@@ -137,3 +137,27 @@ def test_reader_cbz_webtoon_support(client, app, sample_cbz):
     assert b"webtoon-width-select" in res.data
     assert b"reader-cbz.js" in res.data
     assert b"reader-cbz.css" in res.data
+
+
+def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
+    from pathlib import Path
+
+    from buukuu.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        book_id = book.id
+
+    res = client.get(f"/book/{book_id}")
+    assert res.status_code == 200
+    # Original download link
+    assert f'href="/api/books/{book_id}/download"'.encode() in res.data
+    # E-Ink dropdown trigger
+    assert b'id="eink-dropdown-btn"' in res.data
+    # Optimized preset links
+    assert f'href="/api/books/{book_id}/download/optimized/x4"'.encode() in res.data
+    assert f'href="/api/books/{book_id}/download/optimized/x3"'.encode() in res.data
+    assert f'href="/api/books/{book_id}/download/optimized/kindle"'.encode() in res.data
+    assert f'href="/api/books/{book_id}/download/optimized/kobo"'.encode() in res.data
+    assert f'href="/api/books/{book_id}/download/optimized/eink"'.encode() in res.data

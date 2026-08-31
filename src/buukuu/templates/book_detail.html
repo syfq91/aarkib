@@ -33,27 +33,28 @@
         </a>
       {% endif %}
 
-      <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary">
-        ⬇️ Download Original ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)
-      </a>
-
       {% if book.file_format == 'epub' %}
-      <div style="position: relative;">
-        <button id="eink-dropdown-btn" class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;" onclick="toggleEinkDropdown(event)">
-          <span>⚡ Download for E-Ink</span>
-          <span style="font-size: 0.75rem;">▼</span>
+      <div style="position: relative; display: flex; width: 100%;">
+        <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
+          <span>⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)</span>
+        </a>
+        <button id="eink-dropdown-btn" class="btn btn-secondary" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); padding: 0 0.85rem; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="toggleEinkDropdown(event)" title="Choose E-Ink Optimized Preset">
+          <span style="font-size: 0.75rem;">⚡▼</span>
         </button>
-        <div id="eink-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 50; overflow: hidden;">
-          <a href="/api/books/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+        <div id="eink-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 50; overflow: hidden;">
+          <div style="padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); letter-spacing: 0.5px;">
+            ⚡ E-Ink Optimized Downloads
+          </div>
+          <a href="/api/books/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X4</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">480×800 • Grayscale Dithered</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+          <a href="/api/books/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X3</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">528×792 • Grayscale Dithered</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+          <a href="/api/books/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kindle</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1072×1448 • Grayscale</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border-color); font-size: 0.85rem;">
+          <a href="/api/books/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kobo</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1264×1680 • Grayscale</span>
           </a>
           <a href="/api/books/{{ book.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
@@ -61,6 +62,10 @@
           </a>
         </div>
       </div>
+      {% else %}
+      <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary">
+        ⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)
+      </a>
       {% endif %}
 
       <button id="edit-metadata-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="openEditModal()">
