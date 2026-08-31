@@ -410,22 +410,103 @@ function showError(msg) {
   }
 }
 
+function getEpubBookId() {
+  if (typeof BOOK_ID !== "undefined" && BOOK_ID) return BOOK_ID;
+  if (typeof window !== "undefined" && window.BOOK_ID) return window.BOOK_ID;
+  const body = document.querySelector("body");
+  if (body) {
+    const dataId = body.getAttribute("data-book-id");
+    if (dataId) return parseInt(dataId, 10);
+  }
+  const match = window.location.pathname.match(/\/reader\/epub\/(\d+)/);
+  if (match) return parseInt(match[1], 10);
+  return null;
+}
+
+function getEpubBookUrl() {
+  if (typeof BOOK_URL !== "undefined" && BOOK_URL) return BOOK_URL;
+  if (typeof window !== "undefined" && window.BOOK_URL) return window.BOOK_URL;
+  const bookId = getEpubBookId();
+  if (bookId) return `/api/books/${bookId}/book.epub`;
+  return null;
+}
+
+function getEpubInitialLocation() {
+  if (typeof INITIAL_LOCATION !== "undefined" && INITIAL_LOCATION && INITIAL_LOCATION !== "0" && INITIAL_LOCATION !== "" && INITIAL_LOCATION !== "completed") {
+    return INITIAL_LOCATION;
+  }
+  if (typeof window !== "undefined" && window.INITIAL_LOCATION && window.INITIAL_LOCATION !== "0" && window.INITIAL_LOCATION !== "" && window.INITIAL_LOCATION !== "completed") {
+    return window.INITIAL_LOCATION;
+  }
+  const body = document.querySelector("body");
+  if (body) {
+    const dataLoc = body.getAttribute("data-initial-location");
+    if (dataLoc && dataLoc !== "0" && dataLoc !== "" && dataLoc !== "completed") return dataLoc;
+  }
+  const bookId = getEpubBookId();
+  if (bookId) {
+    const localLoc = localStorage.getItem("buukuu-progress-" + bookId);
+    if (localLoc && localLoc !== "0" && localLoc !== "" && localLoc !== "completed") return localLoc;
+  }
+  return null;
+}
+
+function getPercentage(location) {
+  if (!location || !location.start) return 0;
+
+  // 1. Try exact percentage from generated book.locations
+  if (book && book.locations && book.locations.length() > 0 && location.start.cfi) {
+    try {
+      const p = book.locations.percentageFromCfi(location.start.cfi);
+      if (typeof p === "number" && !isNaN(p) && p >= 0) {
+        return Math.floor(p * 100);
+      }
+    } catch (e) {}
+  }
+
+  // 2. Try location.start.percentage
+  if (location.start.percentage != null && !isNaN(location.start.percentage) && location.start.percentage > 0) {
+    return Math.floor(location.start.percentage * 100);
+  }
+
+  // 3. Fallback: spine index approximation
+  if (book && book.spine && book.spine.spineItems && book.spine.spineItems.length > 0) {
+    let spineIdx = location.start.index;
+    if (spineIdx == null && location.start.href) {
+      const target = resolveSpineTarget(location.start.href);
+      const sp = book.spine.get(target);
+      if (sp) spineIdx = sp.index;
+    }
+    if (spineIdx != null && spineIdx >= 0) {
+      const totalSpine = book.spine.spineItems.length;
+      return Math.min(99, Math.floor((spineIdx / totalSpine) * 100));
+    }
+  }
+
+  return 0;
+}
+
 async function initReader() {
   document.body.setAttribute("data-reader-theme", currentTheme);
   showLoading("Fetching book data...");
 
   try {
+    const bookUrl = getEpubBookUrl();
+    if (!bookUrl) {
+      throw new Error("Could not determine book URL.");
+    }
+
     // 1. Fetch file as ArrayBuffer for reliable JSZip decoding
     let bookSource;
     try {
-      const response = await fetch(BOOK_URL);
+      const response = await fetch(bookUrl);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} when loading book file`);
       }
       bookSource = await response.arrayBuffer();
     } catch (fetchErr) {
       console.warn("ArrayBuffer fetch failed, attempting URL string fallback:", fetchErr);
-      bookSource = BOOK_URL;
+      bookSource = bookUrl;
     }
 
     showLoading("Rendering book pages...");
@@ -461,39 +542,6 @@ async function initReader() {
         adjustContentImages(contents);
       }
     });
-
-function getEpubBookId() {
-  if (typeof BOOK_ID !== "undefined" && BOOK_ID) return BOOK_ID;
-  if (typeof window !== "undefined" && window.BOOK_ID) return window.BOOK_ID;
-  const body = document.querySelector("body");
-  if (body) {
-    const dataId = body.getAttribute("data-book-id");
-    if (dataId) return parseInt(dataId, 10);
-  }
-  const match = window.location.pathname.match(/\/reader\/epub\/(\d+)/);
-  if (match) return parseInt(match[1], 10);
-  return null;
-}
-
-function getEpubInitialLocation() {
-  if (typeof INITIAL_LOCATION !== "undefined" && INITIAL_LOCATION && INITIAL_LOCATION !== "0" && INITIAL_LOCATION !== "completed") {
-    return INITIAL_LOCATION;
-  }
-  if (typeof window !== "undefined" && window.INITIAL_LOCATION && window.INITIAL_LOCATION !== "0" && window.INITIAL_LOCATION !== "completed") {
-    return window.INITIAL_LOCATION;
-  }
-  const body = document.querySelector("body");
-  if (body) {
-    const dataLoc = body.getAttribute("data-initial-location");
-    if (dataLoc && dataLoc !== "0" && dataLoc !== "completed") return dataLoc;
-  }
-  const bookId = getEpubBookId();
-  if (bookId) {
-    const localLoc = localStorage.getItem("buukuu-progress-" + bookId);
-    if (localLoc && localLoc !== "0" && localLoc !== "completed") return localLoc;
-  }
-  return null;
-}
 
     // 6. Initial display (with fallback if saved location fails)
     const targetLocation = getEpubInitialLocation();
@@ -943,12 +991,7 @@ function updateProgressUI(location) {
   }
 
   // 3. Right: Total book percentage
-  let percent = 0;
-  if (book && book.locations && book.locations.length() > 0) {
-    percent = Math.floor(book.locations.percentageFromCfi(location.start.cfi) * 100);
-  } else if (location.start.percentage != null) {
-    percent = Math.floor(location.start.percentage * 100);
-  }
+  const percent = getPercentage(location);
   const progressText = document.getElementById("progress-text");
   if (progressText) {
     progressText.innerText = `${percent}%`;
@@ -961,34 +1004,26 @@ function syncProgressDebounced(location) {
     if (!location || !location.start || !location.start.cfi) return;
     const cfi = location.start.cfi;
     const bookId = getEpubBookId();
+    if (!bookId) return;
 
-    if (bookId) {
-      localStorage.setItem("buukuu-progress-" + bookId, cfi);
-    }
+    localStorage.setItem("buukuu-progress-" + bookId, cfi);
 
-    let percent = 0;
-    if (book && book.locations && book.locations.length() > 0) {
-      percent = Math.floor(book.locations.percentageFromCfi(cfi) * 100);
-    } else if (location.start.percentage != null) {
-      percent = Math.floor(location.start.percentage * 100);
-    }
+    const percent = getPercentage(location);
 
-    if (bookId) {
-      try {
-        await fetch(`/api/books/${bookId}/progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: cfi,
-            percentage: percent,
-            is_completed: percent >= 99.0
-          })
-        });
-      } catch (err) {
-        console.warn("Failed to sync reading progress", err);
-      }
+    try {
+      await fetch(`/api/books/${bookId}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: cfi,
+          percentage: percent,
+          is_completed: percent >= 99.0
+        })
+      });
+    } catch (err) {
+      console.warn("Failed to sync reading progress", err);
     }
-  }, 800);
+  }, 500);
 }
 
 window.addEventListener("pagehide", () => {
@@ -998,12 +1033,7 @@ window.addEventListener("pagehide", () => {
       const bookId = getEpubBookId();
       if (bookId) {
         localStorage.setItem("buukuu-progress-" + bookId, loc.start.cfi);
-        let percent = 0;
-        if (book && book.locations && book.locations.length() > 0) {
-          percent = Math.floor(book.locations.percentageFromCfi(loc.start.cfi) * 100);
-        } else if (loc.start.percentage != null) {
-          percent = Math.floor(loc.start.percentage * 100);
-        }
+        const percent = getPercentage(loc);
         const data = JSON.stringify({
           location: loc.start.cfi,
           percentage: percent,
@@ -1082,9 +1112,12 @@ async function addCurrentBookmark() {
   const location = rendition.currentLocation();
   if (!location || !location.start) return;
 
+  const bookId = getEpubBookId();
+  if (!bookId) return;
+
   const progressText = document.getElementById("progress-text") ? document.getElementById("progress-text").innerText : "";
   try {
-    const res = await fetch(`/api/books/${BOOK_ID}/bookmarks`, {
+    const res = await fetch(`/api/books/${bookId}/bookmarks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1100,4 +1133,8 @@ async function addCurrentBookmark() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", initReader);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initReader);
+} else {
+  initReader();
+}

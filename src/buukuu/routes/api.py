@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
@@ -356,9 +357,18 @@ def book_progress(book_id: int):
         if not record:
             record = UserProgress(user_id=user_id, book_id=book.id)
 
-        record.progress_location = location
-        record.percentage = percentage
+        # Only update location if new location is non-zero or record has no valid location
+        if location and location != "0":
+            record.progress_location = location
+        elif not record.progress_location:
+            record.progress_location = location
+
+        # Don't reset a known positive percentage to 0 on race condition
+        if percentage > 0.0 or not record.percentage:
+            record.percentage = percentage
+
         record.is_completed = is_completed
+        record.last_read_at = datetime.now(UTC)
         db.session.add(record)
         db.session.commit()
 
