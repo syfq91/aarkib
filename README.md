@@ -1,4 +1,4 @@
-# 📚 Buukuu (ブークー)
+# 📚 Buukuu
 
 > A modern, lightweight, self-hosted book & comic server built with Flask, SQLite, and PWA capabilities. Provides OPDS 1.2, OPDS 2.0, and **OPDS Progression 1.0** reading sync, full multi-user authentication, online metadata enrichment, and browser-based EPUB & CBZ readers.
 
