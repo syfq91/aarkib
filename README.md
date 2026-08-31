@@ -103,7 +103,7 @@ Buukuu exposes standard OPDS feeds as well as on-demand auto-optimizing feeds fo
 
 ### ⚡ Specialized E-Ink Auto-Converting Feeds (On-Demand):
 - **⚡ Xteink X4**: `http://<your-server-ip>:5000/opds/x4` (480×800 resolution, grayscale dithering, font-stripped)
-- **⚡ Xteink X3**: `http://<your-server-ip>:5000/opds/x3` (600×800 resolution, grayscale dithering, font-stripped)
+- **⚡ Xteink X3**: `http://<your-server-ip>:5000/opds/x3` (528×792 resolution, grayscale dithering, font-stripped)
 - **⚡ Kindle**: `http://<your-server-ip>:5000/opds/kindle` (1072×1448 resolution, grayscale, font-stripped)
 - **⚡ Kobo**: `http://<your-server-ip>:5000/opds/kobo` (1264×1680 resolution, grayscale, font-stripped)
 - **⚡ Generic E-Ink**: `http://<your-server-ip>:5000/opds/eink` (1200×1600 resolution, grayscale, font-stripped)

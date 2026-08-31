@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 DEVICE_PRESETS: dict[str, dict[str, Any]] = {
     "x3": {
         "name": "Xteink X3",
-        "max_width": 600,
-        "max_height": 800,
+        "max_width": 528,
+        "max_height": 792,
         "grayscale": True,
         "dither": True,
         "strip_fonts": True,

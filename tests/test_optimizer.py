@@ -21,7 +21,9 @@ def test_presets_configuration():
     assert "kobo" in DEVICE_PRESETS
     assert "eink" in DEVICE_PRESETS
     assert get_preset("x4")["max_width"] == 480
-    assert get_preset("x3")["max_width"] == 600
+    assert get_preset("x4")["max_height"] == 800
+    assert get_preset("x3")["max_width"] == 528
+    assert get_preset("x3")["max_height"] == 792
     assert get_preset("unknown_device")["name"] == "Generic E-Ink"
 
 
