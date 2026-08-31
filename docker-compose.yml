@@ -1,0 +1,21 @@
+services:
+  buukuu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: buukuu
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - BUUKUU_DATA_DIR=/app/data
+      - BUUKUU_AUTH_REQUIRED=true
+      - BUUKUU_ALLOW_REGISTRATION=true
+      - BUUKUU_AUTO_SCAN=true
+      - BUUKUU_WATCH_LIBRARY=true
+      - BUUKUU_AUTO_ENRICH=false
+      - BUUKUU_METADATA_PROVIDER=all
+      - BUUKUU_PAGE_SIZE=24
+      - SECRET_KEY=buukuu-production-secret-key-change-me

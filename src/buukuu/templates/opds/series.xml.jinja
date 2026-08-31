@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:buukuu:series</id>
+  <title>Series</title>
+  <updated>{{ now_iso }}</updated>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds/series"/>
+  <link rel="start" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds"/>
+
+  {% for s in series_list %}
+  <entry>
+    <title>{{ s.name }}</title>
+    <id>urn:buukuu:series:{{ s.id }}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">{{ s.books|length }} book(s)</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}/opds/series/{{ s.id }}"/>
+  </entry>
+  {% endfor %}
+</feed>
