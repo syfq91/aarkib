@@ -23,12 +23,15 @@
       </span>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 0.5rem;">
-      <select id="mode-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <select id="spread-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;" title="Page Spread">
         <option value="single">Single Page</option>
-        <option value="double">Double Page (Spread)</option>
-        <option value="manga">Manga (R to L)</option>
-        <option value="webtoon">Webtoon (Scroll)</option>
+        <option value="double">Double Page</option>
+        <option value="webtoon">Continuous (Webtoon)</option>
+      </select>
+      <select id="direction-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;" title="Reading Direction">
+        <option value="ltr">Left to Right (LTR)</option>
+        <option value="rtl">Right to Left (RTL)</option>
       </select>
       <button id="fullscreen-btn" class="btn btn-icon" title="Fullscreen">⛶</button>
     </div>

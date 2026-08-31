@@ -2,9 +2,28 @@ let totalPages = 1;
 let pagesData = [];
 let currentPage = 1;
 let currentBookId = null;
-let currentMode = localStorage.getItem("buukuu-cbz-mode") || "single";
+let currentSpread = localStorage.getItem("buukuu-cbz-spread");
+let currentDirection = localStorage.getItem("buukuu-cbz-direction");
 let progressDebounceTimer;
 const preloadedImages = new Map();
+
+// Migrate legacy buukuu-cbz-mode if new keys are not yet set
+if (!currentSpread || !currentDirection) {
+  const legacyMode = localStorage.getItem("buukuu-cbz-mode");
+  if (legacyMode === "manga") {
+    currentSpread = currentSpread || "double";
+    currentDirection = currentDirection || "rtl";
+  } else if (legacyMode === "double") {
+    currentSpread = currentSpread || "double";
+    currentDirection = currentDirection || "ltr";
+  } else if (legacyMode === "webtoon") {
+    currentSpread = currentSpread || "webtoon";
+    currentDirection = currentDirection || "ltr";
+  } else {
+    currentSpread = currentSpread || "single";
+    currentDirection = currentDirection || "ltr";
+  }
+}
 
 function getBookId() {
   if (typeof BOOK_ID !== "undefined" && BOOK_ID) return BOOK_ID;
@@ -66,10 +85,16 @@ async function initCBZReader() {
     // Validate current page bounds
     currentPage = Math.max(1, Math.min(totalPages, currentPage));
 
-    // Setup mode dropdown
-    const modeSelect = document.getElementById("mode-select");
-    if (modeSelect) {
-      modeSelect.value = currentMode;
+    // Setup spread dropdown
+    const spreadSelect = document.getElementById("spread-select");
+    if (spreadSelect) {
+      spreadSelect.value = currentSpread;
+    }
+
+    // Setup direction dropdown
+    const directionSelect = document.getElementById("direction-select");
+    if (directionSelect) {
+      directionSelect.value = currentDirection;
     }
 
     // Setup page slider
@@ -79,6 +104,7 @@ async function initCBZReader() {
       slider.max = totalPages;
       slider.value = currentPage;
     }
+    updateSliderDirection();
 
     setupEvents();
     hideLoading();
@@ -126,6 +152,17 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function updateSliderDirection() {
+  const slider = document.getElementById("page-slider");
+  if (slider) {
+    if (currentDirection === "rtl") {
+      slider.setAttribute("dir", "rtl");
+    } else {
+      slider.removeAttribute("dir");
+    }
+  }
+}
+
 function setupEvents() {
   const btnPrev = document.getElementById("btn-prev-page");
   const btnNext = document.getElementById("btn-next-page");
@@ -139,13 +176,13 @@ function setupEvents() {
   if (touchPrev) {
     touchPrev.addEventListener("click", () => {
       hideControls();
-      if (currentMode === "manga") nextPage(); else prevPage();
+      if (currentDirection === "rtl") nextPage(); else prevPage();
     });
   }
   if (touchNext) {
     touchNext.addEventListener("click", () => {
       hideControls();
-      if (currentMode === "manga") prevPage(); else nextPage();
+      if (currentDirection === "rtl") prevPage(); else nextPage();
     });
   }
   if (touchMenu) {
@@ -159,11 +196,21 @@ function setupEvents() {
     });
   }
 
-  const modeSelect = document.getElementById("mode-select");
-  if (modeSelect) {
-    modeSelect.addEventListener("change", (e) => {
-      currentMode = e.target.value;
-      localStorage.setItem("buukuu-cbz-mode", currentMode);
+  const spreadSelect = document.getElementById("spread-select");
+  if (spreadSelect) {
+    spreadSelect.addEventListener("change", (e) => {
+      currentSpread = e.target.value;
+      localStorage.setItem("buukuu-cbz-spread", currentSpread);
+      renderCurrentView();
+    });
+  }
+
+  const directionSelect = document.getElementById("direction-select");
+  if (directionSelect) {
+    directionSelect.addEventListener("change", (e) => {
+      currentDirection = e.target.value;
+      localStorage.setItem("buukuu-cbz-direction", currentDirection);
+      updateSliderDirection();
       renderCurrentView();
     });
   }
@@ -180,7 +227,7 @@ function setupEvents() {
   if (viewport) {
     let scrollDebounce;
     viewport.addEventListener("scroll", () => {
-      if (currentMode !== "webtoon") return;
+      if (currentSpread !== "webtoon") return;
       clearTimeout(scrollDebounce);
       scrollDebounce = setTimeout(handleWebtoonScroll, 150);
     });
@@ -188,12 +235,19 @@ function setupEvents() {
 }
 
 function handleKeyNavigation(e) {
-  if (e.key === "ArrowLeft" || e.key === "PageUp" || e.key === "h") {
+  const isRTL = currentDirection === "rtl";
+  if (e.key === "ArrowLeft" || e.key === "h") {
     hideControls();
-    if (currentMode === "manga") nextPage(); else prevPage();
-  } else if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " " || e.key === "l") {
+    if (isRTL) nextPage(); else prevPage();
+  } else if (e.key === "ArrowRight" || e.key === "l") {
     hideControls();
-    if (currentMode === "manga") prevPage(); else nextPage();
+    if (isRTL) prevPage(); else nextPage();
+  } else if (e.key === "PageDown" || e.key === " ") {
+    hideControls();
+    nextPage();
+  } else if (e.key === "PageUp") {
+    hideControls();
+    prevPage();
   } else if (e.key === "Home") {
     hideControls();
     goToPage(1);
@@ -218,9 +272,10 @@ function renderCurrentView() {
   if (!pagesData || pagesData.length === 0) return;
 
   currentPage = Math.max(1, Math.min(totalPages, currentPage));
+  updateSliderDirection();
 
-  // 1. Webtoon Mode
-  if (currentMode === "webtoon") {
+  // 1. Continuous Scroll (Webtoon) Mode
+  if (currentSpread === "webtoon") {
     viewport.classList.add("mode-webtoon");
     container.innerHTML = pagesData.map(p => `
       <img src="${p.url}" alt="Page ${p.page_number}" class="cbz-page-img" loading="lazy" data-page="${p.page_number}">
@@ -231,23 +286,29 @@ function renderCurrentView() {
     return;
   }
 
-  // 2. Double Page (Spread) / Manga Spread Mode
-  if ((currentMode === "double" || currentMode === "manga") && currentPage > 1 && currentPage < totalPages) {
+  // 2. Double Page Spread Mode
+  if (currentSpread === "double" && currentPage > 1) {
     container.classList.add("mode-double");
     const p1 = pagesData[currentPage - 1];
-    const p2 = pagesData[currentPage];
+    const p2 = currentPage < totalPages ? pagesData[currentPage] : null;
 
-    if (currentMode === "manga") {
-      // Right to Left spread: second page on left, first page on right
+    if (p1 && p2) {
+      if (currentDirection === "rtl") {
+        // Right-to-Left (Manga): Page N+1 on Left, Page N on Right
+        container.innerHTML = `
+          <img src="${p2.url}" alt="Page ${p2.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
+          <img src="${p1.url}" alt="Page ${p1.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
+        `;
+      } else {
+        // Left-to-Right (Western): Page N on Left, Page N+1 on Right
+        container.innerHTML = `
+          <img src="${p1.url}" alt="Page ${p1.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
+          <img src="${p2.url}" alt="Page ${p2.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
+        `;
+      }
+    } else if (p1) {
       container.innerHTML = `
-        <img src="${p2.url}" alt="Page ${p2.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
         <img src="${p1.url}" alt="Page ${p1.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
-      `;
-    } else {
-      // Left to Right spread
-      container.innerHTML = `
-        <img src="${p1.url}" alt="Page ${p1.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
-        <img src="${p2.url}" alt="Page ${p2.page_number}" class="cbz-page-img" onerror="handleImageError(this)">
       `;
     }
   } else {
@@ -299,7 +360,7 @@ function preloadImage(url) {
 }
 
 function nextPage() {
-  if (currentMode === "double" && currentPage > 1) {
+  if (currentSpread === "double" && currentPage > 1) {
     goToPage(Math.min(totalPages, currentPage + 2));
   } else {
     goToPage(Math.min(totalPages, currentPage + 1));
@@ -307,7 +368,7 @@ function nextPage() {
 }
 
 function prevPage() {
-  if (currentMode === "double" && currentPage > 2) {
+  if (currentSpread === "double" && currentPage > 2) {
     goToPage(Math.max(1, currentPage - 2));
   } else {
     goToPage(Math.max(1, currentPage - 1));
