@@ -75,15 +75,19 @@ Your library books placed in `./data/books` will be mounted automatically.
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `BUUKUU_BOOKS_DIR` | `./data/books` | Directory containing EPUB and CBZ files. |
+| `SECRET_KEY` | `buukuu-secret-key-change-in-production` | Secret key for session security & signing. |
+| `BUUKUU_DATA_DIR` | `./data` | Base storage directory. |
+| `BUUKUU_LIBRARY_DIR` | `./data/books` | Directory containing EPUB and CBZ files. |
 | `BUUKUU_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
-| `BUUKUU_DATABASE_URI` | `sqlite:///data/buukuu.db` | SQLite database URI (WAL mode enabled). |
-| `BUUKUU_SECRET_KEY` | `dev-buukuu-secret` | Flask session secret key. |
+| `DATABASE_URL` | `sqlite:///data/buukuu.db` | SQLAlchemy database URI. |
 | `BUUKUU_AUTH_REQUIRED` | `true` | When `true`, visitors must log in to browse or download. |
 | `BUUKUU_ALLOW_REGISTRATION` | `true` | Allow new readers to sign up from the web UI. |
-| `BUUKUU_METADATA_PROVIDER` | `all` | Online enrichment provider: `google_books`, `open_library`, or `all`. |
-| `BUUKUU_HOST` | `0.0.0.0` | Bind host address. |
-| `BUUKUU_PORT` | `5000` | Server listening port. |
+| `BUUKUU_AUTO_SCAN` | `true` | Automatically scan library on startup. |
+| `BUUKUU_WATCH_LIBRARY` | `true` | Watch library for filesystem changes. |
+| `BUUKUU_AUTO_ENRICH` | `false` | Automatically fetch metadata on library scan. |
+| `BUUKUU_METADATA_PROVIDER` | `all` | Online enrichment provider: `googlebooks`, `openlibrary`, or `all`. |
+| `BUUKUU_PAGE_SIZE` | `24` | Number of books per page in UI views. |
+| `PORT` | `5000` | Server listening port. |
 
 ---
 

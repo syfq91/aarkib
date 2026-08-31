@@ -9,25 +9,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 class Config:
     """Base application configuration."""
 
-    SECRET_KEY: str = os.getenv(
-        "SECRET_KEY",
-        os.getenv("BUUKUU_SECRET_KEY", "buukuu-secret-key-change-in-production"),
-    )
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "buukuu-secret-key-change-in-production")
 
     # Data storage paths
     DATA_DIR: Path = Path(os.getenv("BUUKUU_DATA_DIR", BASE_DIR / "data"))
-    LIBRARY_DIR: Path = Path(
-        os.getenv(
-            "BUUKUU_LIBRARY_DIR",
-            os.getenv("BUUKUU_BOOKS_DIR", DATA_DIR / "books"),
-        )
-    )
+    LIBRARY_DIR: Path = Path(os.getenv("BUUKUU_LIBRARY_DIR", DATA_DIR / "books"))
     COVERS_DIR: Path = Path(os.getenv("BUUKUU_COVERS_DIR", DATA_DIR / "covers"))
 
-    # SQLite Database
+    # Database
     SQLALCHEMY_DATABASE_URI: str = os.getenv(
-        "DATABASE_URL",
-        os.getenv("BUUKUU_DATABASE_URI", f"sqlite:///{DATA_DIR / 'buukuu.db'}"),
+        "DATABASE_URL", f"sqlite:///{DATA_DIR / 'buukuu.db'}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
