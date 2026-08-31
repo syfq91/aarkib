@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from flask import Flask
 
 logger = logging.getLogger(__name__)
-SUPPORTED_EXTENSIONS = {".epub", ".cbz", ".zip"}
+SUPPORTED_EXTENSIONS = {".epub", ".cbz", ".zip", ".cbr"}
 
 
 def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:

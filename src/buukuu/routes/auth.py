@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
+from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
@@ -59,6 +60,20 @@ def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
     return decorated_function
 
 
+def is_safe_url(target: str | None) -> bool:
+    """Verifies that a redirect target URL is safe and relative to this application."""
+    if not target:
+        return False
+    ref_url = urlsplit(request.host_url)
+    test_url = urlsplit(target)
+    return (
+        test_url.scheme in ("", "http", "https")
+        and (test_url.netloc == "" or test_url.netloc == ref_url.netloc)
+        and not target.startswith("//")
+        and target.startswith("/")
+    )
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -79,8 +94,9 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=remember)
             next_page = request.args.get("next")
+            redirect_target = next_page if is_safe_url(next_page) else url_for("ui.index")
             flash(f"Welcome back, {user.username}!", "success")
-            return redirect(next_page or url_for("ui.index"))
+            return redirect(redirect_target)
         flash("Invalid username or password.", "error")
 
     return render_template("login.html", allow_registration=allow_registration)

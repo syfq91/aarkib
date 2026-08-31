@@ -28,7 +28,7 @@ def extract_metadata_from_file(file_path: Path) -> ParsedBookMetadata | None:
         from buukuu.services.parsers.epub import parse_epub
 
         return parse_epub(file_path)
-    elif ext in (".cbz", ".zip"):
+    elif ext in (".cbz", ".zip", ".cbr"):
         from buukuu.services.parsers.cbz import parse_cbz
 
         return parse_cbz(file_path)

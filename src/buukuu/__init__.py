@@ -82,6 +82,16 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     app.register_blueprint(reader_bp)
     app.register_blueprint(auth_bp)
 
+    # Security settings & headers
+    app.config.setdefault("SESSION_COOKIE_HTTPONLY", True)
+    app.config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        return response
+
     with app.app_context():
         migrate_database()
 
