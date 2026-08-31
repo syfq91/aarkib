@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
   <ShortName>Buukuu</ShortName>
-  <Description>Search books in Buukuu catalog</Description>
+  <Description>Search Buukuu catalog{% if preset %} ({{ preset|upper }} Optimized){% endif %}</Description>
   <InputEncoding>UTF-8</InputEncoding>
   <OutputEncoding>UTF-8</OutputEncoding>
   <Url type="application/atom+xml;profile=opds-catalog;kind=acquisition"
-       template="{{ base_url }}/opds/search?q={searchTerms}"/>
+       template="{{ base_url }}{{ opds_prefix }}/search?q={searchTerms}"/>
 </OpenSearchDescription>

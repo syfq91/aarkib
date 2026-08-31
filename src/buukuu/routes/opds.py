@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from flask import Blueprint, Response, current_app, render_template, request
+from flask import Blueprint, Response, current_app, jsonify, render_template, request
 from flask_login import current_user
 from sqlalchemy import or_, select
 
@@ -26,6 +26,8 @@ OPDS_PROGRESSION_TYPE = "application/opds-progression+json"
 OPDS_AUTH_TYPE = "application/opds-authentication+json"
 OPDS_JSON_TYPE = "application/opds+json"
 PROBLEM_JSON_TYPE = "application/problem+json"
+
+PRESET_RULE = "<any(x3,x4,kindle,kobo,eink,generic):preset>"
 
 
 def get_opds_user() -> User | None:
@@ -98,53 +100,50 @@ def format_progression_document(
 
     doc: dict[str, Any] = {
         "modified": last_read.isoformat(),
-        "device": {"id": device_id, "name": device_name},
-        "progression": round(progression_val, 7),
+        "device": {
+            "id": device_id,
+            "name": device_name,
+        },
+        "progression": round(progression_val, 4),
     }
+
+    if progress.progress_location:
+        if progress.references_json:
+            try:
+                refs = json.loads(progress.references_json)
+                if isinstance(refs, list) and refs:
+                    doc["references"] = refs
+                else:
+                    doc["references"] = [progress.progress_location]
+            except Exception:
+                doc["references"] = [progress.progress_location]
+        else:
+            doc["references"] = [progress.progress_location]
 
     if progress.chapter_title:
         doc["title"] = progress.chapter_title
 
-    if progress.references_json:
-        try:
-            refs = json.loads(progress.references_json)
-            if isinstance(refs, list) and refs:
-                doc["references"] = refs
-        except Exception:
-            if progress.progress_location and progress.progress_location not in (
-                "0",
-                "completed",
-            ):
-                doc["references"] = [progress.progress_location]
-    elif progress.progress_location and progress.progress_location not in (
-        "0",
-        "completed",
-    ):
-        doc["references"] = [progress.progress_location]
-
     return doc
 
 
-# ==========================================
-# OPDS Progression 1.0 Endpoints
-# ==========================================
-
-
 @opds_bp.route("/authentication.json", methods=["GET"])
-def opds_authentication_document():
-    """Returns the OPDS Authentication Document."""
+def opds_authentication_doc():
     doc = make_opds_auth_document()
     return Response(json.dumps(doc, indent=2), status=200, mimetype=OPDS_AUTH_TYPE)
+
+
+@opds_bp.route("/presets", methods=["GET"])
+def list_presets():
+    """Returns list of supported e-ink optimization presets."""
+    from buukuu.services.optimizer import DEVICE_PRESETS
+
+    return jsonify(DEVICE_PRESETS)
 
 
 @opds_bp.route("/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 @opds_bp.route("/v2/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 def opds_book_progression(book_id: int):
-    """OPDS Progression 1.0 Fetch and Update endpoint.
-
-    GET: Returns the last-known progression document for this publication.
-    PUT/POST: Updates the last-known progression document for this publication.
-    """
+    """OPDS Progression 1.0 Fetch and Update endpoint."""
     user = get_opds_user()
     if current_app.config.get("AUTH_REQUIRED", False) and not user:
         auth_doc = make_opds_auth_document()
@@ -176,7 +175,6 @@ def opds_book_progression(book_id: int):
         if not progress or (
             progress.percentage == 0 and progress.progress_location in ("0", "")
         ):
-            # When no progression recorded yet, return empty object with 200 OK
             return Response("{}", status=200, mimetype=OPDS_PROGRESSION_TYPE)
 
         doc = format_progression_document(progress, user)
@@ -202,7 +200,6 @@ def opds_book_progression(book_id: int):
 
     try:
         prog_raw = float(payload["progression"])
-        # Support both 0.0-1.0 float and 0-100 percentage
         if prog_raw <= 1.0 and prog_raw >= 0.0:
             percentage = prog_raw * 100.0
         else:
@@ -234,12 +231,10 @@ def opds_book_progression(book_id: int):
     references_json = json.dumps(refs) if isinstance(refs, list) and refs else None
     primary_location = refs[0] if isinstance(refs, list) and refs else str(percentage)
 
-    # Parse modified timestamp
     modified_str = payload.get("modified")
     modified_dt = datetime.now(UTC)
     if modified_str:
         try:
-            # Handle ISO formats with or without Z / offset
             if modified_str.endswith("Z"):
                 modified_str = modified_str[:-1] + "+00:00"
             parsed_dt = datetime.fromisoformat(modified_str)
@@ -256,39 +251,52 @@ def opds_book_progression(book_id: int):
         )
     )
 
-    # Check for conflict if an existing progression is strictly newer
     if progress and progress.last_read_at:
-        existing_dt = progress.last_read_at
-        if existing_dt.tzinfo is None:
-            existing_dt = existing_dt.replace(tzinfo=UTC)
-        if existing_dt > modified_dt:
+        curr_dt = progress.last_read_at
+        if curr_dt.tzinfo is None:
+            curr_dt = curr_dt.replace(tzinfo=UTC)
+        if modified_dt < curr_dt:
             problem = {
                 "type": "https://registry.opds.io/error#progression-date",
-                "title": "A more recent progression point is already available.",
+                "title": "A newer progression timestamp has already been registered.",
+                "current": format_progression_document(progress, user),
             }
-            return Response(json.dumps(problem), status=409, mimetype=PROBLEM_JSON_TYPE)
+            return Response(
+                json.dumps(problem, indent=2),
+                status=409,
+                mimetype=PROBLEM_JSON_TYPE,
+            )
 
-    is_created = False
+    is_new = progress is None
     if not progress:
-        progress = UserProgress(user_id=user_id, book_id=book_id)
+        progress = UserProgress(
+            book_id=book_id,
+            user_id=user_id,
+            progress_location=primary_location,
+            percentage=percentage,
+            is_completed=(percentage >= 100.0),
+            last_read_at=modified_dt,
+            device_id=device_id,
+            device_name=device_name,
+            chapter_title=chapter_title,
+            references_json=references_json,
+        )
         db.session.add(progress)
-        is_created = True
-
-    progress.percentage = percentage
-    progress.progress_location = primary_location
-    progress.is_completed = percentage >= 99.5
-    progress.device_id = device_id
-    progress.device_name = device_name
-    progress.chapter_title = str(chapter_title) if chapter_title else None
-    progress.references_json = references_json
-    progress.last_read_at = modified_dt
+    else:
+        progress.progress_location = primary_location
+        progress.percentage = percentage
+        progress.is_completed = percentage >= 100.0
+        progress.last_read_at = modified_dt
+        progress.device_id = device_id
+        progress.device_name = device_name
+        progress.chapter_title = chapter_title
+        progress.references_json = references_json
 
     db.session.commit()
-
-    doc = format_progression_document(progress, user)
+    updated_doc = format_progression_document(progress, user)
     return Response(
-        json.dumps(doc, indent=2),
-        status=201 if is_created else 200,
+        json.dumps(updated_doc, indent=2),
+        status=201 if is_new else 200,
         mimetype=OPDS_PROGRESSION_TYPE,
     )
 
@@ -299,19 +307,27 @@ def opds_book_progression(book_id: int):
 
 
 @opds_bp.route("/v2/catalog.json", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/v2/catalog.json", methods=["GET"])
 @opds_auth_required
-def opds2_catalog():
+def opds2_catalog(preset: str | None = None):
     """Returns OPDS 2.0 Navigation Catalog."""
     base_url = request.host_url.rstrip("/")
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
+    catalog_title = (
+        f"Buukuu ({preset.upper()} Optimized) OPDS 2.0 Catalog"
+        if preset
+        else "Buukuu OPDS 2.0 Catalog"
+    )
+
     catalog = {
         "metadata": {
-            "title": "Buukuu OPDS 2.0 Catalog",
+            "title": catalog_title,
             "modified": datetime.now(UTC).isoformat(),
         },
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/opds/v2/catalog.json",
+                "href": f"{base_url}{opds_prefix}/v2/catalog.json",
                 "type": OPDS_JSON_TYPE,
             },
             {
@@ -323,7 +339,7 @@ def opds2_catalog():
         "navigation": [
             {
                 "title": "Recent Additions",
-                "href": f"{base_url}/opds/v2/recent.json",
+                "href": f"{base_url}{opds_prefix}/v2/recent.json",
                 "type": OPDS_JSON_TYPE,
             }
         ],
@@ -332,16 +348,23 @@ def opds2_catalog():
 
 
 @opds_bp.route("/v2/recent.json", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/v2/recent.json", methods=["GET"])
 @opds_auth_required
-def opds2_recent():
+def opds2_recent(preset: str | None = None):
     """Returns OPDS 2.0 Recent Publications Feed with Progression 1.0 links."""
     base_url = request.host_url.rstrip("/")
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     books = db.session.scalars(
         select(Book).order_by(Book.created_at.desc()).limit(50)
     ).all()
 
     publications = []
     for b in books:
+        if preset and b.file_format == "epub":
+            acq_href = f"{base_url}/api/books/{b.id}/download/optimized/{preset}"
+        else:
+            acq_href = f"{base_url}/api/books/{b.id}/download"
+
         pub: dict[str, Any] = {
             "metadata": {
                 "@type": "http://schema.org/Book",
@@ -360,7 +383,7 @@ def opds2_recent():
                 },
                 {
                     "rel": "http://opds-spec.org/acquisition",
-                    "href": f"{base_url}/api/books/{b.id}/download",
+                    "href": acq_href,
                     "type": "application/epub+zip"
                     if b.file_format == "epub"
                     else "application/vnd.comicbook+zip",
@@ -383,15 +406,20 @@ def opds2_recent():
             }
         publications.append(pub)
 
+    feed_title = (
+        f"Recent Additions ({preset.upper()} Optimized)"
+        if preset
+        else "Recent Additions"
+    )
     feed = {
         "metadata": {
-            "title": "Recent Additions",
+            "title": feed_title,
             "modified": datetime.now(UTC).isoformat(),
         },
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/opds/v2/recent.json",
+                "href": f"{base_url}{opds_prefix}/v2/recent.json",
                 "type": OPDS_JSON_TYPE,
             }
         ],
@@ -407,14 +435,19 @@ def opds2_recent():
 
 @opds_bp.route("", methods=["GET"])
 @opds_bp.route("/", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/", methods=["GET"])
 @opds_auth_required
-def root_catalog():
+def root_catalog(preset: str | None = None):
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/root.xml.jinja",
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_NAV_TYPE},
@@ -422,25 +455,29 @@ def root_catalog():
 
 
 @opds_bp.route("/recent", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/recent", methods=["GET"])
 @opds_auth_required
-def recent_feed():
+def recent_feed(preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     per_page = 30
     query = select(Book).order_by(Book.created_at.desc())
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/feed.xml.jinja",
-            feed_id="urn:buukuu:feed:recent",
+            feed_id=f"urn:buukuu:feed:recent{f':{preset}' if preset else ''}",
             feed_title="Recent Additions",
             feed_subtitle="Recently added books in Buukuu library",
             books=pagination.items,
             pagination=pagination,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
             self_url=request.url,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_ACQ_TYPE},
@@ -448,16 +485,20 @@ def recent_feed():
 
 
 @opds_bp.route("/authors", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/authors", methods=["GET"])
 @opds_auth_required
-def authors_index():
+def authors_index(preset: str | None = None):
     authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/authors.xml.jinja",
             authors=authors,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_NAV_TYPE},
@@ -465,8 +506,9 @@ def authors_index():
 
 
 @opds_bp.route("/authors/<int:author_id>", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/authors/<int:author_id>", methods=["GET"])
 @opds_auth_required
-def author_books(author_id: int):
+def author_books(author_id: int, preset: str | None = None):
     author = db.session.get(Author, author_id)
     if not author:
         return Response("Author not found", 404)
@@ -479,17 +521,20 @@ def author_books(author_id: int):
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
 
     return (
         render_template(
             "opds/feed.xml.jinja",
-            feed_id=f"urn:buukuu:author:{author.id}",
+            feed_id=f"urn:buukuu:author:{author.id}{f':{preset}' if preset else ''}",
             feed_title=f"Books by {author.name}",
             books=pagination.items,
             pagination=pagination,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
             self_url=request.url,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_ACQ_TYPE},
@@ -497,16 +542,20 @@ def author_books(author_id: int):
 
 
 @opds_bp.route("/series", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/series", methods=["GET"])
 @opds_auth_required
-def series_index():
+def series_index(preset: str | None = None):
     series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/series.xml.jinja",
             series_list=series_list,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_NAV_TYPE},
@@ -514,8 +563,9 @@ def series_index():
 
 
 @opds_bp.route("/series/<int:series_id>", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/series/<int:series_id>", methods=["GET"])
 @opds_auth_required
-def series_books(series_id: int):
+def series_books(series_id: int, preset: str | None = None):
     series_obj = db.session.get(Series, series_id)
     if not series_obj:
         return Response("Series not found", 404)
@@ -528,17 +578,20 @@ def series_books(series_id: int):
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
 
     return (
         render_template(
             "opds/feed.xml.jinja",
-            feed_id=f"urn:buukuu:series:{series_obj.id}",
+            feed_id=f"urn:buukuu:series:{series_obj.id}{f':{preset}' if preset else ''}",
             feed_title=f"Series: {series_obj.name}",
             books=pagination.items,
             pagination=pagination,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
             self_url=request.url,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_ACQ_TYPE},
@@ -546,16 +599,20 @@ def series_books(series_id: int):
 
 
 @opds_bp.route("/tags", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/tags", methods=["GET"])
 @opds_auth_required
-def tags_index():
+def tags_index(preset: str | None = None):
     tags = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/tags.xml.jinja",
             tags=tags,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_NAV_TYPE},
@@ -563,8 +620,9 @@ def tags_index():
 
 
 @opds_bp.route("/tags/<int:tag_id>", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/tags/<int:tag_id>", methods=["GET"])
 @opds_auth_required
-def tag_books(tag_id: int):
+def tag_books(tag_id: int, preset: str | None = None):
     tag_obj = db.session.get(Tag, tag_id)
     if not tag_obj:
         return Response("Tag not found", 404)
@@ -575,17 +633,20 @@ def tag_books(tag_id: int):
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
 
     return (
         render_template(
             "opds/feed.xml.jinja",
-            feed_id=f"urn:buukuu:tag:{tag_obj.id}",
+            feed_id=f"urn:buukuu:tag:{tag_obj.id}{f':{preset}' if preset else ''}",
             feed_title=f"Tag: {tag_obj.name}",
             books=pagination.items,
             pagination=pagination,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
             self_url=request.url,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_ACQ_TYPE},
@@ -593,11 +654,15 @@ def tag_books(tag_id: int):
 
 
 @opds_bp.route("/search/opensearch.xml", methods=["GET"])
-def opensearch_description():
+@opds_bp.route(f"/{PRESET_RULE}/search/opensearch.xml", methods=["GET"])
+def opensearch_description(preset: str | None = None):
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
             "opds/opensearch.xml.jinja",
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPENSEARCH_TYPE},
@@ -605,8 +670,9 @@ def opensearch_description():
 
 
 @opds_bp.route("/search", methods=["GET"])
+@opds_bp.route(f"/{PRESET_RULE}/search", methods=["GET"])
 @opds_auth_required
-def search_feed():
+def search_feed(preset: str | None = None):
     q = request.args.get("q", "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = 30
@@ -625,17 +691,20 @@ def search_feed():
     query = query.order_by(Book.title.asc())
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
+    opds_prefix = f"/opds/{preset}" if preset else "/opds"
 
     return (
         render_template(
             "opds/feed.xml.jinja",
-            feed_id="urn:buukuu:search",
+            feed_id=f"urn:buukuu:search{f':{preset}' if preset else ''}",
             feed_title=f"Search: {q}" if q else "Search Catalog",
             books=pagination.items,
             pagination=pagination,
             now_iso=now_iso,
             base_url=request.host_url.rstrip("/"),
+            opds_prefix=opds_prefix,
             self_url=request.url,
+            preset=preset,
         ),
         200,
         {"Content-Type": OPDS_ACQ_TYPE},

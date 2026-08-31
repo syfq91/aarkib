@@ -91,6 +91,7 @@ storage/
 uploads/
 books/
 covers/
+optimized/
 *.db
 *.db-*
 *.db-shm

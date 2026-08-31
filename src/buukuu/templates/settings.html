@@ -14,18 +14,46 @@
   <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
     <div>
       <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-        <span>📡</span> OPDS Catalog Feed
+        <span>📡</span> OPDS Catalog Feeds
       </h3>
-      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-        Add this URL to any OPDS e-reader application (such as KOReader, Moon+ Reader, Thorium, Marvin, or Panels) to browse and download your books directly:
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Add these URLs to any OPDS e-reader (KOReader, Xteink, Moon+ Reader, Thorium, Panels, etc.) to browse and download books:
       </p>
-      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-        <input type="text" id="opds-url-input" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds" style="font-family: monospace; font-size: 0.85rem; flex: 1;">
-        <button class="btn btn-secondary" onclick="copyOpdsUrl()" title="Copy to clipboard">📋 Copy</button>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Standard OPDS 1.2 Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" id="opds-url-input" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X4 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x4" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x4')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X3 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x3" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x3')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Kindle / Kobo / Generic E-Ink Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/eink" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/eink')" title="Copy to clipboard">📋 Copy</button>
+        </div>
       </div>
     </div>
-    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem;">
-      💡 If authentication is enabled, enter your Buukuu account credentials when prompted by your e-reader app.
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      💡 Optimized feeds automatically strip fonts, convert images to grayscale e-ink format, and compress EPUBs on demand!
     </div>
   </div>
 
@@ -188,6 +216,11 @@
 
 {% block scripts %}
 <script>
+function copyText(text) {
+  navigator.clipboard.writeText(text);
+  showToast("OPDS URL copied to clipboard!", "success");
+}
+
 function copyOpdsUrl() {
   const input = document.getElementById("opds-url-input");
   input.select();

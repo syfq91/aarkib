@@ -65,8 +65,10 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     # Ensure required data directories exist
     data_dir = Path(app.config.get("DATA_DIR", "data"))
     covers_dir = Path(app.config.get("COVERS_DIR", data_dir / "covers"))
+    optimized_dir = Path(app.config.get("OPTIMIZED_DIR", data_dir / "optimized"))
     data_dir.mkdir(parents=True, exist_ok=True)
     covers_dir.mkdir(parents=True, exist_ok=True)
+    optimized_dir.mkdir(parents=True, exist_ok=True)
 
     from buukuu.services.scanner import get_library_dirs
 

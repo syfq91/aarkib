@@ -236,17 +236,107 @@ def get_book_file(book_id: int, filename: str | None = None):
 
 
 @api_bp.route("/books/<int:book_id>/download", methods=["GET"])
-def download_book_file(book_id: int):
+@api_bp.route(
+    "/books/<int:book_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",
+    methods=["GET"],
+)
+def download_book_file(book_id: int, preset: str | None = None):
     book = db.session.get(Book, book_id)
     if not book:
         abort(404)
 
+    preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
     file_path = Path(book.original_file_path)
     if not file_path.exists():
         abort(404, description="File missing from storage")
 
+    if preset_arg and book.file_format == "epub":
+        optimized_dir = Path(
+            current_app.config.get(
+                "OPTIMIZED_DIR",
+                Path(current_app.config.get("DATA_DIR", "data")) / "optimized",
+            )
+        )
+        from buukuu.services.optimizer import get_or_create_optimized_epub
+
+        try:
+            opt_path = get_or_create_optimized_epub(
+                book_id=book.id,
+                file_path=book.original_file_path,
+                file_hash=book.file_hash,
+                preset_key=preset_arg,
+                optimized_dir=optimized_dir,
+            )
+            download_name = f"{book.title} ({preset_arg.upper()}).epub"
+            return send_file(
+                opt_path,
+                as_attachment=True,
+                download_name=download_name,
+                mimetype="application/epub+zip",
+            )
+        except Exception as e:
+            current_app.logger.error(
+                "Failed optimizing on download for %s: %s", book.title, e
+            )
+
     filename = f"{book.title}.{book.file_format}"
     return send_file(file_path, as_attachment=True, download_name=filename)
+
+
+@api_bp.route("/optimizer/presets", methods=["GET"])
+def get_optimizer_presets():
+    """List supported e-ink optimization presets."""
+    from buukuu.services.optimizer import DEVICE_PRESETS
+
+    return jsonify(DEVICE_PRESETS)
+
+
+@api_bp.route("/books/<int:book_id>/optimize", methods=["POST"])
+def precompute_book_optimization(book_id: int):
+    """Pre-generate optimized EPUB cache for a book."""
+    book = db.session.get(Book, book_id)
+    if not book or book.file_format != "epub":
+        abort(404, description="Book is not an EPUB")
+
+    data = request.get_json(silent=True) or {}
+    preset_arg = str(data.get("preset", "generic"))
+
+    optimized_dir = Path(
+        current_app.config.get(
+            "OPTIMIZED_DIR",
+            Path(current_app.config.get("DATA_DIR", "data")) / "optimized",
+        )
+    )
+    from buukuu.services.optimizer import get_or_create_optimized_epub
+
+    try:
+        opt_path = get_or_create_optimized_epub(
+            book_id=book.id,
+            file_path=book.original_file_path,
+            file_hash=book.file_hash,
+            preset_key=preset_arg,
+            optimized_dir=optimized_dir,
+        )
+        opt_size = opt_path.stat().st_size
+        orig_size = book.file_size or Path(book.original_file_path).stat().st_size
+        reduction = (
+            round((1.0 - (opt_size / orig_size)) * 100, 1) if orig_size > 0 else 0
+        )
+
+        return jsonify(
+            {
+                "status": "success",
+                "book_id": book.id,
+                "preset": preset_arg,
+                "original_size": orig_size,
+                "optimized_size": opt_size,
+                "reduction_percent": reduction,
+                "download_url": f"/api/books/{book.id}/download/optimized/{preset_arg}",
+            }
+        )
+    except Exception as e:
+        current_app.logger.error("Optimization failed: %s", e)
+        abort(500, description=f"Optimization failed: {e}")
 
 
 @api_bp.route("/books/<int:book_id>/pages", methods=["GET"])

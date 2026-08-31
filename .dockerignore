@@ -16,6 +16,9 @@ data/
 instance/
 storage/
 uploads/
+books/
+covers/
+optimized/
 *.db
 *.db-*
 *.sqlite*

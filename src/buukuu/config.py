@@ -15,6 +15,9 @@ class Config:
     DATA_DIR: Path = Path(os.getenv("BUUKUU_DATA_DIR", BASE_DIR / "data"))
     LIBRARY_DIR: Path = Path(os.getenv("BUUKUU_LIBRARY_DIR", DATA_DIR / "books"))
     COVERS_DIR: Path = Path(os.getenv("BUUKUU_COVERS_DIR", DATA_DIR / "covers"))
+    OPTIMIZED_DIR: Path = Path(
+        os.getenv("BUUKUU_OPTIMIZED_DIR", DATA_DIR / "optimized")
+    )
 
     # Database
     SQLALCHEMY_DATABASE_URI: str = os.getenv(

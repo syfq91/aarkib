@@ -93,17 +93,25 @@ Your library books placed in `./data/books` will be mounted automatically.
 
 ## 📡 OPDS Catalog & E-Reader Setup
 
-Buukuu exposes standard OPDS feeds for third-party reading apps:
+Buukuu exposes standard OPDS feeds as well as on-demand auto-optimizing feeds for e-ink devices (strips bloat fonts, converts images to grayscale/dithered e-ink format, and compresses on the fly without modifying original files):
 
+### Standard Feeds:
 - **OPDS 1.2 Feed (Atom)**: `http://<your-server-ip>:5000/opds`
 - **OPDS 2.0 Feed (JSON)**: `http://<your-server-ip>:5000/opds/v2/catalog.json`
 - **OPDS Authentication Document**: `http://<your-server-ip>:5000/opds/authentication.json`
 - **OPDS Progression 1.0 Endpoint**: `http://<your-server-ip>:5000/opds/books/<id>/progression`
 
-### Connecting KOReader / Thorium / Cantook / Panels:
-1. Open your e-reader app and add a new OPDS catalog with URL: `http://<server-ip>:5000/opds`.
+### ⚡ Specialized E-Ink Auto-Converting Feeds (On-Demand):
+- **⚡ Xteink X4**: `http://<your-server-ip>:5000/opds/x4` (480×800 resolution, grayscale dithering, font-stripped)
+- **⚡ Xteink X3**: `http://<your-server-ip>:5000/opds/x3` (600×800 resolution, grayscale dithering, font-stripped)
+- **⚡ Kindle**: `http://<your-server-ip>:5000/opds/kindle` (1072×1448 resolution, grayscale, font-stripped)
+- **⚡ Kobo**: `http://<your-server-ip>:5000/opds/kobo` (1264×1680 resolution, grayscale, font-stripped)
+- **⚡ Generic E-Ink**: `http://<your-server-ip>:5000/opds/eink` (1200×1600 resolution, grayscale, font-stripped)
+
+### Connecting KOReader / Xteink / Thorium / Panels:
+1. Open your e-reader app and add your chosen OPDS catalog URL (e.g. `http://<server-ip>:5000/opds/x4`).
 2. When prompted, enter your Buukuu **Username** and **Password** (HTTP Basic Auth).
-3. Browse, download, and synchronize reading positions automatically!
+3. Browse, download optimized EPUBs, and synchronize reading positions automatically!
 
 ---
 
