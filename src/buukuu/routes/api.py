@@ -330,7 +330,9 @@ def get_cbz_page_image(book_id: int, page_num: int):
                 },
             )
     except Exception as e:
-        current_app.logger.error(f"Error serving page {page_num} for book {book_id}: {e}")
+        current_app.logger.error(
+            f"Error serving page {page_num} for book {book_id}: {e}"
+        )
         abort(500, description=f"Unable to read comic page: {e}")
 
 

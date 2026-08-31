@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Pre-commit hook to prevent committing sensitive files and secrets.
+
+set -euo pipefail
+
+# 1. Check for staged sensitive filenames
+BLOCKED_PATTERNS=(
+    '^\.env(\..+)?$'
+    '^data/.*$'
+    '.*\.db$'
+    '.*\.db-(shm|wal)$'
+    '.*\.sqlite3?$'
+    '.*\.key$'
+    '.*\.pem$'
+    '.*\.crt$'
+    '.*\.p12$'
+    '.*\.pfx$'
+    '.*id_rsa.*$'
+    '.*id_ed25519.*$'
+    '.*id_ecdsa.*$'
+    '.*\.epub$'
+    '.*\.cbz$'
+    '.*\.cbr$'
+    '.*\.mobi$'
+)
+
+# Exceptions that are allowed to be committed
+ALLOWED_EXCEPTIONS=(
+    '.env.example'
+    '.env.template'
+)
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -z "$staged_files" ]; then
+    exit 0
+fi
+
+has_error=0
+
+for file in $staged_files; do
+    # Skip allowed exception files
+    is_exception=0
+    for exception in "${ALLOWED_EXCEPTIONS[@]}"; do
+        if [ "$file" == "$exception" ]; then
+            is_exception=1
+            break
+        fi
+    done
+    if [ $is_exception -eq 1 ]; then
+        continue
+    fi
+
+    # Check filename patterns
+    for pattern in "${BLOCKED_PATTERNS[@]}"; do
+        if [[ "$file" =~ $pattern ]]; then
+            echo "❌ [PRE-COMMIT ERROR] Attempting to commit blocked/sensitive file: $file"
+            has_error=1
+            break
+        fi
+    done
+done
+
+# 2. Check staged content for private keys and common secrets
+for file in $staged_files; do
+    # Skip deleted or binary files
+    if ! git ls-files --stage "$file" | grep -q "^"; then
+        continue
+    fi
+
+    # Check for private key headers
+    if git diff --cached "$file" | grep -qE "^\+.*-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"; then
+        echo "❌ [PRE-COMMIT ERROR] Private key detected in staged changes in file: $file"
+        has_error=1
+    fi
+
+    # Check for live API tokens or secret patterns
+    if git diff --cached "$file" | grep -qE "^\+.*(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{20,})"; then
+        echo "❌ [PRE-COMMIT ERROR] High-confidence API secret or token detected in staged changes in: $file"
+        has_error=1
+    fi
+done
+
+if [ $has_error -ne 0 ]; then
+    echo ""
+    echo "Commit rejected to prevent sensitive data exposure."
+    echo "To untrack sensitive files while keeping them locally, run:"
+    echo "  git rm --cached <file>"
+    exit 1
+fi
+
+exit 0

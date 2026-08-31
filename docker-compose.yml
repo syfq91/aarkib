@@ -18,4 +18,4 @@ services:
       - BUUKUU_AUTO_ENRICH=false
       - BUUKUU_METADATA_PROVIDER=all
       - BUUKUU_PAGE_SIZE=24
-      - SECRET_KEY=buukuu-production-secret-key-change-me
+      - SECRET_KEY=${SECRET_KEY:-buukuu-production-secret-key-change-me}

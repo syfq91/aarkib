@@ -10,31 +10,61 @@ build/
 *.egg
 wheels/
 *.whl
+*.tar.gz
 
 # Virtual environments
 .venv/
 venv/
 ENV/
 env/
+ENVDIR/
+.envrc
 
-# Testing & Coverage
+# Testing, Coverage & Profiling
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
 .tox/
 .nox/
+.hypothesis/
 
 # Linters and type checkers
 .mypy_cache/
 .ruff_cache/
 .dmypy.json
 dmypy.json
+.pyre/
+.pytype/
 
-# Environment variables & secrets
+# Environment variables, credentials & secrets
 .env
 .env.*
 !.env.example
+!.env.template
+*.env
+*.key
+*.pem
+*.crt
+*.cer
+*.pfx
+*.p12
+*.pkcs12
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+*.secret
+*.secrets
+*.token
+*.tokens
+credentials.json
+client_secret*.json
+service_account*.json
+service-account*.json
+.netrc
+auth.json
+*.htpasswd
 
 # IDEs and Editors
 .vscode/
@@ -42,19 +72,48 @@ dmypy.json
 *.swp
 *.swo
 *~
+*.sublime-workspace
+*.sublime-project
 
 # Operating System Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Data, library books, covers & SQLite databases
 data/
+instance/
+storage/
+uploads/
+books/
+covers/
 *.db
+*.db-*
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
+*.sqlite3-*
 *.epub
 *.cbz
 *.cbr
+*.cb7
+*.cbt
+*.pdf
+*.mobi
+*.azw
+*.azw3
+*.djvu
 *.zip
+*.rar
+*.7z
+
+# Logs and database dumps
+*.log
+logs/
+*.dump
+*.sql

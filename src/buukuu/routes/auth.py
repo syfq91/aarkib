@@ -94,7 +94,9 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=remember)
             next_page = request.args.get("next")
-            redirect_target = next_page if is_safe_url(next_page) else url_for("ui.index")
+            redirect_target = (
+                next_page if is_safe_url(next_page) else url_for("ui.index")
+            )
             flash(f"Welcome back, {user.username}!", "success")
             return redirect(redirect_target)
         flash("Invalid username or password.", "error")

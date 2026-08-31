@@ -101,4 +101,3 @@ def test_migrate_database_adds_missing_columns(app):
     assert "device_name" in cols_after
     assert "chapter_title" in cols_after
     assert "references_json" in cols_after
-

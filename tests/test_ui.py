@@ -72,7 +72,9 @@ def test_reader_epub_resume_progress(client, app, sample_epub):
 
     # Save progress via API
     cfi = "epubcfi(/6/2[chapter1]!/4/2/14)"
-    res = client.post(f"/api/books/{book_id}/progress", json={"location": cfi, "percentage": 35.0})
+    res = client.post(
+        f"/api/books/{book_id}/progress", json={"location": cfi, "percentage": 35.0}
+    )
     assert res.status_code == 200
 
     # Reopen reader
@@ -102,14 +104,16 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
     assert b'data-initial-page="1"' in reader_res.data
 
     # Save progress via API (e.g. Page 2)
-    res = client.post(f"/api/books/{book_id}/progress", json={"location": "2", "percentage": 50.0})
+    res = client.post(
+        f"/api/books/{book_id}/progress", json={"location": "2", "percentage": 50.0}
+    )
     assert res.status_code == 200
 
     # Reopen CBZ reader -> initial_page should be 2
     reader_res = client.get(f"/reader/cbz/{book_id}")
     assert reader_res.status_code == 200
     assert b'data-initial-page="2"' in reader_res.data
-    assert b'INITIAL_PAGE = 2' in reader_res.data
+    assert b"INITIAL_PAGE = 2" in reader_res.data
 
     # Book detail page should show Continue Reading
     detail_res = client.get(f"/book/{book_id}")
