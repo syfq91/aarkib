@@ -119,3 +119,21 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
     detail_res = client.get(f"/book/{book_id}")
     assert detail_res.status_code == 200
     assert b"Continue Reading (50%)" in detail_res.data
+
+
+def test_reader_cbz_webtoon_support(client, app, sample_cbz):
+    from pathlib import Path
+
+    from buukuu.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_cbz, covers_dir)
+        book_id = book.id
+
+    res = client.get(f"/reader/cbz/{book_id}")
+    assert res.status_code == 200
+    assert b"Continuous (Webtoon)" in res.data
+    assert b"webtoon-width-select" in res.data
+    assert b"reader-cbz.js" in res.data
+    assert b"reader-cbz.css" in res.data

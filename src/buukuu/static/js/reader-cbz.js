@@ -2,26 +2,31 @@ let totalPages = 1;
 let pagesData = [];
 let currentPage = 1;
 let currentBookId = null;
-let currentSpread = localStorage.getItem("buukuu-cbz-spread");
-let currentDirection = localStorage.getItem("buukuu-cbz-direction");
+let currentSpread = localStorage.getItem("buukuu-cbz-spread") || "single";
+let currentDirection = localStorage.getItem("buukuu-cbz-direction") || "ltr";
+let currentWebtoonWidth = localStorage.getItem("buukuu-cbz-webtoon-width") || "medium";
 let progressDebounceTimer;
+let webtoonObserver = null;
+let isWebtoonRendered = false;
+let isProgrammaticScroll = false;
+let scrollTimeout = null;
 const preloadedImages = new Map();
 
 // Migrate legacy buukuu-cbz-mode if new keys are not yet set
-if (!currentSpread || !currentDirection) {
+if (!localStorage.getItem("buukuu-cbz-spread") && !localStorage.getItem("buukuu-cbz-direction")) {
   const legacyMode = localStorage.getItem("buukuu-cbz-mode");
   if (legacyMode === "manga") {
-    currentSpread = currentSpread || "double";
-    currentDirection = currentDirection || "rtl";
+    currentSpread = "double";
+    currentDirection = "rtl";
   } else if (legacyMode === "double") {
-    currentSpread = currentSpread || "double";
-    currentDirection = currentDirection || "ltr";
+    currentSpread = "double";
+    currentDirection = "ltr";
   } else if (legacyMode === "webtoon") {
-    currentSpread = currentSpread || "webtoon";
-    currentDirection = currentDirection || "ltr";
+    currentSpread = "webtoon";
+    currentDirection = "ltr";
   } else {
-    currentSpread = currentSpread || "single";
-    currentDirection = currentDirection || "ltr";
+    currentSpread = "single";
+    currentDirection = "ltr";
   }
 }
 
@@ -91,6 +96,12 @@ async function initCBZReader() {
       spreadSelect.value = currentSpread;
     }
 
+    // Setup webtoon width dropdown
+    const widthSelect = document.getElementById("webtoon-width-select");
+    if (widthSelect) {
+      widthSelect.value = currentWebtoonWidth;
+    }
+
     // Setup direction dropdown
     const directionSelect = document.getElementById("direction-select");
     if (directionSelect) {
@@ -108,7 +119,7 @@ async function initCBZReader() {
 
     setupEvents();
     hideLoading();
-    renderCurrentView();
+    renderCurrentView(true);
   } catch (err) {
     console.error("Failed to initialize comic reader:", err);
     showError(err.message || "Failed to load comic pages.");
@@ -155,7 +166,7 @@ function escapeHtml(str) {
 function updateSliderDirection() {
   const slider = document.getElementById("page-slider");
   if (slider) {
-    if (currentDirection === "rtl") {
+    if (currentDirection === "rtl" && currentSpread !== "webtoon") {
       slider.setAttribute("dir", "rtl");
     } else {
       slider.removeAttribute("dir");
@@ -175,18 +186,23 @@ function setupEvents() {
 
   if (touchPrev) {
     touchPrev.addEventListener("click", () => {
+      if (currentSpread === "webtoon") return;
       hideControls();
       if (currentDirection === "rtl") nextPage(); else prevPage();
     });
   }
   if (touchNext) {
     touchNext.addEventListener("click", () => {
+      if (currentSpread === "webtoon") return;
       hideControls();
       if (currentDirection === "rtl") prevPage(); else nextPage();
     });
   }
   if (touchMenu) {
-    touchMenu.addEventListener("click", toggleControls);
+    touchMenu.addEventListener("click", () => {
+      if (currentSpread === "webtoon") return;
+      toggleControls();
+    });
   }
 
   const slider = document.getElementById("page-slider");
@@ -201,7 +217,17 @@ function setupEvents() {
     spreadSelect.addEventListener("change", (e) => {
       currentSpread = e.target.value;
       localStorage.setItem("buukuu-cbz-spread", currentSpread);
-      renderCurrentView();
+      isWebtoonRendered = false;
+      renderCurrentView(true);
+    });
+  }
+
+  const widthSelect = document.getElementById("webtoon-width-select");
+  if (widthSelect) {
+    widthSelect.addEventListener("change", (e) => {
+      currentWebtoonWidth = e.target.value;
+      localStorage.setItem("buukuu-cbz-webtoon-width", currentWebtoonWidth);
+      applyWebtoonWidth();
     });
   }
 
@@ -211,7 +237,7 @@ function setupEvents() {
       currentDirection = e.target.value;
       localStorage.setItem("buukuu-cbz-direction", currentDirection);
       updateSliderDirection();
-      renderCurrentView();
+      renderCurrentView(true);
     });
   }
 
@@ -222,20 +248,71 @@ function setupEvents() {
 
   document.addEventListener("keydown", handleKeyNavigation);
 
-  // Scroll listener for webtoon mode
+  // Setup Webtoon Touch & Click Tap handling on viewport
   const viewport = document.getElementById("cbz-viewport");
   if (viewport) {
-    let scrollDebounce;
-    viewport.addEventListener("scroll", () => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      }
+    }, { passive: true });
+
+    viewport.addEventListener("touchend", (e) => {
       if (currentSpread !== "webtoon") return;
-      clearTimeout(scrollDebounce);
-      scrollDebounce = setTimeout(handleWebtoonScroll, 150);
+      if (e.changedTouches.length === 1) {
+        const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartX);
+        const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY);
+        const deltaTime = Date.now() - touchStartTime;
+        if (deltaX < 12 && deltaY < 12 && deltaTime < 350) {
+          toggleControls();
+        }
+      }
+    });
+
+    viewport.addEventListener("click", (e) => {
+      if (currentSpread === "webtoon") {
+        // Toggle controls if clicking on the background or comic strip
+        toggleControls();
+      }
     });
   }
 }
 
 function handleKeyNavigation(e) {
   const isRTL = currentDirection === "rtl";
+
+  if (currentSpread === "webtoon") {
+    const viewport = document.getElementById("cbz-viewport");
+    if (!viewport) return;
+    const scrollStep = Math.round(viewport.clientHeight * 0.8);
+
+    if (e.key === "ArrowDown" || e.key === "j" || e.key === " " || e.key === "PageDown") {
+      e.preventDefault();
+      viewport.scrollBy({ top: scrollStep, behavior: "smooth" });
+    } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") {
+      e.preventDefault();
+      viewport.scrollBy({ top: -scrollStep, behavior: "smooth" });
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      goToPage(1);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      goToPage(totalPages);
+    } else if (e.key === "f" || e.key === "F") {
+      toggleFullscreen();
+    } else if (e.key === "Escape") {
+      hideControls();
+    }
+    return;
+  }
+
+  // Paginated modes (Single & Double)
   if (e.key === "ArrowLeft" || e.key === "h") {
     hideControls();
     if (isRTL) nextPage(); else prevPage();
@@ -261,13 +338,20 @@ function handleKeyNavigation(e) {
   }
 }
 
-function renderCurrentView() {
+function applyWebtoonWidth() {
+  const viewport = document.getElementById("cbz-viewport");
+  if (!viewport) return;
+  viewport.classList.remove("width-compact", "width-medium", "width-large", "width-full");
+  viewport.classList.add(`width-${currentWebtoonWidth}`);
+}
+
+function renderCurrentView(forceRebuild = false) {
   const container = document.getElementById("cbz-canvas-container");
   const viewport = document.getElementById("cbz-viewport");
-  if (!container || !viewport) return;
+  const widthSelect = document.getElementById("webtoon-width-select");
+  const directionSelect = document.getElementById("direction-select");
 
-  container.className = "cbz-canvas-container";
-  viewport.className = "cbz-viewport";
+  if (!container || !viewport) return;
 
   if (!pagesData || pagesData.length === 0) return;
 
@@ -276,14 +360,39 @@ function renderCurrentView() {
 
   // 1. Continuous Scroll (Webtoon) Mode
   if (currentSpread === "webtoon") {
+    document.body.classList.add("is-webtoon");
     viewport.classList.add("mode-webtoon");
-    container.innerHTML = pagesData.map(p => `
-      <img src="${p.url}" alt="Page ${p.page_number}" class="cbz-page-img" loading="lazy" data-page="${p.page_number}">
-    `).join("");
+    applyWebtoonWidth();
+
+    if (widthSelect) widthSelect.style.display = "inline-block";
+    if (directionSelect) directionSelect.style.display = "none";
+
+    if (!isWebtoonRendered || forceRebuild) {
+      container.innerHTML = pagesData.map(p => `
+        <img src="${p.url}" alt="Page ${p.page_number}" class="cbz-page-img" loading="lazy" data-page="${p.page_number}" onerror="handleImageError(this)">
+      `).join("");
+      isWebtoonRendered = true;
+      setupWebtoonObserver();
+      setTimeout(() => scrollToWebtoonPage(currentPage), 50);
+    }
+
     updatePageIndicator();
-    scrollToWebtoonPage(currentPage);
     syncProgressDebounced();
     return;
+  }
+
+  // Paginated modes (Single or Double)
+  document.body.classList.remove("is-webtoon");
+  viewport.classList.remove("mode-webtoon", "width-compact", "width-medium", "width-large", "width-full");
+  container.className = "cbz-canvas-container";
+  isWebtoonRendered = false;
+
+  if (widthSelect) widthSelect.style.display = "none";
+  if (directionSelect) directionSelect.style.display = "inline-block";
+
+  if (webtoonObserver) {
+    webtoonObserver.disconnect();
+    webtoonObserver = null;
   }
 
   // 2. Double Page Spread Mode
@@ -326,13 +435,57 @@ function renderCurrentView() {
   syncProgressDebounced();
 }
 
+function setupWebtoonObserver() {
+  if (webtoonObserver) {
+    webtoonObserver.disconnect();
+  }
+
+  const viewport = document.getElementById("cbz-viewport");
+  if (!viewport) return;
+
+  const options = {
+    root: viewport,
+    rootMargin: "-30% 0px -30% 0px",
+    threshold: [0, 0.25, 0.5, 0.75, 1.0]
+  };
+
+  webtoonObserver = new IntersectionObserver((entries) => {
+    if (isProgrammaticScroll || currentSpread !== "webtoon") return;
+
+    let bestEntry = null;
+    let maxRatio = -1;
+
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+        maxRatio = entry.intersectionRatio;
+        bestEntry = entry;
+      }
+    });
+
+    if (bestEntry && bestEntry.target) {
+      const pageNum = parseInt(bestEntry.target.getAttribute("data-page"), 10);
+      if (pageNum && pageNum !== currentPage) {
+        currentPage = pageNum;
+        const slider = document.getElementById("page-slider");
+        if (slider) slider.value = currentPage;
+        updatePageIndicator();
+        syncProgressDebounced();
+      }
+    }
+  }, options);
+
+  const images = document.querySelectorAll(".mode-webtoon .cbz-page-img");
+  images.forEach(img => webtoonObserver.observe(img));
+}
+
 function handleImageError(img) {
   img.style.display = "none";
   const parent = img.parentElement;
-  if (parent) {
+  if (parent && !parent.querySelector(".img-error-box")) {
     const errDiv = document.createElement("div");
-    errDiv.style.cssText = "padding: 2rem; color: #f87171; text-align: center;";
-    errDiv.innerHTML = `Failed to load page image.<br><button class="btn btn-secondary btn-sm" onclick="renderCurrentView()" style="margin-top: 0.5rem;">Reload</button>`;
+    errDiv.className = "img-error-box";
+    errDiv.style.cssText = "padding: 1.5rem; color: #f87171; text-align: center;";
+    errDiv.innerHTML = `Failed to load page image.<br><button class="btn btn-secondary btn-sm" onclick="renderCurrentView(true)" style="margin-top: 0.5rem;">Reload</button>`;
     parent.appendChild(errDiv);
   }
 }
@@ -360,6 +513,10 @@ function preloadImage(url) {
 }
 
 function nextPage() {
+  if (currentSpread === "webtoon") {
+    goToPage(Math.min(totalPages, currentPage + 1));
+    return;
+  }
   if (currentSpread === "double" && currentPage > 1) {
     goToPage(Math.min(totalPages, currentPage + 2));
   } else {
@@ -368,6 +525,10 @@ function nextPage() {
 }
 
 function prevPage() {
+  if (currentSpread === "webtoon") {
+    goToPage(Math.max(1, currentPage - 1));
+    return;
+  }
   if (currentSpread === "double" && currentPage > 2) {
     goToPage(Math.max(1, currentPage - 2));
   } else {
@@ -379,7 +540,14 @@ function goToPage(page) {
   currentPage = Math.max(1, Math.min(totalPages, page));
   const slider = document.getElementById("page-slider");
   if (slider) slider.value = currentPage;
-  renderCurrentView();
+
+  if (currentSpread === "webtoon") {
+    updatePageIndicator();
+    scrollToWebtoonPage(currentPage);
+    syncProgressDebounced();
+  } else {
+    renderCurrentView(false);
+  }
 }
 
 function updatePageIndicator() {
@@ -397,34 +565,12 @@ function updatePageIndicator() {
 function scrollToWebtoonPage(page) {
   const img = document.querySelector(`.mode-webtoon img[data-page="${page}"]`);
   if (img) {
+    isProgrammaticScroll = true;
     img.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-}
-
-function handleWebtoonScroll() {
-  const imgs = document.querySelectorAll(".mode-webtoon img[data-page]");
-  const viewport = document.getElementById("cbz-viewport");
-  if (!viewport || imgs.length === 0) return;
-
-  const viewportMid = viewport.scrollTop + (viewport.clientHeight / 2);
-  let closestPage = currentPage;
-  let minDiff = Infinity;
-
-  imgs.forEach(img => {
-    const top = img.offsetTop;
-    const diff = Math.abs(top - viewportMid);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closestPage = parseInt(img.getAttribute("data-page"), 10) || closestPage;
-    }
-  });
-
-  if (closestPage !== currentPage) {
-    currentPage = closestPage;
-    const slider = document.getElementById("page-slider");
-    if (slider) slider.value = currentPage;
-    updatePageIndicator();
-    syncProgressDebounced();
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      isProgrammaticScroll = false;
+    }, 600);
   }
 }
 

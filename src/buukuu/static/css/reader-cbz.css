@@ -27,8 +27,8 @@ body.cbz-reader-body {
 
 body.controls-hidden .cbz-viewport {
   top: 0;
-  bottom: 40px;
-  height: calc(100vh - 40px);
+  bottom: 0;
+  height: 100vh;
 }
 
 /* Single & Double Page Container */
@@ -67,24 +67,63 @@ body.controls-hidden .cbz-viewport {
 }
 
 /* Webtoon Continuous Scroll Mode */
-.mode-webtoon {
+.cbz-viewport.mode-webtoon {
+  display: block !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mode-webtoon .cbz-canvas-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow-y: auto !important;
-  overflow-x: hidden;
-  height: 100%;
-  width: 100vw;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  gap: 0;
+  padding: 0;
+  margin: 0 auto;
 }
 
 .mode-webtoon .cbz-page-img {
-  max-width: 850px;
   width: 100%;
+  max-width: 800px;
   height: auto;
-  margin: 0;
+  max-height: none;
+  margin: 0 auto;
   display: block;
   box-shadow: none;
   border-radius: 0;
+  vertical-align: top;
+  line-height: 0;
+  background-color: #000;
+}
+
+/* Webtoon width variants */
+.mode-webtoon.width-compact .cbz-page-img {
+  max-width: 600px;
+}
+
+.mode-webtoon.width-medium .cbz-page-img {
+  max-width: 800px;
+}
+
+.mode-webtoon.width-large .cbz-page-img {
+  max-width: 1000px;
+}
+
+.mode-webtoon.width-full .cbz-page-img {
+  max-width: 100%;
+}
+
+/* Hide fixed touch zones in webtoon mode so user can scroll freely without interception */
+body.is-webtoon .cbz-touch-prev,
+body.is-webtoon .cbz-touch-next,
+body.is-webtoon .cbz-touch-menu {
+  display: none !important;
 }
 
 /* Header & Footer */
@@ -118,12 +157,17 @@ body.controls-hidden .cbz-viewport {
   justify-content: space-between;
   padding: 0 1rem;
   z-index: 100;
-  border-top: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.85rem;
+  transition: transform 0.3s ease;
 }
 
 .cbz-header.hidden {
   transform: translateY(-100%);
+}
+
+body.controls-hidden .cbz-footer {
+  transform: translateY(100%);
 }
 
 .page-slider {
@@ -133,7 +177,7 @@ body.controls-hidden .cbz-viewport {
   accent-color: #6366f1;
 }
 
-/* Touch click zones */
+/* Touch click zones for paginated modes */
 .cbz-touch-prev {
   position: fixed;
   top: 50px;

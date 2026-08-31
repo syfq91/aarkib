@@ -18,16 +18,22 @@
   <header id="cbz-header" class="cbz-header">
     <div style="display: flex; align-items: center; gap: 0.75rem;">
       <a href="/book/{{ book.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit">←</a>
-      <span style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;">
+      <span style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 35vw;">
         {{ book.title }}
       </span>
     </div>
 
     <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-      <select id="spread-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;" title="Page Spread">
+      <select id="spread-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;" title="Page Mode">
         <option value="single">Single Page</option>
         <option value="double">Double Page</option>
         <option value="webtoon">Continuous (Webtoon)</option>
+      </select>
+      <select id="webtoon-width-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto; display: none;" title="Webtoon Width">
+        <option value="compact">Compact (600px)</option>
+        <option value="medium" selected>Medium (800px)</option>
+        <option value="large">Large (1000px)</option>
+        <option value="full">Full Width (100%)</option>
       </select>
       <select id="direction-select" class="select-input" style="padding: 0.35rem 0.5rem; font-size: 0.85rem; width: auto;" title="Reading Direction">
         <option value="ltr">Left to Right (LTR)</option>
@@ -47,7 +53,7 @@
     </div>
   </div>
 
-  <!-- Touch Nav Zones -->
+  <!-- Touch Nav Zones (for Single / Double page modes) -->
   <div id="touch-prev" class="cbz-touch-prev"></div>
   <div id="touch-menu" class="cbz-touch-menu"></div>
   <div id="touch-next" class="cbz-touch-next"></div>
