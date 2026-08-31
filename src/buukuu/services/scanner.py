@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,6 +29,29 @@ def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
         while chunk := f.read(chunk_size):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+def get_library_dirs(app: Flask) -> list[Path]:
+    """Resolves one or more library directories from app config."""
+    raw = app.config.get("LIBRARY_DIR", "data/books")
+    if isinstance(raw, (list, tuple)):
+        dirs = [Path(p) for p in raw]
+    elif isinstance(raw, Path):
+        dirs = [raw]
+    else:
+        raw_str = str(raw).strip()
+        if ";" in raw_str:
+            parts = [p.strip() for p in raw_str.split(";") if p.strip()]
+        elif "," in raw_str:
+            parts = [p.strip() for p in raw_str.split(",") if p.strip()]
+        elif ":" in raw_str and not (len(raw_str) > 1 and raw_str[1] == ":"):
+            parts = [p.strip() for p in raw_str.split(":") if p.strip()]
+        elif raw_str:
+            parts = [raw_str]
+        else:
+            parts = ["data/books"]
+        dirs = [Path(p) for p in parts]
+    return dirs
 
 
 def index_single_book(
@@ -143,23 +167,29 @@ def index_single_book(
 
 
 def scan_library(app: Flask) -> dict[str, int]:
-    """Scans the entire library directory for changes."""
+    """Scans all configured library directories (and symlinked directories) for changes."""
     with app.app_context():
-        library_dir = Path(app.config["LIBRARY_DIR"])
+        library_dirs = get_library_dirs(app)
         covers_dir = Path(app.config["COVERS_DIR"])
         auto_enrich = app.config.get("AUTO_ENRICH", False)
-        library_dir.mkdir(parents=True, exist_ok=True)
+        for lib_dir in library_dirs:
+            lib_dir.mkdir(parents=True, exist_ok=True)
         covers_dir.mkdir(parents=True, exist_ok=True)
 
         added = 0
         existing_files = set()
 
-        for file_path in library_dir.rglob("*"):
-            if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                existing_files.add(str(file_path.resolve()))
-                book = index_single_book(file_path, covers_dir, auto_enrich=auto_enrich)
-                if book:
-                    added += 1
+        for lib_dir in library_dirs:
+            for root, _, filenames in os.walk(lib_dir, followlinks=True):
+                for filename in filenames:
+                    file_path = Path(root) / filename
+                    if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                        existing_files.add(str(file_path.resolve()))
+                        book = index_single_book(
+                            file_path, covers_dir, auto_enrich=auto_enrich
+                        )
+                        if book:
+                            added += 1
 
         # Clean up deleted files from DB
         all_books = db.session.scalars(select(Book)).all()
@@ -225,17 +255,19 @@ class LibraryChangeHandler(FileSystemEventHandler):
 
 
 def start_library_watcher(app: Flask) -> Observer | None:
-    """Starts a background filesystem observer on the library directory."""
+    """Starts a background filesystem observer on all configured library directories."""
     if not app.config.get("WATCH_LIBRARY", True):
         return None
 
-    library_dir = Path(app.config["LIBRARY_DIR"])
-    library_dir.mkdir(parents=True, exist_ok=True)
-
+    library_dirs = get_library_dirs(app)
     event_handler = LibraryChangeHandler(app)
     observer = Observer()
-    observer.schedule(event_handler, str(library_dir), recursive=True)
+    for lib_dir in library_dirs:
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        observer.schedule(event_handler, str(lib_dir), recursive=True)
     observer.daemon = True
     observer.start()
-    logger.info("Library watcher started for %s", library_dir)
+    logger.info(
+        "Library watcher started for %s", ", ".join(str(d) for d in library_dirs)
+    )
     return observer

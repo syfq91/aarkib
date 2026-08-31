@@ -64,12 +64,14 @@ def create_app(config_class: type[Config] = Config) -> Flask:
 
     # Ensure required data directories exist
     data_dir = Path(app.config.get("DATA_DIR", "data"))
-    library_dir = Path(app.config.get("LIBRARY_DIR", data_dir / "books"))
     covers_dir = Path(app.config.get("COVERS_DIR", data_dir / "covers"))
-
     data_dir.mkdir(parents=True, exist_ok=True)
-    library_dir.mkdir(parents=True, exist_ok=True)
     covers_dir.mkdir(parents=True, exist_ok=True)
+
+    from buukuu.services.scanner import get_library_dirs
+
+    for lib_dir in get_library_dirs(app):
+        lib_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize extensions
     db.init_app(app)

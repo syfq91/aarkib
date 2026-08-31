@@ -484,7 +484,10 @@ def upload_file():
     if ext not in (".epub", ".cbz", ".zip"):
         abort(400, description="Unsupported format. Only EPUB and CBZ are supported.")
 
-    library_dir = Path(current_app.config["LIBRARY_DIR"])
+    from buukuu.services.scanner import get_library_dirs
+
+    library_dirs = get_library_dirs(current_app)
+    library_dir = library_dirs[0]
     covers_dir = Path(current_app.config["COVERS_DIR"])
     library_dir.mkdir(parents=True, exist_ok=True)
     covers_dir.mkdir(parents=True, exist_ok=True)
