@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:buukuu:root</id>
+  <title>Buukuu Book Catalog</title>
+  <updated>{{ now_iso }}</updated>
+  <author>
+    <name>Buukuu</name>
+    <uri>{{ base_url }}</uri>
+  </author>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds"/>
+  <link rel="start" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds"/>
+  <link rel="search" type="application/opensearchdescription+xml" href="{{ base_url }}/opds/search/opensearch.xml"/>
+
+  <entry>
+    <title>Recent Additions</title>
+    <id>urn:buukuu:section:recent</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Recently added books in the library</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}/opds/recent"/>
+  </entry>
+
+  <entry>
+    <title>Authors</title>
+    <id>urn:buukuu:section:authors</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by author</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds/authors"/>
+  </entry>
+
+  <entry>
+    <title>Series</title>
+    <id>urn:buukuu:section:series</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by series</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds/series"/>
+  </entry>
+
+  <entry>
+    <title>Tags / Categories</title>
+    <id>urn:buukuu:section:tags</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by genre and tags</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}/opds/tags"/>
+  </entry>
+</feed>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ book.title }} - Buukuu Reader</title>
+  
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/reader-epub.css">
+
+  <script src="/static/js/vendor/jszip.min.js"></script>
+  <script src="/static/js/vendor/epub.min.js"></script>
+  <script>
+    window.BOOK_ID = {{ book.id }};
+    window.BOOK_URL = "/api/books/{{ book.id }}/book.epub";
+    window.INITIAL_LOCATION = "{{ initial_location }}";
+  </script>
+</head>
+<body class="reader-body" data-reader-theme="dark" data-book-id="{{ book.id }}" data-initial-location="{{ initial_location }}">
+
+  <!-- Top Controls Bar -->
+  <header id="reader-header" class="reader-header">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="/book/{{ book.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit Reader">←</a>
+      <span style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;">
+        {{ book.title }}
+      </span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <button id="toc-btn" class="btn btn-icon" title="Table of Contents">📑</button>
+      <button id="settings-btn" class="btn btn-icon" title="Display Settings">⚙️</button>
+      <button id="bookmark-btn" class="btn btn-icon" title="Add Bookmark">🔖</button>
+    </div>
+  </header>
+
+  <!-- EPUB Viewport -->
+  <div id="viewer">
+    <div id="loading-state" class="loading-state">
+      <div class="spinner"></div>
+      <div id="loading-msg">Opening book...</div>
+    </div>
+  </div>
+
+  <!-- Touch Navigation Zones -->
+  <div id="zone-prev" class="nav-zone nav-zone-prev" title="Previous Page"></div>
+  <div id="zone-center" class="nav-zone nav-zone-center"></div>
+  <div id="zone-next" class="nav-zone nav-zone-next" title="Next Page"></div>
+
+  <!-- Bottom Info & Progress Bar -->
+  <footer id="reader-footer" class="reader-footer">
+    <div id="page-info" class="footer-left">1/1</div>
+    <div id="chapter-title" class="footer-center">Loading...</div>
+    <div id="progress-text" class="footer-right">0%</div>
+  </footer>
+
+  <!-- Sidebar Overlay -->
+  <div id="overlay" class="overlay"></div>
+
+  <!-- Table of Contents Sidebar -->
+  <aside id="toc-sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h3>Contents</h3>
+      <button id="close-toc-btn" class="btn btn-icon">✕</button>
+    </div>
+    <div id="toc-list" class="sidebar-content"></div>
+  </aside>
+
+  <!-- Settings Sidebar -->
+  <aside id="settings-sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h3>Settings</h3>
+      <button id="close-settings-btn" class="btn btn-icon">✕</button>
+    </div>
+    <div class="sidebar-content" style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.5rem;">Theme</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <button class="btn btn-secondary" onclick="setReaderTheme('dark')">Dark</button>
+          <button class="btn btn-secondary" onclick="setReaderTheme('light')">Light</button>
+          <button class="btn btn-secondary" onclick="setReaderTheme('sepia')">Sepia</button>
+          <button class="btn btn-secondary" onclick="setReaderTheme('oled')">OLED Black</button>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.5rem;">Font Size</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-secondary" onclick="changeFontSize(-10)">A-</button>
+          <span id="font-size-label" style="flex: 1; text-align: center; font-weight: 600;">100%</span>
+          <button class="btn btn-secondary" onclick="changeFontSize(10)">A+</button>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.5rem;">Columns</label>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="col-1" class="btn btn-secondary" style="flex: 1;" onclick="setColumns('1')">1 Col</button>
+          <button id="col-2" class="btn btn-secondary" style="flex: 1;" onclick="setColumns('2')">2 Col</button>
+          <button id="col-auto" class="btn btn-primary" style="flex: 1;" onclick="setColumns('auto')">Auto</button>
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.5rem;">Flow</label>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="flow-paginated" class="btn btn-primary" style="flex: 1;" onclick="setFlow('paginated')">Paginated</button>
+          <button id="flow-scrolled" class="btn btn-secondary" style="flex: 1;" onclick="setFlow('scrolled')">Continuous</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    const BOOK_ID = {{ book.id }};
+    const BOOK_URL = "/api/books/{{ book.id }}/book.epub";
+    const INITIAL_LOCATION = "{{ initial_location }}";
+  </script>
+  <script src="/static/js/reader-epub.js"></script>
+</body>
+</html>
