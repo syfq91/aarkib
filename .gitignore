@@ -46,3 +46,15 @@ dmypy.json
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Data, library books, covers & SQLite databases
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.epub
+*.cbz
+*.cbr
+*.zip
