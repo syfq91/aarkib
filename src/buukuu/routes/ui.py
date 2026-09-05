@@ -101,10 +101,27 @@ def tags():
 def settings():
     users = (
         db.session.scalars(select(User).order_by(User.id.asc())).all()
-        if current_user.is_admin
+        if current_user.is_authenticated and current_user.is_admin
         else []
     )
-    return render_template("settings.html", users=users)
+    from buukuu.services.scanner import get_library_dirs
+
+    library_dirs = [str(p) for p in get_library_dirs(current_app._get_current_object())]  # type: ignore
+    covers_path = str(current_app.config.get("COVERS_DIR", "data/covers"))
+    book_count = db.session.scalar(select(func.count(Book.id))) or 0
+    author_count = db.session.scalar(select(func.count(Author.id))) or 0
+    series_count = db.session.scalar(select(func.count(Series.id))) or 0
+
+    return render_template(
+        "settings.html",
+        users=users,
+        library_dirs=library_dirs,
+        library_path=library_dirs[0] if library_dirs else "data/books",
+        covers_path=covers_path,
+        book_count=book_count,
+        author_count=author_count,
+        series_count=series_count,
+    )
 
 
 @ui_bp.route("/manifest.webmanifest")

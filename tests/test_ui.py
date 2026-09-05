@@ -161,3 +161,28 @@ def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
     assert f'href="/api/books/{book_id}/download/optimized/kindle"'.encode() in res.data
     assert f'href="/api/books/{book_id}/download/optimized/kobo"'.encode() in res.data
     assert f'href="/api/books/{book_id}/download/optimized/eink"'.encode() in res.data
+
+
+def test_settings_page_displays_multiple_directories(tmp_path):
+    from buukuu import create_app
+    from buukuu.config import TestConfig
+
+    dir1 = tmp_path / "lib1"
+    dir2 = tmp_path / "lib2"
+    dir1.mkdir()
+    dir2.mkdir()
+
+    class MultiDirTestConfig(TestConfig):
+        DATA_DIR = tmp_path / "data"
+        LIBRARY_DIR = f"{dir1}:{dir2}"
+        COVERS_DIR = tmp_path / "data" / "covers"
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/settings_test.db"
+
+    app = create_app(MultiDirTestConfig)
+    client = app.test_client()
+
+    res = client.get("/settings")
+    assert res.status_code == 200
+    assert b"Library Storage (2 folders):" in res.data
+    assert str(dir1).encode() in res.data
+    assert str(dir2).encode() in res.data

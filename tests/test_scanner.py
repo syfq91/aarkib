@@ -73,3 +73,79 @@ def test_scan_symlinked_directory(tmp_path, sample_epub):
     res = scan_library(app)
     assert res["scanned"] == 1
     assert res["added_or_updated"] == 1
+
+
+def test_get_env_library_dirs(tmp_path):
+    from buukuu.config import get_env_library_dirs, split_path_string
+
+    # Test split_path_string
+    assert split_path_string("/a:/b;/c,/d\n/e") == ["/a", "/b", "/c", "/d", "/e"]
+    assert split_path_string("C:\\books;D:\\comics") == ["C:\\books", "D:\\comics"]
+
+    # Test numbered and named environment variables in custom dict
+    mock_env = {
+        "BUUKUU_LIBRARY_DIR": f"{tmp_path}/main",
+        "BUUKUU_LIBRARY_DIR1": f"{tmp_path}/manga",
+        "BUUKUU_LIBRARY_DIR2": f"{tmp_path}/comics",
+        "BUUKUU_LIBRARY_DIR3": f"{tmp_path}/novels",
+        "BUUKU_LIBRARY_DIR4": f"{tmp_path}/audiobooks",
+        "BUUKUU_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
+        "BUUKUU_LIBRARY_DIR_10": f"{tmp_path}/extra10",
+    }
+    paths = get_env_library_dirs(env=mock_env)
+    path_strs = [str(p) for p in paths]
+
+    # Primary should come first
+    assert path_strs[0] == str(tmp_path / "main")
+    # Numbered matches: index 1, 2, 3, 4, 10
+    assert str(tmp_path / "manga") in path_strs
+    assert str(tmp_path / "comics") in path_strs
+    assert str(tmp_path / "novels") in path_strs
+    assert str(tmp_path / "audiobooks") in path_strs
+    assert str(tmp_path / "extra10") in path_strs
+    # Named match
+    assert str(tmp_path / "ln") in path_strs
+    # Ordering verification: index 1 < index 2 < index 3 < index 4 < index 10
+    idx_manga = path_strs.index(str(tmp_path / "manga"))
+    idx_comics = path_strs.index(str(tmp_path / "comics"))
+    idx_novels = path_strs.index(str(tmp_path / "novels"))
+    idx_audio = path_strs.index(str(tmp_path / "audiobooks"))
+    idx_extra10 = path_strs.index(str(tmp_path / "extra10"))
+    assert idx_manga < idx_comics < idx_novels < idx_audio < idx_extra10
+
+
+def test_scan_multiple_directories_via_env(
+    tmp_path, sample_epub, sample_cbz, monkeypatch
+):
+    dir1 = tmp_path / "folder_one"
+    dir2 = tmp_path / "folder_two"
+    dir3 = tmp_path / "folder_three"
+    dir1.mkdir()
+    dir2.mkdir()
+    dir3.mkdir()
+
+    import shutil
+
+    shutil.copy(sample_epub, dir1 / "book1.epub")
+    shutil.copy(sample_cbz, dir2 / "comic1.cbz")
+    shutil.copy(sample_epub, dir3 / "book2.epub")
+
+    monkeypatch.setenv("BUUKUU_LIBRARY_DIR", str(dir1))
+    monkeypatch.setenv("BUUKUU_LIBRARY_DIR1", str(dir2))
+    monkeypatch.setenv("BUUKUU_LIBRARY_DIR2", str(dir3))
+
+    class EnvMultiDirConfig(TestConfig):
+        DATA_DIR = tmp_path / "data"
+        COVERS_DIR = tmp_path / "data" / "covers"
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/env_multi_test.db"
+
+    app = create_app(EnvMultiDirConfig)
+    dirs = get_library_dirs(app)
+    assert len(dirs) == 3
+    assert dir1 in dirs
+    assert dir2 in dirs
+    assert dir3 in dirs
+
+    res = scan_library(app)
+    assert res["scanned"] == 3
+    assert res["added_or_updated"] == 3

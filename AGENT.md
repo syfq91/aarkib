@@ -32,7 +32,7 @@ graph TD
         
         subgraph Storage
             DB[(SQLite with WAL mode)]
-            BooksDir[(Books Storage: ./data/books)]
+            BooksDir[(Books Storage: ./data/books + Multi-Dir Scan)]
             CoversDir[(Covers Storage: ./data/covers)]
         end
     end
@@ -63,7 +63,7 @@ graph TD
 buukuu/
 ├── src/buukuu/
 │   ├── __init__.py           # Flask app factory (create_app), CLI commands (scan, enrich, create-user, list-users)
-│   ├── config.py             # Config dataclass, defaults, and BUUKUU_* environment variables
+│   ├── config.py             # Config dataclass, defaults, and BUUKUU_* / BUUKUU_LIBRARY_DIR* multi-folder discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
 │   │   ├── __init__.py       # Model exports
@@ -78,7 +78,7 @@ buukuu/
 │   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── scanner.py        # Recursive directory crawler, SHA-256 hash deduction, cover caching (.webp)
+│   │   ├── scanner.py        # Recursive multi-dir crawler, watchdog watcher, SHA-256 hash deduction, cover caching (.webp)
 │   │   ├── enricher.py       # Google Books & Open Library metadata enrichment client
 │   │   └── parsers/
 │   │       ├── base.py       # ParsedBookMetadata dataclass

@@ -11,12 +11,15 @@ from sqlalchemy import select
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from buukuu.config import Config, get_env_library_dirs, split_path_string
 from buukuu.extensions import db
 from buukuu.models import Author, Book, Series, Tag
 from buukuu.services.parsers.base import extract_metadata_from_file
 from buukuu.services.thumbnail import generate_cover_webp
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from flask import Flask
 
 logger = logging.getLogger(__name__)
@@ -31,27 +34,87 @@ def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
     return sha256.hexdigest()
 
 
-def get_library_dirs(app: Flask) -> list[Path]:
-    """Resolves one or more library directories from app config."""
-    raw = app.config.get("LIBRARY_DIR", "data/books")
-    if isinstance(raw, (list, tuple)):
-        dirs = [Path(p) for p in raw]
-    elif isinstance(raw, Path):
-        dirs = [raw]
-    else:
-        raw_str = str(raw).strip()
-        if ";" in raw_str:
-            parts = [p.strip() for p in raw_str.split(";") if p.strip()]
-        elif "," in raw_str:
-            parts = [p.strip() for p in raw_str.split(",") if p.strip()]
-        elif ":" in raw_str and not (len(raw_str) > 1 and raw_str[1] == ":"):
-            parts = [p.strip() for p in raw_str.split(":") if p.strip()]
-        elif raw_str:
-            parts = [raw_str]
+def get_library_dirs(app: Flask | None = None) -> list[Path]:
+    """Resolves one or more library directories from app config and environment variables."""
+    raw_candidates: list[Any] = []
+
+    if app is not None:
+        raw_dirs = app.config.get("LIBRARY_DIRS")
+        raw_dir = app.config.get("LIBRARY_DIR")
+
+        if raw_dirs is not None and raw_dirs != Config.LIBRARY_DIRS:
+            if isinstance(raw_dirs, (list, tuple, set)):
+                raw_candidates.extend(raw_dirs)
+            else:
+                raw_candidates.append(raw_dirs)
+
+        if raw_dir is not None and raw_dir != Config.LIBRARY_DIR:
+            if isinstance(raw_dir, (list, tuple, set)):
+                raw_candidates.extend(raw_dir)
+            else:
+                raw_candidates.append(raw_dir)
+
+    # Check explicitly defined environment variables
+    env_paths = get_env_library_dirs()
+    if env_paths:
+        raw_candidates.extend(env_paths)
+
+    # If neither app config override nor explicit env vars were found
+    if not raw_candidates:
+        if app is not None:
+            raw = app.config.get("LIBRARY_DIRS") or app.config.get("LIBRARY_DIR")
+            if raw is not None:
+                if isinstance(raw, (list, tuple, set)):
+                    raw_candidates.extend(raw)
+                else:
+                    raw_candidates.append(raw)
+            else:
+                data_dir = app.config.get("DATA_DIR", "data")
+                raw_candidates.append(Path(data_dir) / "books")
         else:
-            parts = ["data/books"]
-        dirs = [Path(p) for p in parts]
-    return dirs
+            raw_candidates.append(Path("data/books"))
+
+    # Parse and deduplicate
+    final_paths: list[Path] = []
+    seen: set[str] = set()
+
+    for item in raw_candidates:
+        if isinstance(item, Path):
+            path_strs = [str(item)]
+        elif isinstance(item, str):
+            path_strs = split_path_string(item)
+        elif isinstance(item, (list, tuple, set)):
+            path_strs = []
+            for sub in item:
+                if isinstance(sub, Path):
+                    path_strs.append(str(sub))
+                elif isinstance(sub, str):
+                    path_strs.extend(split_path_string(sub))
+        else:
+            path_strs = [str(item)]
+
+        for p_str in path_strs:
+            if not p_str or not p_str.strip():
+                continue
+            path_obj = Path(p_str).expanduser()
+            try:
+                norm_key = str(path_obj.resolve())
+            except Exception:
+                norm_key = str(path_obj)
+
+            if norm_key not in seen:
+                seen.add(norm_key)
+                final_paths.append(path_obj)
+
+    if not final_paths:
+        fallback = (
+            Path(app.config.get("DATA_DIR", "data")) / "books"
+            if app is not None
+            else Path("data/books")
+        )
+        return [fallback]
+
+    return final_paths
 
 
 def index_single_book(

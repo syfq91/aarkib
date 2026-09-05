@@ -77,7 +77,8 @@ Your library books placed in `./data/books` will be mounted automatically.
 | :--- | :--- | :--- |
 | `SECRET_KEY` | `buukuu-secret-key-change-in-production` | Secret key for session security & signing. |
 | `BUUKUU_DATA_DIR` | `./data` | Base storage directory. |
-| `BUUKUU_LIBRARY_DIR` | `./data/books` | Directory containing EPUB and CBZ files. |
+| `BUUKUU_LIBRARY_DIR` | `./data/books` | Primary library directory (or delimited list: `/dir1:/dir2`). |
+| `BUUKUU_LIBRARY_DIR1`, `DIR2`, ... | *(none)* | Additional numbered library directories (`BUUKUU_LIBRARY_DIR1`, `BUUKUU_LIBRARY_DIR2`, `DIR1`, etc.). |
 | `BUUKUU_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
 | `DATABASE_URL` | `sqlite:///data/buukuu.db` | SQLAlchemy database URI. |
 | `BUUKUU_AUTH_REQUIRED` | `true` | When `true`, visitors must log in to browse or download. |
@@ -88,6 +89,8 @@ Your library books placed in `./data/books` will be mounted automatically.
 | `BUUKUU_METADATA_PROVIDER` | `all` | Online enrichment provider: `googlebooks`, `openlibrary`, or `all`. |
 | `BUUKUU_PAGE_SIZE` | `24` | Number of books per page in UI views. |
 | `PORT` | `5000` | Server listening port. |
+
+> **💡 Multiple Library Folders**: You can specify multiple folders in `.env` using numbered variables like `BUUKUU_LIBRARY_DIR1=/mnt/nas/books`, `BUUKUU_LIBRARY_DIR2=/media/manga`, `BUUKUU_LIBRARY_DIR3=/home/user/calibre` (or `DIR1`, `DIR2`), or as a delimited list in `BUUKUU_LIBRARY_DIR=/books:/manga`.
 
 ---
 

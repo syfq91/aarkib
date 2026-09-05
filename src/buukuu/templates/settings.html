@@ -108,9 +108,20 @@
         <div style="font-size: 0.75rem; color: var(--text-secondary);">Series</div>
       </div>
     </div>
-    <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.25rem;">
-      <div><strong>Library Storage:</strong> <code>{{ library_path }}</code></div>
-      <div><strong>Covers Storage:</strong> <code>{{ covers_path }}</code></div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.35rem;">
+      <div>
+        <strong>Library Storage ({{ library_dirs|length if library_dirs else 1 }} folder{{ 's' if (library_dirs and library_dirs|length != 1) else '' }}):</strong>
+        <div style="margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.2rem;">
+          {% if library_dirs %}
+            {% for dir_path in library_dirs %}
+              <code>{{ dir_path }}</code>
+            {% endfor %}
+          {% else %}
+            <code>{{ library_path }}</code>
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-top: 0.25rem;"><strong>Covers Storage:</strong> <code>{{ covers_path }}</code></div>
     </div>
   </div>
 
