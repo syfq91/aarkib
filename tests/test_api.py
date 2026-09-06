@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from buukuu.services.parsers.epub import extract_series_from_title
-from buukuu.services.scanner import index_single_book
+from aarkib.services.parsers.epub import extract_series_from_title
+from aarkib.services.scanner import index_single_book
 
 
 def test_extract_series_from_title():

@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from flask import Flask
 
-from buukuu import create_app
-from buukuu.config import TestConfig
-from buukuu.extensions import db
+from aarkib import create_app
+from aarkib.config import TestConfig
+from aarkib.extensions import db
 
 
 @pytest.fixture

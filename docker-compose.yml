@@ -1,21 +1,21 @@
 services:
-  buukuu:
+  aarkib:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: buukuu
+    container_name: aarkib
     restart: unless-stopped
     ports:
       - "5000:5000"
     volumes:
       - ./data:/app/data
     environment:
-      - BUUKUU_DATA_DIR=/app/data
-      - BUUKUU_AUTH_REQUIRED=true
-      - BUUKUU_ALLOW_REGISTRATION=true
-      - BUUKUU_AUTO_SCAN=true
-      - BUUKUU_WATCH_LIBRARY=true
-      - BUUKUU_AUTO_ENRICH=false
-      - BUUKUU_METADATA_PROVIDER=all
-      - BUUKUU_PAGE_SIZE=24
-      - SECRET_KEY=${SECRET_KEY:-buukuu-production-secret-key-change-me}
+      - AARKIB_DATA_DIR=/app/data
+      - AARKIB_AUTH_REQUIRED=true
+      - AARKIB_ALLOW_REGISTRATION=true
+      - AARKIB_AUTO_SCAN=true
+      - AARKIB_WATCH_LIBRARY=true
+      - AARKIB_AUTO_ENRICH=false
+      - AARKIB_METADATA_PROVIDER=all
+      - AARKIB_PAGE_SIZE=24
+      - SECRET_KEY=${SECRET_KEY:-aarkib-production-secret-key-change-me}

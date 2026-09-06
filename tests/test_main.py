@@ -1,5 +1,5 @@
-from buukuu import create_app
-from buukuu.config import TestConfig
+from aarkib import create_app
+from aarkib.config import TestConfig
 
 
 def test_create_app(tmp_path):

@@ -4,14 +4,14 @@ from pathlib import Path
 
 from PIL import Image
 
-from buukuu.services.optimizer import (
+from aarkib.services.optimizer import (
     DEVICE_PRESETS,
     clean_css_content,
     get_preset,
     optimize_epub,
     optimize_image,
 )
-from buukuu.services.scanner import index_single_book
+from aarkib.services.scanner import index_single_book
 
 
 def test_presets_configuration():

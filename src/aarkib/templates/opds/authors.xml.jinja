@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:aarkib:authors{% if preset %}:{{ preset }}{% endif %}</id>
+  <title>Authors</title>
+  <updated>{{ now_iso }}</updated>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}/authors"/>
+  <link rel="start" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}"/>
+
+  {% for author in authors %}
+  <entry>
+    <title>{{ author.name }}</title>
+    <id>urn:aarkib:author:{{ author.id }}{% if preset %}:{{ preset }}{% endif %}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">{{ author.books|length }} book(s)</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}{{ opds_prefix }}/authors/{{ author.id }}"/>
+  </entry>
+  {% endfor %}
+</feed>

@@ -1,5 +1,5 @@
-from buukuu.extensions import db
-from buukuu.models import Author, Book, Series, Tag, User
+from aarkib.extensions import db
+from aarkib.models import Author, Book, Series, Tag, User
 
 
 def test_user_password_hashing(app):
@@ -37,7 +37,7 @@ def test_book_relations(app):
 
 
 def test_user_progress_fields(app):
-    from buukuu.models import UserProgress
+    from aarkib.models import UserProgress
 
     book = Book(
         title="Test Book",
@@ -70,7 +70,7 @@ def test_user_progress_fields(app):
 def test_migrate_database_adds_missing_columns(app):
     from sqlalchemy import inspect, text
 
-    from buukuu import migrate_database
+    from aarkib import migrate_database
 
     # Drop a column by recreating user_progress table without device_id
     with db.engine.begin() as conn:
@@ -104,7 +104,7 @@ def test_migrate_database_adds_missing_columns(app):
 
 
 def test_generalized_media_model(app):
-    from buukuu.models import Collection, Creator, MediaType
+    from aarkib.models import Collection, Creator, MediaType
 
     # Check aliases
     assert Creator is Author
@@ -148,7 +148,7 @@ def test_generalized_media_model(app):
 
 
 def test_generalized_progress_and_bookmarks(app):
-    from buukuu.models import Bookmark, UserProgress
+    from aarkib.models import Bookmark, UserProgress
 
     book = Book(
         title="Progress Test Book",
@@ -182,7 +182,7 @@ def test_generalized_progress_and_bookmarks(app):
 def test_parser_registry_and_base_metadata(tmp_path):
     from pathlib import Path
 
-    from buukuu.services.parsers.base import (
+    from aarkib.services.parsers.base import (
         BaseParsedMetadata,
         ParsedBookMetadata,
         extract_metadata_from_file,

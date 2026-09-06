@@ -1,4 +1,4 @@
-# Buukuu Book Server Dockerfile
+# Aarkib Media Server Dockerfile
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 
 WORKDIR /app
@@ -7,7 +7,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    BUUKUU_DATA_DIR=/app/data
+    AARKIB_DATA_DIR=/app/data
 
 # Cache dependencies
 COPY pyproject.toml uv.lock ./
@@ -24,5 +24,5 @@ RUN mkdir -p /app/data/books /app/data/covers
 # Expose default HTTP port
 EXPOSE 5000
 
-# Run Buukuu server
-CMD ["uv", "run", "buukuu"]
+# Run Aarkib server
+CMD ["uv", "run", "aarkib"]

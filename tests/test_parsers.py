@@ -1,5 +1,5 @@
-from buukuu.services.parsers.cbz import parse_cbz
-from buukuu.services.parsers.epub import parse_epub
+from aarkib.services.parsers.cbz import parse_cbz
+from aarkib.services.parsers.epub import parse_epub
 
 
 def test_parse_epub(sample_epub):

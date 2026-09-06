@@ -1,7 +1,7 @@
 [project]
-name = "buukuu"
+name = "aarkib"
 version = "0.1.0"
-description = "Add your description here"
+description = "A modern, lightweight self-hosted book, comic, and media server"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -14,7 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
-buukuu = "buukuu:main"
+aarkib = "aarkib:main"
+buukuu = "aarkib:main"
 
 [build-system]
 requires = ["uv_build>=0.12.6,<0.13.0"]

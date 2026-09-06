@@ -1,15 +1,15 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from buukuu.extensions import db
-from buukuu.models import Book
-from buukuu.services.enricher import (
+from aarkib.extensions import db
+from aarkib.models import Book
+from aarkib.services.enricher import (
     EnrichedMetadata,
     enrich_book,
     fetch_from_google_books,
     fetch_from_open_library,
 )
-from buukuu.services.scanner import index_single_book
+from aarkib.services.scanner import index_single_book
 
 
 def test_fetch_from_google_books_mock():
@@ -34,9 +34,9 @@ def test_fetch_from_google_books_mock():
     }
 
     with (
-        patch("buukuu.services.enricher._http_get_json", return_value=mock_gb_response),
+        patch("aarkib.services.enricher._http_get_json", return_value=mock_gb_response),
         patch(
-            "buukuu.services.enricher._http_get_bytes", return_value=b"fake_image_bytes"
+            "aarkib.services.enricher._http_get_bytes", return_value=b"fake_image_bytes"
         ),
     ):
         meta = fetch_from_google_books(
@@ -67,8 +67,8 @@ def test_fetch_from_open_library_mock():
     }
 
     with (
-        patch("buukuu.services.enricher._http_get_json", return_value=mock_ol_response),
-        patch("buukuu.services.enricher._http_get_bytes", return_value=b"fake_cover"),
+        patch("aarkib.services.enricher._http_get_json", return_value=mock_ol_response),
+        patch("aarkib.services.enricher._http_get_bytes", return_value=b"fake_cover"),
     ):
         meta = fetch_from_open_library(title="Mistborn", author="Brandon Sanderson")
         assert meta is not None
@@ -97,7 +97,7 @@ def test_enrich_book_in_db(app, sample_epub):
         )
 
         with patch(
-            "buukuu.services.enricher.fetch_external_metadata", return_value=mock_meta
+            "aarkib.services.enricher.fetch_external_metadata", return_value=mock_meta
         ):
             result = enrich_book(book, covers_dir, overwrite=True)
             assert result["status"] == "success"
@@ -128,7 +128,7 @@ def test_api_enrich_endpoints(client, app, sample_epub):
     )
 
     with patch(
-        "buukuu.services.enricher.fetch_external_metadata", return_value=mock_meta
+        "aarkib.services.enricher.fetch_external_metadata", return_value=mock_meta
     ):
         # Single book enrich
         res = client.post(f"/api/books/{book_id}/enrich", json={"overwrite": True})

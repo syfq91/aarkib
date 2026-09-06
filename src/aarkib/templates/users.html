@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Manage Users - Aarkib{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h2>User Management</h2>
+    <p style="color: var(--text-secondary); font-size: 0.85rem;">Manage user accounts, roles, and access credentials.</p>
+  </div>
+  <a href="/auth/profile" class="btn btn-secondary" style="font-size: 0.85rem;">← Back to Profile</a>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+  <!-- Users Table -->
+  <div style="background-color: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden;">
+    <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); font-weight: 600;">
+      Registered Users ({{ users|length }})
+    </div>
+    
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase;">
+            <th style="padding: 0.75rem 1.25rem;">User</th>
+            <th style="padding: 0.75rem 1rem;">Role</th>
+            <th style="padding: 0.75rem 1rem;">Joined</th>
+            <th style="padding: 0.75rem 1.25rem; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 0.85rem 1.25rem;">
+              <strong style="color: var(--text-primary);">{{ u.username }}</strong>
+              {% if u.id == current_user.id %}
+                <span style="font-size: 0.75rem; color: var(--accent); margin-left: 0.35rem;">(You)</span>
+              {% endif %}
+            </td>
+            <td style="padding: 0.85rem 1rem;">
+              {% if u.is_admin %}
+                <span style="background: rgba(99, 102, 241, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600;">ADMIN</span>
+              {% else %}
+                <span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem;">READER</span>
+              {% endif %}
+            </td>
+            <td style="padding: 0.85rem 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+              {{ u.created_at.strftime('%Y-%m-%d') if u.created_at else 'N/A' }}
+            </td>
+            <td style="padding: 0.85rem 1.25rem; text-align: right;">
+              <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+                {% if u.id != current_user.id %}
+                  <form method="POST" action="/auth/users/{{ u.id }}/toggle-admin" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Toggle Administrator">
+                      {{ "Demote" if u.is_admin else "Promote" }}
+                    </button>
+                  </form>
+                  <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')">
+                    Reset
+                  </button>
+                  <form method="POST" action="/auth/users/{{ u.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete user {{ u.username }}?');">
+                    <button type="submit" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" title="Delete User">
+                      Delete
+                    </button>
+                  </form>
+                {% else %}
+                  <a href="/auth/profile" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Edit Profile</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Create User Form -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <h3 style="margin-bottom: 1rem;">Add New User</h3>
+    <form method="POST" action="/auth/users" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Username</label>
+        <input type="text" name="username" class="input-text" required placeholder="New username">
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Initial Password</label>
+        <input type="password" name="password" class="input-text" required minlength="4" placeholder="Minimum 4 characters">
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0;">
+        <input type="checkbox" name="is_admin" id="is_admin">
+        <label for="is_admin" style="font-size: 0.85rem;">Grant Administrator privileges</label>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Create User</button>
+    </form>
+  </div>
+</div>
+
+<!-- Password Reset Hidden Form -->
+<form id="reset-password-form" method="POST" action="" style="display: none;">
+  <input type="hidden" name="new_password" id="reset-new-password">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function promptResetPassword(userId, username) {
+  const newPass = prompt(`Enter new password for ${username} (min 4 characters):`);
+  if (!newPass) return;
+  if (newPass.length < 4) {
+    alert("Password must be at least 4 characters.");
+    return;
+  }
+  const form = document.getElementById("reset-password-form");
+  form.action = `/auth/users/${userId}/reset-password`;
+  document.getElementById("reset-new-password").value = newPass;
+  form.submit();
+}
+</script>
+{% endblock %}

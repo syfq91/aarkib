@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
-from buukuu.extensions import db
-from buukuu.models import User
+from aarkib.extensions import db
+from aarkib.models import User
 
 
 def test_user_registration_and_login(client):
@@ -170,7 +170,7 @@ def test_admin_user_management(client):
 def test_per_user_progress_isolation(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -232,7 +232,7 @@ def test_per_user_progress_isolation(client, app, sample_epub):
 def test_auth_required_enforcement(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])

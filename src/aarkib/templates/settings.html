@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block title %}Settings - Aarkib{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+  <h2>Settings & Integrations</h2>
+  <p style="color: var(--text-secondary); font-size: 0.9rem;">Configure OPDS feeds, library indexing, metadata enrichment, and user accounts.</p>
+</div>
+
+<!-- Main Settings Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+  
+  <!-- OPDS Feed Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📡</span> OPDS Catalog Feeds
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Add these URLs to any OPDS e-reader (KOReader, Xteink, Moon+ Reader, Thorium, Panels, etc.) to browse and download books:
+      </p>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Standard OPDS 1.2 Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" id="opds-url-input" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X4 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x4" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x4')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X3 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x3" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x3')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Kindle / Kobo / Generic E-Ink Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/eink" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/eink')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      💡 Optimized feeds automatically strip fonts, convert images to grayscale e-ink format, and compress EPUBs on demand!
+    </div>
+  </div>
+
+  <!-- Library Upload & Indexing Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+      <span>📥</span> Upload Books
+    </h3>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Upload `.epub` or `.cbz` files to import and index them immediately.
+    </p>
+    <form id="upload-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <input type="file" id="book-file-input" accept=".epub,.cbz,.zip" class="input-text" required>
+      <button type="submit" id="upload-btn" class="btn btn-primary">Upload & Index Book</button>
+    </form>
+  </div>
+
+  <!-- Library Maintenance & Metadata Enrichment -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+      <span>✨</span> Library Tools
+    </h3>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Sync disk storage and enrich books with descriptions, genres, and high-res covers from Google Books & Open Library.
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <button id="scan-lib-btn" class="btn btn-secondary" onclick="rescanLibrary()">
+        🔄 Rescan Library Folder
+      </button>
+      <button id="enrich-all-btn" class="btn btn-secondary" onclick="enrichLibrary()">
+        ✨ Fetch Online Metadata (All Books)
+      </button>
+    </div>
+  </div>
+
+  <!-- Server & Storage Info -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+      <span>📊</span> Storage & Statistics
+    </h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; text-align: center; margin-bottom: 1rem;">
+      <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: var(--radius-sm);">
+        <strong style="font-size: 1.25rem; color: var(--accent);">{{ book_count }}</strong>
+        <div style="font-size: 0.75rem; color: var(--text-secondary);">Books</div>
+      </div>
+      <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: var(--radius-sm);">
+        <strong style="font-size: 1.25rem; color: var(--accent);">{{ author_count }}</strong>
+        <div style="font-size: 0.75rem; color: var(--text-secondary);">Authors</div>
+      </div>
+      <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: var(--radius-sm);">
+        <strong style="font-size: 1.25rem; color: var(--accent);">{{ series_count }}</strong>
+        <div style="font-size: 0.75rem; color: var(--text-secondary);">Series</div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.35rem;">
+      <div>
+        <strong>Library Storage ({{ library_dirs|length if library_dirs else 1 }} folder{{ 's' if (library_dirs and library_dirs|length != 1) else '' }}):</strong>
+        <div style="margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.2rem;">
+          {% if library_dirs %}
+            {% for dir_path in library_dirs %}
+              <code>{{ dir_path }}</code>
+            {% endfor %}
+          {% else %}
+            <code>{{ library_path }}</code>
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-top: 0.25rem;"><strong>Covers Storage:</strong> <code>{{ covers_path }}</code></div>
+    </div>
+  </div>
+
+</div>
+
+{% if current_user.is_authenticated and current_user.is_admin %}
+<!-- User Management Section (Admin Only) -->
+<div id="users" style="margin-top: 2rem;">
+  <div style="margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+    <h3>👥 User Management</h3>
+    <span style="font-size: 0.85rem; color: var(--text-secondary);">{{ users|length }} registered accounts</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+    <!-- Users Table -->
+    <div style="background-color: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden;">
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase;">
+              <th style="padding: 0.75rem 1rem;">User</th>
+              <th style="padding: 0.75rem 1rem;">Role</th>
+              <th style="padding: 0.75rem 1rem;">Joined</th>
+              <th style="padding: 0.75rem 1rem; text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.75rem 1rem;">
+                <strong style="color: var(--text-primary);">{{ u.username }}</strong>
+                {% if u.id == current_user.id %}
+                  <span style="font-size: 0.75rem; color: var(--accent); margin-left: 0.35rem;">(You)</span>
+                {% endif %}
+              </td>
+              <td style="padding: 0.75rem 1rem;">
+                {% if u.is_admin %}
+                  <span style="background: rgba(99, 102, 241, 0.15); color: var(--accent); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600;">ADMIN</span>
+                {% else %}
+                  <span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem;">READER</span>
+                {% endif %}
+              </td>
+              <td style="padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                {{ u.created_at.strftime('%Y-%m-%d') if u.created_at else 'N/A' }}
+              </td>
+              <td style="padding: 0.75rem 1rem; text-align: right;">
+                <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+                  {% if u.id != current_user.id %}
+                    <form method="POST" action="/auth/users/{{ u.id }}/toggle-admin" style="display: inline;">
+                      <button type="submit" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Toggle Administrator Role">
+                        {{ "Demote" if u.is_admin else "Promote" }}
+                      </button>
+                    </form>
+                    <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')">
+                      Reset
+                    </button>
+                    <form method="POST" action="/auth/users/{{ u.id }}/delete" style="display: inline;" onsubmit="return confirm('Delete user {{ u.username }}?');">
+                      <button type="submit" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" title="Delete User">
+                        ✕
+                      </button>
+                    </form>
+                  {% else %}
+                    <a href="/auth/profile" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Profile</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Create User Form -->
+    <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+      <h4 style="margin-bottom: 0.75rem;">Add New User</h4>
+      <form method="POST" action="/auth/users" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Username</label>
+          <input type="text" name="username" class="input-text" required placeholder="New username">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Initial Password</label>
+          <input type="password" name="password" class="input-text" required minlength="4" placeholder="Minimum 4 characters">
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0;">
+          <input type="checkbox" name="is_admin" id="is_admin">
+          <label for="is_admin" style="font-size: 0.85rem;">Grant Administrator privileges</label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 0.25rem;">Create User</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Password Reset Hidden Form -->
+<form id="reset-password-form" method="POST" action="" style="display: none;">
+  <input type="hidden" name="new_password" id="reset-new-password">
+</form>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyText(text) {
+  navigator.clipboard.writeText(text);
+  showToast("OPDS URL copied to clipboard!", "success");
+}
+
+function copyOpdsUrl() {
+  const input = document.getElementById("opds-url-input");
+  input.select();
+  navigator.clipboard.writeText(input.value);
+  showToast("OPDS Catalog URL copied to clipboard!", "success");
+}
+
+function promptResetPassword(userId, username) {
+  const newPass = prompt(`Enter new password for ${username} (min 4 characters):`);
+  if (!newPass) return;
+  if (newPass.length < 4) {
+    alert("Password must be at least 4 characters.");
+    return;
+  }
+  const form = document.getElementById("reset-password-form");
+  form.action = `/auth/users/${userId}/reset-password`;
+  document.getElementById("reset-new-password").value = newPass;
+  form.submit();
+}
+
+document.getElementById("upload-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fileInput = document.getElementById("book-file-input");
+  if (!fileInput.files.length) return;
+
+  const btn = document.getElementById("upload-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Uploading...";
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+
+  try {
+    const res = await fetch("/api/library/upload", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Uploaded "${data.title}" successfully!`, "success");
+      fileInput.value = "";
+    } else {
+      showToast(data.description || "Upload failed", "error");
+    }
+  } catch (err) {
+    showToast("Network error uploading book", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Upload & Index Book";
+  }
+});
+
+async function enrichLibrary() {
+  const btn = document.getElementById("enrich-all-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Enriching library...";
+  try {
+    const res = await fetch("/api/library/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overwrite: false })
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(`Enriched ${data.result.enriched} books (${data.result.skipped} skipped)`, "success");
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast("Enrichment failed", "error");
+    }
+  } catch (err) {
+    showToast("Network error during enrichment", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "✨ Fetch Online Metadata (All Books)";
+  }
+}
+
+async function rescanLibrary() {
+  const btn = document.getElementById("scan-lib-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Scanning files...";
+  try {
+    const res = await fetch("/api/library/scan", { method: "POST" });
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(`Scanned ${data.result.scanned} files (${data.result.added_or_updated} added/updated)`, "success");
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast("Scan failed", "error");
+    }
+  } catch (err) {
+    showToast("Network error scanning library", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "🔄 Rescan Library Folder";
+  }
+}
+</script>
+{% endblock %}

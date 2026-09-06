@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} - Aarkib{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <a href="/" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem;">← Back to Library</a>
+</div>
+
+<div class="detail-layout">
+  <div>
+    <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="detail-cover">
+    
+    <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+      {% if book.file_format == 'epub' %}
+        <a href="/reader/epub/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+          {% if progress and progress.is_completed %}
+            📖 Read Again (EPUB)
+          {% elif progress and progress.percentage > 0 %}
+            📖 Continue Reading ({{ progress.percentage|round(0)|int }}%)
+          {% else %}
+            📖 Read in Browser (EPUB)
+          {% endif %}
+        </a>
+      {% else %}
+        <a href="/reader/cbz/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+          {% if progress and progress.is_completed %}
+            🖼️ Read Again (CBZ)
+          {% elif progress and progress.percentage > 0 %}
+            🖼️ Continue Reading ({{ progress.percentage|round(0)|int }}%)
+          {% else %}
+            🖼️ Read Comic / Manga (CBZ)
+          {% endif %}
+        </a>
+      {% endif %}
+
+      {% if book.file_format == 'epub' %}
+      <div style="position: relative; display: flex; width: 100%;">
+        <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
+          <span>⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)</span>
+        </a>
+        <button id="eink-dropdown-btn" class="btn btn-secondary" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); padding: 0 0.85rem; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="toggleEinkDropdown(event)" title="Choose E-Ink Optimized Preset">
+          <span style="font-size: 0.75rem;">⚡▼</span>
+        </button>
+        <div id="eink-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 50; overflow: hidden;">
+          <div style="padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); letter-spacing: 0.5px;">
+            ⚡ E-Ink Optimized Downloads
+          </div>
+          <a href="/api/books/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+            <strong>⚡ Xteink X4</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">480×800 • Grayscale Dithered</span>
+          </a>
+          <a href="/api/books/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+            <strong>⚡ Xteink X3</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">528×792 • Grayscale Dithered</span>
+          </a>
+          <a href="/api/books/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+            <strong>⚡ Kindle</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1072×1448 • Grayscale</span>
+          </a>
+          <a href="/api/books/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+            <strong>⚡ Kobo</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1264×1680 • Grayscale</span>
+          </a>
+          <a href="/api/books/{{ book.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
+            <strong>⚡ Generic E-Ink</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1200×1600 • Grayscale & No Fonts</span>
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary">
+        ⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)
+      </a>
+      {% endif %}
+
+      <button id="edit-metadata-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="openEditModal()">
+        ✏️ Edit Book & Series
+      </button>
+
+      <button id="enrich-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="enrichCurrentBook()">
+        ✨ Fetch Metadata Online
+      </button>
+    </div>
+  </div>
+
+  <div>
+    <h1 style="font-size: 1.85rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem;">{{ book.title }}</h1>
+    <h3 style="color: var(--text-secondary); font-weight: 500; font-size: 1.1rem; margin-bottom: 1.5rem;">
+      by
+      {% for author in book.authors %}
+        <a href="/?author_id={{ author.id }}" style="color: var(--accent); text-decoration: none;">{{ author.name }}</a>{% if not loop.last %}, {% endif %}
+      {% else %}
+        <span>Unknown Author</span>
+      {% endfor %}
+    </h3>
+
+    <div style="background-color: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+        <span>Reading Progress</span>
+        <span style="font-weight: 600; color: var(--accent);">{{ progress.percentage|round(1) if progress else 0 }}%</span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" style="width: {{ progress.percentage if progress else 0 }}%;"></div>
+      </div>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.25rem 0.6rem;" onclick="setBookProgress(100)">
+          ✓ Mark as Finished
+        </button>
+        {% if progress and progress.percentage > 0 %}
+        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.25rem 0.6rem;" onclick="setBookProgress(0)">
+          ↺ Reset Progress
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if book.tags %}
+      <div style="margin-bottom: 1.5rem;">
+        {% for tag in book.tags %}
+          <a href="/?tag_id={{ tag.id }}" class="tag-badge">{{ tag.name }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="detail-meta-list">
+      <div class="meta-item">
+        <span class="meta-label">Format</span>
+        <span class="meta-value" style="text-transform: uppercase;">{{ book.file_format }}</span>
+      </div>
+      {% if book.series %}
+      <div class="meta-item">
+        <span class="meta-label">Series</span>
+        <span class="meta-value">
+          <a href="/?series_id={{ book.series.id }}" style="color: var(--accent); text-decoration: none; font-weight: 600;">
+            📚 {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}
+          </a>
+        </span>
+      </div>
+      {% endif %}
+      {% if book.page_count %}
+      <div class="meta-item">
+        <span class="meta-label">Pages</span>
+        <span class="meta-value">{{ book.page_count }}</span>
+      </div>
+      {% endif %}
+      {% if book.publisher %}
+      <div class="meta-item">
+        <span class="meta-label">Publisher</span>
+        <span class="meta-value">{{ book.publisher }}</span>
+      </div>
+      {% endif %}
+      {% if book.publication_date %}
+      <div class="meta-item">
+        <span class="meta-label">Published</span>
+        <span class="meta-value">{{ book.publication_date }}</span>
+      </div>
+      {% endif %}
+      {% if book.isbn %}
+      <div class="meta-item">
+        <span class="meta-label">ISBN</span>
+        <span class="meta-value">{{ book.isbn }}</span>
+      </div>
+      {% endif %}
+      {% if book.language %}
+      <div class="meta-item">
+        <span class="meta-label">Language</span>
+        <span class="meta-value" style="text-transform: uppercase;">{{ book.language }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if book.description %}
+      <div style="margin-top: 1.5rem;">
+        <h4 style="margin-bottom: 0.5rem;">Synopsis</h4>
+        <div style="color: var(--text-secondary); line-height: 1.7; font-size: 0.95rem; white-space: pre-line;">
+          {{ book.description|striptags }}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Edit Metadata Modal -->
+<div id="edit-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; padding: 1.5rem; box-shadow: var(--shadow-lg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+      <h3 style="font-size: 1.25rem; font-weight: 700;">✏️ Edit Book & Series Metadata</h3>
+      <button onclick="closeEditModal()" class="btn btn-icon" style="font-size: 1.2rem;">✕</button>
+    </div>
+
+    <form id="edit-metadata-form" onsubmit="saveMetadata(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Title</label>
+        <input type="text" id="edit-title" class="input-text" value="{{ book.title }}" required>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Author(s) (comma separated)</label>
+        <input type="text" id="edit-authors" class="input-text" value="{{ book.authors|map(attribute='name')|join(', ') }}">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Series Name</label>
+          <input type="text" id="edit-series" class="input-text" placeholder="e.g. Harry Potter, One Piece" value="{{ book.series.name if book.series else '' }}">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Volume / #</label>
+          <input type="number" step="any" id="edit-series-index" class="input-text" placeholder="e.g. 1" value="{{ book.series_index if book.series_index is not none else '' }}">
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Tags / Genres (comma separated)</label>
+        <input type="text" id="edit-tags" class="input-text" placeholder="Fantasy, Adventure, Sci-Fi" value="{{ book.tags|map(attribute='name')|join(', ') }}">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Publisher</label>
+          <input type="text" id="edit-publisher" class="input-text" value="{{ book.publisher or '' }}">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Published Date</label>
+          <input type="text" id="edit-publication-date" class="input-text" placeholder="YYYY-MM-DD" value="{{ book.publication_date or '' }}">
+        </div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">ISBN</label>
+        <input type="text" id="edit-isbn" class="input-text" value="{{ book.isbn or '' }}">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Synopsis / Description</label>
+        <textarea id="edit-description" class="input-text" rows="4" style="resize: vertical;">{{ book.description or '' }}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+        <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Cancel</button>
+        <button type="submit" id="save-metadata-btn" class="btn btn-primary">💾 Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEditModal() {
+  const modal = document.getElementById("edit-modal");
+  modal.style.display = "flex";
+}
+
+function closeEditModal() {
+  const modal = document.getElementById("edit-modal");
+  modal.style.display = "none";
+}
+
+async function saveMetadata(e) {
+  e.preventDefault();
+  const btn = document.getElementById("save-metadata-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Saving...";
+
+  const payload = {
+    title: document.getElementById("edit-title").value.trim(),
+    authors: document.getElementById("edit-authors").value.trim(),
+    series: document.getElementById("edit-series").value.trim(),
+    series_index: document.getElementById("edit-series-index").value.trim(),
+    tags: document.getElementById("edit-tags").value.trim(),
+    publisher: document.getElementById("edit-publisher").value.trim(),
+    publication_date: document.getElementById("edit-publication-date").value.trim(),
+    isbn: document.getElementById("edit-isbn").value.trim(),
+    description: document.getElementById("edit-description").value.trim()
+  };
+
+  try {
+    const res = await fetch("/api/books/{{ book.id }}/edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("Metadata saved successfully!", "success");
+      setTimeout(() => location.reload(), 700);
+    } else {
+      showToast(data.message || "Failed to save metadata", "error");
+    }
+  } catch (err) {
+    showToast("Error updating metadata", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "💾 Save Changes";
+  }
+}
+
+async function enrichCurrentBook() {
+  const btn = document.getElementById("enrich-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Fetching metadata...";
+  try {
+    const res = await fetch("/api/books/{{ book.id }}/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overwrite: true })
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(`Updated: ${data.changes.join(", ")}`, "success");
+      setTimeout(() => location.reload(), 1200);
+    } else if (data.status === "not_found") {
+      showToast("No matching online metadata found.", "error");
+    } else {
+      showToast("No new metadata changes found.", "info");
+    }
+  } catch (err) {
+    showToast("Error connecting to enrichment service", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "✨ Fetch Metadata Online";
+  }
+}
+
+function toggleEinkDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById("eink-dropdown-menu");
+  if (menu) {
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
+  }
+}
+
+document.addEventListener("click", () => {
+  const menu = document.getElementById("eink-dropdown-menu");
+  if (menu) menu.style.display = "none";
+});
+
+async function setBookProgress(percentage) {
+  try {
+    const res = await fetch("/api/books/{{ book.id }}/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        percentage: percentage,
+        location: percentage === 100 ? "completed" : "0",
+        is_completed: percentage === 100
+      })
+    });
+    if (res.ok) {
+      showToast(percentage === 100 ? "Marked as finished!" : "Progress reset!", "success");
+      setTimeout(() => location.reload(), 800);
+    }
+  } catch (err) {
+    showToast("Failed to update reading progress", "error");
+  }
+}
+</script>
+{% endblock %}

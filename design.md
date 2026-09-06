@@ -1,6 +1,6 @@
-# 🏛️ Buukuu System Architecture & Technical Design
+# 🏛️ Aarkib System Architecture & Technical Design
 
-**Buukuu** is a modern, lightweight, self-hosted book and comic server engineered with Python 3.14, Flask, and SQLite. It provides catalog management, in-browser reading, on-demand e-ink device optimization, OPDS catalog feeds, and multi-client reading progress synchronization.
+**Aarkib** is a modern, lightweight, self-hosted media server engineered with Python 3.14, Flask, and SQLite. It provides catalog management, in-browser reading, on-demand e-ink device optimization, OPDS catalog feeds, multi-client reading progress synchronization, and an extensible plugin system with work-in-progress (WIP) support for audio and video media.
 
 ---
 
@@ -12,8 +12,9 @@
    - **OPDS Progression 1.0** for reading position synchronization with strict conflict resolution.
    - **OPDS Authentication Specification** (`application/opds-authentication+json`) alongside HTTP Basic Auth.
 3. **E-Ink Native Experience**: Hardware-tailored processing pipeline that optimizes EPUB files on-demand (font stripping, CSS sanitization, image resizing/dithering) specifically for e-paper devices (Xteink, Kindle, Kobo).
-4. **Non-Destructive Storage**: Original book archives (`.epub`, `.cbz`) are strictly read-only and never modified. Extracted covers, thumbnails, and optimized device variants are cached separately.
-5. **Zero-Friction Web Reading**: Built-in, responsive web readers for EPUB and CBZ with client-side progress tracking and offline asset caching via PWA Service Workers.
+4. **Non-Destructive Storage**: Original media archives (`.epub`, `.cbz`, `.mp3`, `.mp4`) are strictly read-only and never modified. Extracted covers, thumbnails, and optimized device variants are cached separately.
+5. **Zero-Friction Web Reading & Media Access**: Built-in, responsive web readers for EPUB and CBZ with client-side progress tracking and offline asset caching via PWA Service Workers, with playback interfaces in progress for audiobooks, music, and video.
+6. **Extensible Multi-Media Plugin Architecture**: Core data models and scanner pipeline decoupled from file types through abstract `MediaPlugin` handlers and declarative mixins.
 
 ---
 
@@ -25,6 +26,7 @@ graph TD
         Web[Web Browser / PWA]
         EReader[E-Readers / Apps: KOReader, Moon+, Thorium]
         EInk[E-Ink Devices: Xteink, Kindle, Kobo]
+        MediaPlayer[Media Players: Web Audio/Video Player - WIP]
     end
 
     subgraph Presentation & Routing Layer
@@ -35,17 +37,19 @@ graph TD
         ReaderRoutes[Reader Blueprint: /reader/epub/:id, /reader/cbz/:id]
     end
 
-    subgraph Service Layer
+    subgraph Service & Plugin Layer
+        PluginRegistry[Plugin Registry: plugin_registry]
+        BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP]
+        AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC - WIP]
+        VideoPlugin[VideoMediaPlugin: MP4, MKV - WIP]
         Scanner[Scanner & Watchdog Service]
-        EPUBParser[EPUB 2/3 OPF Parser]
-        CBZParser[CBZ / ComicInfo Parser]
         Optimizer[E-Ink Device Optimizer]
         Enricher[Metadata Enricher: Google Books & Open Library]
     end
 
     subgraph Persistence & Storage Layer
-        DB[(SQLite WAL: buukuu.db)]
-        BooksDir[(Library Folders: ./data/books)]
+        DB[(SQLite WAL: aarkib.db)]
+        BooksDir[(Media Folders: ./data/books, ./data/audio, ./data/video)]
         CoversDir[(Cover Storage: ./data/covers - WebP)]
         OptimizedDir[(Optimized Cache: ./data/optimized)]
     end
@@ -53,6 +57,7 @@ graph TD
     Web --> AuthFilter
     EReader --> AuthFilter
     EInk --> AuthFilter
+    MediaPlayer --> AuthFilter
 
     AuthFilter --> UIRoutes
     AuthFilter --> APIRoutes
@@ -66,8 +71,10 @@ graph TD
     OPDSRoutes --> DB
     OPDSRoutes --> Optimizer
 
-    Scanner --> EPUBParser
-    Scanner --> CBZParser
+    Scanner --> PluginRegistry
+    PluginRegistry --> BookPlugin
+    PluginRegistry --> AudioPlugin
+    PluginRegistry --> VideoPlugin
     Scanner --> DB
     Scanner --> CoversDir
 
@@ -113,11 +120,11 @@ sequenceDiagram
 ```
 
 - **Multi-Directory Discovery**: Supported via multiple environment conventions:
-  - `BUUKUU_LIBRARY_DIR` or `BUUKUU_BOOKS_DIR` (supports colon, semicolon, comma, or newline delimiters).
-  - Numbered environment variables: `BUUKUU_LIBRARY_DIR1`, `BUUKUU_LIBRARY_DIR2`, `DIR1`, `DIR2`.
-  - Named variables: `BUUKUU_LIBRARY_DIR_MANGA`, `BUUKUU_DIR_COMICS`.
-- **Deduplication & Integrity**: Every book is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading history or metadata customizations.
-- **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `BUUKUU_WATCH_LIBRARY=true`.
+  - `AARKIB_LIBRARY_DIR` or `AARKIB_BOOKS_DIR` (supports colon, semicolon, comma, or newline delimiters; legacy `BUUKUU_*` supported).
+  - Numbered environment variables: `AARKIB_LIBRARY_DIR1`, `AARKIB_LIBRARY_DIR2`, `DIR1`, `DIR2` (or `BUUKUU_LIBRARY_DIR1`, ...).
+  - Named variables: `AARKIB_LIBRARY_DIR_MANGA`, `AARKIB_LIBRARY_DIR_AUDIO`, `AARKIB_LIBRARY_DIR_VIDEO`.
+- **Deduplication & Integrity**: Every book or media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading history or metadata customizations.
+- **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `AARKIB_WATCH_LIBRARY=true`.
 
 ---
 
@@ -170,7 +177,7 @@ graph LR
 
 ### 3.4 OPDS Catalog & Sync Protocols (`routes/opds.py`)
 
-Buukuu exposes a complete suite of OPDS endpoints tailored for modern e-readers and synchronization clients:
+Aarkib exposes a complete suite of OPDS endpoints tailored for modern e-readers and synchronization clients:
 
 | Protocol / Standard | Endpoint | MIME Type / Format | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -195,7 +202,7 @@ In adherence to the [OPDS Progression 1.0 Specification](https://github.com/opds
 
 ### 3.5 In-Browser Web Readers (`routes/reader.py` & `static/js/`)
 
-Buukuu provides rich in-browser reading environments without external server plugins:
+Aarkib provides rich in-browser reading environments without external server plugins:
 
 1. **EPUB Web Reader (`reader_epub.html`, `reader-epub.js`)**:
    - Built on `ePub.js` and `JSZip`.
@@ -206,6 +213,37 @@ Buukuu provides rich in-browser reading environments without external server plu
    - Custom, responsive HTML5 canvas and image viewer.
    - Dual viewing modes: **Continuous Vertical Webtoon Scroll** and **Single-Page Flip**.
    - Features: Fit-to-width, fit-to-height, fullscreen toggle, keyboard navigation (arrow keys, space), and automatic page-progress reporting.
+
+---
+
+### 3.6 Multi-Media Plugin Architecture & WIP Audio/Video Support (`plugins/`, `models/media.py`)
+
+Aarkib features a decoupled, extensible plugin architecture designed to manage diverse personal media libraries under unified indexing, storage, and progress-tracking foundations:
+
+1. **Plugin Contract (`MediaPlugin`)**:
+   - Every media handler inherits from the abstract base class `MediaPlugin` (`plugins/base.py`).
+   - Declares `name`, `media_type` (`MediaType.BOOK`, `MediaType.COMIC`, `MediaType.AUDIO`, `MediaType.VIDEO`), and `supported_extensions`.
+   - Implements standardized lifecycle hooks:
+     - `parse_metadata(file_path)`: Extracts title, creators/artists, descriptions, and technical metadata.
+     - `extract_cover(file_path)`: Extracts embedded cover art, poster artwork, or chapter thumbnails.
+     - `get_player_url(item_id, file_format)`: Returns the in-browser playback or reader route.
+     - `register_routes(app)`: Injects custom Flask blueprints (e.g. streaming endpoints, custom player interfaces).
+     - `check_health()`: Diagnostic checks for optional native tools or libraries.
+
+2. **Central Registry (`PluginRegistry`)**:
+   - Singleton `plugin_registry` initialized at application startup in `aarkib/__init__.py`.
+   - Dynamically maps file extensions (e.g. `.epub`, `.cbz`, `.mp3`, `.mp4`) to their respective plugins and metadata parsers.
+   - Enables new media plugins to be registered modularly without altering the core library crawler.
+
+3. **Audio Support (Work In Progress)**:
+   - **Target Formats**: `.mp3`, `.m4b`, `.flac`, `.aac`.
+   - **Data Model** (`AudioTrackMixin`): Pre-defined database columns for `duration` (runtime in seconds), `bitrate` (kbps), `album`, `track_number`, and `disc_number`.
+   - **Planned Capabilities**: Tag metadata parsing, chapter detection for audiobooks, cover art extraction, and a dedicated in-browser web audio player with listening resume position.
+
+4. **Video Support (Work In Progress)**:
+   - **Target Formats**: `.mp4`, `.mkv`, `.webm`.
+   - **Data Model** (`VideoItemMixin`): Pre-defined database columns for `duration`, `resolution_width`, `resolution_height`, `codec`, `season`, and `episode`.
+   - **Planned Capabilities**: Video metadata extraction, poster frame generation, responsive HTML5 web video player with subtitle track support, and stream progress persistence.
 
 ---
 
@@ -231,16 +269,17 @@ erDiagram
 
     Book {
         int id PK
-        string file_path
+        string original_file_path UK
         string file_hash UK
+        string media_type
         string title
         string sort_title
-        string format
+        string file_format
         int file_size
-        string cover_path
+        string cover_image_path
         text description
         string publisher
-        date publication_date
+        string publication_date
         string language
         string isbn
         float series_index
@@ -284,6 +323,11 @@ erDiagram
     }
 ```
 
+### Multi-Media Schema Mixins (`models/media.py`)
+- **`MediaItemMixin`**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps).
+- **`AudioTrackMixin` (WIP)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`.
+- **`VideoItemMixin` (WIP)**: Schema extension columns for video media: `duration` (seconds), `resolution_width`, `resolution_height`, `codec`, `season`, `episode`.
+
 ### Database Pragmas & Concurrency
 - Configured with SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).
 - `PRAGMA synchronous=NORMAL` to maximize transaction throughput while maintaining durability.
@@ -294,7 +338,7 @@ erDiagram
 
 ## 5. Security & Authentication Architecture
 
-1. **Authentication Enforcement (`BUUKUU_AUTH_REQUIRED`)**:
+1. **Authentication Enforcement (`AARKIB_AUTH_REQUIRED`)**:
    - When enabled (default), all web routes redirect unauthenticated users to `/auth/login`.
    - If the database contains zero users, the application automatically redirects visitors to `/auth/register` to establish the initial Administrator account.
 2. **Dual-Credential Interceptor**:
@@ -316,12 +360,12 @@ erDiagram
 - **Dependency Management**: `uv` using pinned `uv.lock`.
 - **Container Strategy**: Multi-stage `Dockerfile` using `python:3.14-slim` and `uv` for minimal attack surface and lightweight image footprints.
 - **Persistent Volumes**:
-  - `/app/data`: Houses `buukuu.db`, `covers/`, and `optimized/`.
-  - `/app/data/books` (or external mount): Primary read-only book library.
+  - `/app/data`: Houses `aarkib.db`, `covers/`, and `optimized/`.
+  - `/app/data/books` (or external mounts like `/media/audio`, `/media/video`): Primary read-only media storage.
 
 ### Key Operational CLI Commands
-- `uv run buukuu`: Start web application server.
-- `uv run buukuu scan [--enrich]`: Trigger indexing scan and optional online metadata enrichment.
-- `uv run buukuu create-admin <username>`: Bootstrap or update administrator account.
-- `uv run buukuu create-user <username> [--admin]`: Create a reader or admin account.
-- `uv run buukuu list-users`: Display registered user credentials and roles.
+- `uv run aarkib`: Start web application server.
+- `uv run aarkib scan [--enrich]`: Trigger indexing scan and optional online metadata enrichment.
+- `uv run aarkib create-admin <username>`: Bootstrap or update administrator account.
+- `uv run aarkib create-user <username> [--admin]`: Create a reader or admin account.
+- `uv run aarkib list-users`: Display registered user credentials and roles.

@@ -1,7 +1,7 @@
 def test_ui_index(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert b"Buukuu" in response.data
+    assert b"Aarkib" in response.data
     assert b"Library" in response.data
 
 
@@ -9,7 +9,7 @@ def test_pwa_manifest(client):
     response = client.get("/manifest.webmanifest")
     assert response.status_code == 200
     assert "application/manifest+json" in response.headers["Content-Type"]
-    assert b"Buukuu Book Server" in response.data
+    assert b"Aarkib Media Server" in response.data
 
 
 def test_service_worker(client):
@@ -21,7 +21,7 @@ def test_service_worker(client):
 def test_book_detail_page(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -39,7 +39,7 @@ def test_book_detail_page(client, app, sample_epub):
 def test_reader_epub_page(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -63,7 +63,7 @@ def test_reader_epub_page(client, app, sample_epub):
 def test_reader_epub_resume_progress(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -91,7 +91,7 @@ def test_reader_epub_resume_progress(client, app, sample_epub):
 def test_reader_cbz_resume_progress(client, app, sample_cbz):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -124,7 +124,7 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
 def test_reader_cbz_webtoon_support(client, app, sample_cbz):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -142,7 +142,7 @@ def test_reader_cbz_webtoon_support(client, app, sample_cbz):
 def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
     from pathlib import Path
 
-    from buukuu.services.scanner import index_single_book
+    from aarkib.services.scanner import index_single_book
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
@@ -164,8 +164,8 @@ def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
 
 
 def test_settings_page_displays_multiple_directories(tmp_path):
-    from buukuu import create_app
-    from buukuu.config import TestConfig
+    from aarkib import create_app
+    from aarkib.config import TestConfig
 
     dir1 = tmp_path / "lib1"
     dir2 = tmp_path / "lib2"

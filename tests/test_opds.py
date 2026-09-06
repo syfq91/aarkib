@@ -1,12 +1,12 @@
-from buukuu.extensions import db
-from buukuu.models import Author, Book, User
+from aarkib.extensions import db
+from aarkib.models import Author, Book, User
 
 
 def test_opds_root_catalog(client):
     response = client.get("/opds")
     assert response.status_code == 200
     assert "application/atom+xml" in response.headers["Content-Type"]
-    assert b"Buukuu Book Catalog" in response.data
+    assert b"Aarkib Catalog" in response.data
 
 
 def test_opds_recent_feed(client, app):

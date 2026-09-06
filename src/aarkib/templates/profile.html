@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}My Profile - Aarkib{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+  <h2 style="margin-bottom: 1.5rem;">User Profile</h2>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+      <div style="font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem;">{{ reading_count }}</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">Currently Reading</div>
+    </div>
+    <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+      <div style="font-size: 2rem; font-weight: 700; color: var(--success); margin-bottom: 0.25rem;">{{ completed_count }}</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">Completed Books</div>
+    </div>
+    <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+      <div style="font-size: 2rem; font-weight: 700; color: #eab308; margin-bottom: 0.25rem;">{{ bookmarks_count }}</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">Saved Bookmarks</div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+    <!-- User Information Card -->
+    <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+      <h3 style="margin-bottom: 1rem;">Account Info</h3>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
+        <div>
+          <span style="color: var(--text-secondary); font-size: 0.85rem; display: block;">Username</span>
+          <strong>{{ user.username }}</strong>
+        </div>
+        <div>
+          <span style="color: var(--text-secondary); font-size: 0.85rem; display: block;">Role</span>
+          <span>{{ "👑 Administrator" if user.is_admin else "👤 Reader" }}</span>
+        </div>
+        <div>
+          <span style="color: var(--text-secondary); font-size: 0.85rem; display: block;">Joined</span>
+          <span>{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else 'N/A' }}</span>
+        </div>
+      </div>
+
+      {% if user.is_admin %}
+      <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+        <a href="/auth/users" class="btn btn-secondary" style="width: 100%;">⚙️ Manage All Users</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Change Password Card -->
+    <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+      <h3 style="margin-bottom: 1rem;">Change Password</h3>
+      <form method="POST" action="/auth/profile" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Current Password</label>
+          <input type="password" name="current_password" class="input-text" required placeholder="••••••••">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">New Password</label>
+          <input type="password" name="new_password" class="input-text" required minlength="4" placeholder="Minimum 4 characters">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Confirm New Password</label>
+          <input type="password" name="confirm_new_password" class="input-text" required minlength="4" placeholder="Repeat new password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Update Password</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

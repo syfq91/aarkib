@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:aarkib:root{% if preset %}:{{ preset }}{% endif %}</id>
+  <title>Aarkib Catalog{% if preset %} ({{ preset|upper }} Optimized){% endif %}</title>
+  <updated>{{ now_iso }}</updated>
+  <author>
+    <name>Aarkib</name>
+    <uri>{{ base_url }}</uri>
+  </author>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}"/>
+  <link rel="start" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}"/>
+  <link rel="search" type="application/opensearchdescription+xml" href="{{ base_url }}{{ opds_prefix }}/search/opensearch.xml"/>
+
+  <entry>
+    <title>Recent Additions</title>
+    <id>urn:aarkib:section:recent{% if preset %}:{{ preset }}{% endif %}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Recently added books in the library{% if preset %} ({{ preset|upper }} Optimized){% endif %}</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}{{ opds_prefix }}/recent"/>
+  </entry>
+
+  <entry>
+    <title>Authors</title>
+    <id>urn:aarkib:section:authors{% if preset %}:{{ preset }}{% endif %}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by author</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}/authors"/>
+  </entry>
+
+  <entry>
+    <title>Series</title>
+    <id>urn:aarkib:section:series{% if preset %}:{{ preset }}{% endif %}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by series</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}/series"/>
+  </entry>
+
+  <entry>
+    <title>Tags / Categories</title>
+    <id>urn:aarkib:section:tags{% if preset %}:{{ preset }}{% endif %}</id>
+    <updated>{{ now_iso }}</updated>
+    <content type="text">Browse catalog by genre and tags</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="{{ base_url }}{{ opds_prefix }}/tags"/>
+  </entry>
+</feed>

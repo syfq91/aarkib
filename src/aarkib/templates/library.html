@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Library - Aarkib{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <div class="toolbar-filters">
+    <div class="input-group" style="flex: 1; min-width: 200px;">
+      <input type="text" id="search-input" class="input-text" placeholder="Search title, author, series, tag...">
+    </div>
+
+    <select id="format-filter" class="select-input" style="width: auto;">
+      <option value="">All Formats</option>
+      <option value="epub">EPUB</option>
+      <option value="cbz">CBZ / Comics</option>
+    </select>
+
+    <select id="sort-select" class="select-input" style="width: auto;">
+      <option value="added_at:desc">Recently Added</option>
+      <option value="title:asc">Title (A-Z)</option>
+      <option value="title:desc">Title (Z-A)</option>
+    </select>
+  </div>
+
+  <div class="toolbar-actions">
+    <button id="scan-now-btn" class="btn btn-secondary" title="Scan Library">
+      🔄 Scan
+    </button>
+  </div>
+</div>
+
+<div id="active-filter-bar" style="display: none; margin-bottom: 1.5rem; align-items: center; justify-content: space-between; background: var(--bg-secondary); padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+  <span id="active-filter-label" style="font-size: 0.95rem; font-weight: 500; color: var(--text-primary);"></span>
+  <a href="/" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.25rem 0.6rem;">✕ Clear Filter</a>
+</div>
+
+<div id="book-grid" class="book-grid">
+  {% for book in initial_books %}
+    <a href="/book/{{ book.id }}" class="book-card">
+      <div class="book-cover-wrap">
+        <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
+        <span class="badge-format">{{ book.file_format }}</span>
+      </div>
+      {% set prog = progress_map.get(book.id, 0) %}
+      {% if prog > 0 %}
+        <div class="progress-bar-container" title="{{ prog|round(0) }}% completed">
+          <div class="progress-bar-fill" style="width: {{ prog }}%;"></div>
+        </div>
+      {% endif %}
+      <div class="book-info">
+        <div class="book-title" title="{{ book.title }}">{{ book.title }}</div>
+        <div class="book-author">{{ book.authors_display }}</div>
+      </div>
+    </a>
+  {% else %}
+    <div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-secondary);">
+      <h3>No books found in library</h3>
+      <p style="margin-top: 0.5rem; font-size: 0.9rem;">Add .epub or .cbz files to your books directory and click 'Scan'.</p>
+    </div>
+  {% endfor %}
+</div>
+
+<div id="pagination-controls" style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem;">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+const urlParams = new URLSearchParams(window.location.search);
+let activeAuthorId = urlParams.get("author_id");
+let activeSeriesId = urlParams.get("series_id");
+let activeTagId = urlParams.get("tag_id");
+let initialQuery = urlParams.get("q");
+
+if (initialQuery) {
+  document.getElementById("search-input").value = initialQuery;
+}
+
+function updateFilterBar() {
+  const bar = document.getElementById("active-filter-bar");
+  const label = document.getElementById("active-filter-label");
+  if (activeAuthorId) {
+    bar.style.display = "flex";
+    label.innerText = `Filtered by Author`;
+  } else if (activeSeriesId) {
+    bar.style.display = "flex";
+    label.innerText = `Filtered by Series`;
+  } else if (activeTagId) {
+    bar.style.display = "flex";
+    label.innerText = `Filtered by Tag`;
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+async function fetchBooks() {
+  updateFilterBar();
+  const q = document.getElementById("search-input").value.trim();
+  const format = document.getElementById("format-filter").value;
+  const [sort, order] = document.getElementById("sort-select").value.split(":");
+  
+  const params = new URLSearchParams({
+    page: currentPage,
+    sort: sort,
+    order: order
+  });
+  if (q) params.append("q", q);
+  if (format) params.append("format", format);
+  if (activeAuthorId) params.append("author_id", activeAuthorId);
+  if (activeSeriesId) params.append("series_id", activeSeriesId);
+  if (activeTagId) params.append("tag_id", activeTagId);
+
+  try {
+    const res = await fetch(`/api/books?${params.toString()}`);
+    if (res.status === 401) {
+      window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname + window.location.search);
+      return;
+    }
+    const data = await res.json();
+    if (res.ok && data.books) {
+      renderBooks(data.books);
+      renderPagination(data);
+    }
+  } catch (err) {
+    console.error("Failed to load books", err);
+  }
+}
+
+function renderBooks(books) {
+  const grid = document.getElementById("book-grid");
+  if (!books || books.length === 0) {
+    grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-secondary);">
+      <h3>No books found in library</h3>
+      <p style="margin-top: 0.5rem; font-size: 0.9rem;">Add .epub or .cbz files to your books directory and click 'Scan'.</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = books.map(book => {
+    const progressPercent = book.progress ? Math.round(book.progress.percentage) : 0;
+    
+    return `
+      <a href="/book/${book.id}" class="book-card">
+        <div class="book-cover-wrap">
+          <img src="${book.cover_url}" alt="${book.title}" class="book-cover-img" loading="lazy">
+          <span class="badge-format">${book.file_format}</span>
+        </div>
+        ${progressPercent > 0 ? `
+          <div class="progress-bar-container" title="${progressPercent}% completed">
+            <div class="progress-bar-fill" style="width: ${progressPercent}%;"></div>
+          </div>
+        ` : ''}
+        <div class="book-info">
+          <div class="book-title" title="${book.title}">${book.title}</div>
+          <div class="book-author">${book.authors_display}</div>
+        </div>
+      </a>
+    `;
+  }).join('');
+}
+
+function renderPagination(data) {
+  const container = document.getElementById("pagination-controls");
+  if (!data || data.pages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  if (data.has_prev) {
+    html += `<button class="btn btn-secondary" onclick="goToPage(${data.page - 1})">Previous</button>`;
+  }
+  html += `<span style="align-self: center; font-size: 0.9rem; color: var(--text-secondary); padding: 0 0.5rem;">Page ${data.page} of ${data.pages}</span>`;
+  if (data.has_next) {
+    html += `<button class="btn btn-secondary" onclick="goToPage(${data.page + 1})">Next</button>`;
+  }
+  container.innerHTML = html;
+}
+
+function goToPage(page) {
+  currentPage = page;
+  fetchBooks();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+let debounceTimer;
+document.getElementById("search-input").addEventListener("input", () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    currentPage = 1;
+    fetchBooks();
+  }, 300);
+});
+
+document.getElementById("format-filter").addEventListener("change", () => {
+  currentPage = 1;
+  fetchBooks();
+});
+
+document.getElementById("sort-select").addEventListener("change", () => {
+  currentPage = 1;
+  fetchBooks();
+});
+
+document.getElementById("scan-now-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("scan-now-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Scanning...";
+  try {
+    const res = await fetch("/api/library/scan", { method: "POST" });
+    if (res.status === 401) {
+      window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname);
+      return;
+    }
+    const data = await res.json();
+    showToast(`Scan complete: ${data.result.scanned} files checked`, "success");
+    fetchBooks();
+  } catch (err) {
+    showToast("Library scan failed", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "🔄 Scan";
+  }
+});
+
+// If URL has active filters (e.g. ?series_id=... or ?author_id=...), fetch dynamically
+if (activeAuthorId || activeSeriesId || activeTagId || initialQuery) {
+  fetchBooks();
+}
+</script>
+{% endblock %}

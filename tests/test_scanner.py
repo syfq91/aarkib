@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from buukuu import create_app
-from buukuu.config import TestConfig
-from buukuu.services.scanner import get_library_dirs, scan_library
+from aarkib import create_app
+from aarkib.config import TestConfig
+from aarkib.services.scanner import get_library_dirs, scan_library
 
 
 def test_get_library_dirs(tmp_path):
@@ -76,7 +76,7 @@ def test_scan_symlinked_directory(tmp_path, sample_epub):
 
 
 def test_get_env_library_dirs(tmp_path):
-    from buukuu.config import get_env_library_dirs, split_path_string
+    from aarkib.config import get_env_library_dirs, split_path_string
 
     # Test split_path_string
     assert split_path_string("/a:/b;/c,/d\n/e") == ["/a", "/b", "/c", "/d", "/e"]
@@ -84,13 +84,13 @@ def test_get_env_library_dirs(tmp_path):
 
     # Test numbered and named environment variables in custom dict
     mock_env = {
-        "BUUKUU_LIBRARY_DIR": f"{tmp_path}/main",
-        "BUUKUU_LIBRARY_DIR1": f"{tmp_path}/manga",
-        "BUUKUU_LIBRARY_DIR2": f"{tmp_path}/comics",
-        "BUUKUU_LIBRARY_DIR3": f"{tmp_path}/novels",
+        "AARKIB_LIBRARY_DIR": f"{tmp_path}/main",
+        "AARKIB_LIBRARY_DIR1": f"{tmp_path}/manga",
+        "AARKIB_LIBRARY_DIR2": f"{tmp_path}/comics",
+        "AARKIB_LIBRARY_DIR3": f"{tmp_path}/novels",
         "BUUKU_LIBRARY_DIR4": f"{tmp_path}/audiobooks",
-        "BUUKUU_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
-        "BUUKUU_LIBRARY_DIR_10": f"{tmp_path}/extra10",
+        "AARKIB_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
+        "AARKIB_LIBRARY_DIR_10": f"{tmp_path}/extra10",
     }
     paths = get_env_library_dirs(env=mock_env)
     path_strs = [str(p) for p in paths]

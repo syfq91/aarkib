@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from buukuu.models import Book
-from buukuu.plugins import (
+from aarkib.models import Book
+from aarkib.plugins import (
     BookMediaPlugin,
     MediaPlugin,
     PluginRegistry,
     init_plugins,
     plugin_registry,
 )
-from buukuu.services.parsers.base import BaseParsedMetadata
+from aarkib.services.parsers.base import BaseParsedMetadata
 
 
 def test_book_media_plugin_metadata(sample_epub, sample_cbz):
