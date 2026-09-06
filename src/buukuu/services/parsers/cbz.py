@@ -140,6 +140,7 @@ def parse_cbz(file_path: Path) -> ParsedBookMetadata | None:
                 page_count=page_count,
                 publication_date=publication_date,
                 file_format="cbz",
+                media_type="comic",
             )
     except Exception:
         s_name, s_idx, clean_t = extract_series_from_title(file_path.stem)
@@ -149,4 +150,5 @@ def parse_cbz(file_path: Path) -> ParsedBookMetadata | None:
             series=s_name,
             series_index=s_idx,
             file_format="cbz",
+            media_type="comic",
         )

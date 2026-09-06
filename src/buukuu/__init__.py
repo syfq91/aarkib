@@ -79,11 +79,17 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     db.init_app(app)
     login_manager.init_app(app)
 
+    # Initialize media plugins
+    from buukuu.plugins import init_plugins
+
+    init_plugins(app)
+
     # Register blueprints
     app.register_blueprint(ui_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(opds_bp)
-    app.register_blueprint(reader_bp)
+    if "reader" not in app.blueprints:
+        app.register_blueprint(reader_bp)
     app.register_blueprint(auth_bp)
 
     # Security settings & headers

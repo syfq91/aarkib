@@ -56,6 +56,24 @@ class UserProgress(db.Model):
     user: Mapped[User | None] = relationship("User", back_populates="progress_records")
     book: Mapped[Book] = relationship("Book", back_populates="progress_records")
 
+    @property
+    def media_id(self) -> int:
+        """Alias for book_id to support generalized media progress tracking."""
+        return self.book_id
+
+    @media_id.setter
+    def media_id(self, value: int) -> None:
+        self.book_id = value
+
+    @property
+    def last_accessed_at(self) -> datetime:
+        """Alias for last_read_at to support generalized media playback/reading."""
+        return self.last_read_at
+
+    @last_accessed_at.setter
+    def last_accessed_at(self, value: datetime) -> None:
+        self.last_read_at = value
+
     def __repr__(self) -> str:
         return f"<UserProgress user={self.user_id} book={self.book_id} progress={self.percentage:.1f}%>"
 
@@ -80,6 +98,15 @@ class Bookmark(db.Model):
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="bookmarks")
     book: Mapped[Book] = relationship("Book", back_populates="bookmarks")
+
+    @property
+    def media_id(self) -> int:
+        """Alias for book_id to support generalized media bookmarks."""
+        return self.book_id
+
+    @media_id.setter
+    def media_id(self, value: int) -> None:
+        self.book_id = value
 
     def __repr__(self) -> str:
         return f"<Bookmark book={self.book_id} loc={self.location}>"

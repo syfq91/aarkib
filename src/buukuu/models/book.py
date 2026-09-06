@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from buukuu.extensions import db
 from buukuu.models.author import book_authors
+from buukuu.models.media import MediaItemMixin, MediaType
 from buukuu.models.tag import book_tags
 
 if TYPE_CHECKING:
@@ -17,52 +17,20 @@ if TYPE_CHECKING:
     from buukuu.models.tag import Tag
 
 
-class Book(db.Model):
+class Book(db.Model, MediaItemMixin):
     __tablename__ = "books"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
-    sort_title: Mapped[str | None] = mapped_column(
-        String(500), nullable=True, index=True
-    )
 
-    # File details
-    original_file_path: Mapped[str] = mapped_column(
-        String(1000), unique=True, nullable=False
-    )
-    file_format: Mapped[str] = mapped_column(
-        String(10), nullable=False, index=True
-    )  # 'epub' or 'cbz'
-    file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    cover_image_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-
-    # Metadata
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    publisher: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    language: Mapped[str | None] = mapped_column(
-        String(30), nullable=True, default="en"
-    )
+    # Book-specific metadata
     isbn: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
-    publication_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Series metadata
     series_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
     )
     series_index: Mapped[float | None] = mapped_column(Float, nullable=True)
-    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
-        nullable=False,
-    )
 
     # Relationships
     series: Mapped[Series | None] = relationship("Series", back_populates="books")
@@ -79,6 +47,15 @@ class Book(db.Model):
         "Bookmark", back_populates="book", cascade="all, delete-orphan"
     )
 
+    def __init__(self, **kwargs: Any) -> None:
+        if "media_type" not in kwargs or not kwargs["media_type"]:
+            fmt = (kwargs.get("file_format") or "").lower()
+            if fmt in ("cbz", "cbr", "zip"):
+                kwargs["media_type"] = MediaType.COMIC.value
+            else:
+                kwargs["media_type"] = MediaType.BOOK.value
+        super().__init__(**kwargs)
+
     @property
     def authors_display(self) -> str:
         if not self.authors:
@@ -86,8 +63,33 @@ class Book(db.Model):
         return ", ".join(a.name for a in self.authors)
 
     @property
+    def creators_display(self) -> str:
+        """Alias for authors_display to support generalized media creators."""
+        return self.authors_display
+
+    @property
     def tags_display(self) -> list[str]:
         return [t.name for t in self.tags]
+
+    @property
+    def player_url(self) -> str:
+        """Returns in-browser player or reader URL via plugin registry or fallback."""
+        from buukuu.plugins import plugin_registry
+
+        plugin = plugin_registry.get_plugin_for_media_type(self.media_type or "book")
+        if plugin:
+            url = plugin.get_player_url(self.id, self.file_format)
+            if url:
+                return url
+
+        if (self.file_format or "").lower() in ("cbz", "zip", "cbr"):
+            return f"/reader/cbz/{self.id}"
+        return f"/reader/epub/{self.id}"
+
+    @property
+    def reader_url(self) -> str:
+        """Alias for player_url."""
+        return self.player_url
 
     def __repr__(self) -> str:
         return f"<Book {self.id}: {self.title}>"

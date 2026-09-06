@@ -45,6 +45,11 @@ def list_books():
     series_id = request.args.get("series_id", type=int)
     tag_id = request.args.get("tag_id", type=int)
     file_format = request.args.get("format", "").strip().lower()
+    media_type = (
+        (request.args.get("media_type") or request.args.get("type") or "")
+        .strip()
+        .lower()
+    )
     sort_by = request.args.get("sort", "added_at")
     order = request.args.get("order", "desc")
     page = request.args.get("page", 1, type=int)
@@ -72,6 +77,8 @@ def list_books():
         query = query.filter(Book.tags.any(Tag.id == tag_id))
     if file_format:
         query = query.filter(Book.file_format == file_format)
+    if media_type:
+        query = query.filter(Book.media_type == media_type)
 
     # Sorting
     if sort_by == "title":
@@ -112,6 +119,7 @@ def list_books():
             {
                 "id": b.id,
                 "title": b.title,
+                "media_type": b.media_type,
                 "authors": [a.name for a in b.authors],
                 "authors_display": b.authors_display,
                 "file_format": b.file_format,
@@ -164,6 +172,7 @@ def get_book(book_id: int):
         {
             "id": book.id,
             "title": book.title,
+            "media_type": book.media_type,
             "authors": [a.name for a in book.authors],
             "authors_display": book.authors_display,
             "description": book.description,

@@ -22,8 +22,20 @@ if TYPE_CHECKING:
 
     from flask import Flask
 
+from buukuu.plugins import plugin_registry
+
 logger = logging.getLogger(__name__)
-SUPPORTED_EXTENSIONS = {".epub", ".cbz", ".zip", ".cbr"}
+
+DEFAULT_EXTENSIONS = {".epub", ".cbz", ".zip", ".cbr"}
+
+
+def get_supported_extensions() -> set[str]:
+    """Returns the set of all media file extensions supported by active plugins."""
+    registered = plugin_registry.get_all_supported_extensions()
+    return registered if registered else DEFAULT_EXTENSIONS
+
+
+SUPPORTED_EXTENSIONS = DEFAULT_EXTENSIONS
 
 
 def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
@@ -123,7 +135,8 @@ def index_single_book(
     auto_enrich: bool = False,
 ) -> Book | None:
     """Parses and updates or inserts a single book record in the database."""
-    if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS or not file_path.is_file():
+    supported = get_supported_extensions()
+    if file_path.suffix.lower() not in supported or not file_path.is_file():
         return None
 
     try:
@@ -137,16 +150,25 @@ def index_single_book(
         if existing_book and existing_book.file_hash == file_hash:
             return existing_book
 
-        metadata = extract_metadata_from_file(file_path)
+        plugin = plugin_registry.get_plugin_for_extension(file_path.suffix)
+        if plugin:
+            metadata = plugin.parse_metadata(file_path)
+        else:
+            metadata = extract_metadata_from_file(file_path)
+
         if not metadata:
             return None
 
         # Cover processing
         cover_rel_path = None
-        if metadata.cover_bytes:
+        cover_bytes = metadata.cover_bytes
+        if not cover_bytes and plugin:
+            cover_bytes = plugin.extract_cover(file_path)
+
+        if cover_bytes:
             cover_filename = f"{file_hash[:16]}.webp"
             cover_output_path = covers_dir / cover_filename
-            if generate_cover_webp(metadata.cover_bytes, cover_output_path):
+            if generate_cover_webp(cover_bytes, cover_output_path):
                 cover_rel_path = cover_filename
 
         book = existing_book or Book(original_file_path=resolved_path)
@@ -160,21 +182,28 @@ def index_single_book(
         book.description = metadata.description
         book.publisher = metadata.publisher
         book.language = metadata.language or "en"
-        book.isbn = metadata.isbn
+        book.isbn = getattr(metadata, "isbn", None)
         book.publication_date = metadata.publication_date
-        book.page_count = metadata.page_count
+        book.page_count = getattr(metadata, "page_count", None)
+        book.media_type = getattr(metadata, "media_type", None) or (
+            "comic" if metadata.file_format in ("cbz", "cbr", "zip") else "book"
+        )
         if cover_rel_path:
             book.cover_image_path = cover_rel_path
 
-        # Handle Authors
+        # Handle Authors / Creators
         author_objs = []
-        for author_name in metadata.authors:
+        authors_list = getattr(metadata, "authors", None) or getattr(
+            metadata, "creators", []
+        )
+        for author_name in authors_list:
             cleaned_name = author_name.strip()
             if not cleaned_name:
                 continue
             author = db.session.scalar(
                 select(Author).where(Author.name == cleaned_name)
             )
+
             if not author:
                 author = Author(name=cleaned_name)
                 db.session.add(author)
@@ -241,12 +270,13 @@ def scan_library(app: Flask) -> dict[str, int]:
 
         added = 0
         existing_files = set()
+        supported = get_supported_extensions()
 
         for lib_dir in library_dirs:
             for root, _, filenames in os.walk(lib_dir, followlinks=True):
                 for filename in filenames:
                     file_path = Path(root) / filename
-                    if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    if file_path.suffix.lower() in supported:
                         existing_files.add(str(file_path.resolve()))
                         book = index_single_book(
                             file_path, covers_dir, auto_enrich=auto_enrich
@@ -282,7 +312,7 @@ class LibraryChangeHandler(FileSystemEventHandler):
 
     def _trigger_index(self, path_str: str) -> None:
         file_path = Path(path_str)
-        if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+        if file_path.suffix.lower() in get_supported_extensions():
             with self.app.app_context():
                 covers_dir = Path(self.app.config["COVERS_DIR"])
                 time.sleep(0.5)  # allow file write to finish

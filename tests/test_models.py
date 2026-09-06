@@ -101,3 +101,127 @@ def test_migrate_database_adds_missing_columns(app):
     assert "device_name" in cols_after
     assert "chapter_title" in cols_after
     assert "references_json" in cols_after
+
+
+def test_generalized_media_model(app):
+    from buukuu.models import Collection, Creator, MediaType
+
+    # Check aliases
+    assert Creator is Author
+    assert Collection is Series
+
+    # Check Book with default media_type for epub
+    epub_book = Book(
+        title="EPUB Title",
+        original_file_path="/tmp/epub_title.epub",
+        file_format="epub",
+        file_hash="hash_epub_1",
+        file_size=1048576,  # 1 MB
+    )
+    assert epub_book.media_type == MediaType.BOOK.value
+    assert epub_book.is_book is True
+    assert epub_book.is_comic is False
+    assert epub_book.is_audio is False
+    assert epub_book.is_video is False
+    assert "1.0 MB" in epub_book.formatted_file_size
+
+    # Check Book with cbz comic format
+    cbz_book = Book(
+        title="Comic Title",
+        original_file_path="/tmp/comic_title.cbz",
+        file_format="cbz",
+        file_hash="hash_cbz_1",
+    )
+    assert cbz_book.media_type == MediaType.COMIC.value
+    assert cbz_book.is_comic is True
+    assert cbz_book.is_book is False
+
+    # Check creator alias
+    author = Creator(name="Test Creator")
+    epub_book.authors.append(author)
+    db.session.add_all([author, epub_book, cbz_book])
+    db.session.commit()
+
+    saved = db.session.get(Book, epub_book.id)
+    assert saved.creators_display == "Test Creator"
+    assert saved.authors_display == "Test Creator"
+
+
+def test_generalized_progress_and_bookmarks(app):
+    from buukuu.models import Bookmark, UserProgress
+
+    book = Book(
+        title="Progress Test Book",
+        original_file_path="/tmp/prog.epub",
+        file_format="epub",
+        file_hash="prog1234",
+    )
+    db.session.add(book)
+    db.session.commit()
+
+    prog = UserProgress(
+        book_id=book.id,
+        progress_location="100.5",
+        percentage=50.0,
+    )
+    assert prog.media_id == book.id
+    prog.media_id = 999
+    assert prog.book_id == 999
+    prog.book_id = book.id
+
+    bm = Bookmark(
+        book_id=book.id,
+        location="ch1.xhtml",
+        title="Chapter 1 Bookmark",
+    )
+    assert bm.media_id == book.id
+    bm.media_id = 888
+    assert bm.book_id == 888
+
+
+def test_parser_registry_and_base_metadata(tmp_path):
+    from pathlib import Path
+
+    from buukuu.services.parsers.base import (
+        BaseParsedMetadata,
+        ParsedBookMetadata,
+        extract_metadata_from_file,
+        register_parser,
+    )
+
+    # Test BaseParsedMetadata dataclass
+    base_meta = BaseParsedMetadata(
+        title="Audio Track",
+        creators=["Artist One"],
+        media_type="audio",
+        file_format="mp3",
+    )
+    assert base_meta.title == "Audio Track"
+    assert base_meta.media_type == "audio"
+    assert "Artist One" in base_meta.creators
+
+    # Test ParsedBookMetadata creator/author sync
+    book_meta = ParsedBookMetadata(
+        title="Sync Test",
+        creators=["Synced Author"],
+    )
+    assert book_meta.authors == ["Synced Author"]
+
+    # Test registering a mock custom parser (e.g. for audio)
+    fake_audio = tmp_path / "song.mp3"
+    fake_audio.write_bytes(b"ID3mock")
+
+    def mock_audio_parser(path: Path) -> BaseParsedMetadata:
+        return BaseParsedMetadata(
+            title=path.stem.title(),
+            creators=["Test Musician"],
+            media_type="audio",
+            file_format="mp3",
+        )
+
+    register_parser(".mp3", mock_audio_parser)
+    extracted = extract_metadata_from_file(fake_audio)
+    assert extracted is not None
+    assert extracted.title == "Song"
+    assert extracted.media_type == "audio"
+    assert extracted.creators == ["Test Musician"]

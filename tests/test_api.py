@@ -65,6 +65,15 @@ def test_api_books_and_progress(client, app, sample_epub):
     res = client.get(f"/api/books/{book_id}")
     assert res.status_code == 200
     assert res.get_json()["series"] == "Sample Chronicles"
+    assert res.get_json()["media_type"] == "book"
+
+    # Verify media_type filtering in list_books
+    res = client.get("/api/books?media_type=book")
+    assert res.status_code == 200
+    assert len(res.get_json()["books"]) >= 1
+    res = client.get("/api/books?media_type=video")
+    assert res.status_code == 200
+    assert len(res.get_json()["books"]) == 0
 
     # Save Progress
     res = client.post(
