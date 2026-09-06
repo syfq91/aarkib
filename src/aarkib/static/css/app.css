@@ -524,6 +524,220 @@ body {
   transition: width 0.3s;
 }
 
+/* --- Dashboard Shelves & Horizontal Rows --- */
+.dashboard-shelves {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  margin-bottom: 3rem;
+}
+
+.shelf-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.shelf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.shelf-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.shelf-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shelf-count-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+}
+
+.shelf-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shelf-view-all {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.shelf-view-all:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.shelf-scroll-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.shelf-scroll-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.shelf-row-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.shelf-row {
+  display: flex;
+  gap: 1.25rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  padding: 0.25rem 0 1rem 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.shelf-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.shelf-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.shelf-row::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.shelf-row::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.shelf-row .book-card {
+  flex: 0 0 165px;
+  width: 165px;
+  min-width: 165px;
+  max-width: 165px;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 640px) {
+  .shelf-row .book-card {
+    flex: 0 0 135px;
+    width: 135px;
+    min-width: 135px;
+    max-width: 135px;
+  }
+}
+
+.badge-progress {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 2px 7px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.9);
+  color: #ffffff;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.badge-resume {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #ffffff;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 2;
+}
+
+.book-card:hover .badge-resume {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.view-toggle-group {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.view-toggle-btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.view-toggle-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
 /* --- Book Detail View --- */
 .detail-layout {
   display: grid;

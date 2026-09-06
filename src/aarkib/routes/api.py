@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from flask_login import current_user
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from werkzeug.utils import secure_filename
 
 from aarkib.extensions import db
@@ -45,6 +45,9 @@ def list_books():
     series_id = request.args.get("series_id", type=int)
     tag_id = request.args.get("tag_id", type=int)
     file_format = request.args.get("format", "").strip().lower()
+    library_filter = (
+        request.args.get("library") or request.args.get("library_dir") or ""
+    ).strip()
     media_type = (
         (request.args.get("media_type") or request.args.get("type") or "")
         .strip()
@@ -79,6 +82,33 @@ def list_books():
         query = query.filter(Book.file_format == file_format)
     if media_type:
         query = query.filter(Book.media_type == media_type)
+    if library_filter:
+        from aarkib.services.scanner import get_library_definitions
+
+        lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+        matched_lib = None
+        for lib_def in lib_defs:
+            if (
+                library_filter.lower() == lib_def["id"].lower()
+                or library_filter.lower() == lib_def["name"].lower()
+                or library_filter == str(lib_def["path"])
+                or library_filter == lib_def["path_str"]
+            ):
+                matched_lib = lib_def
+                break
+
+        if matched_lib:
+            p_res = str(matched_lib["path"].resolve()).rstrip("/\\") + "/"
+            p_raw = str(matched_lib["path"]).rstrip("/\\") + "/"
+            query = query.filter(
+                or_(
+                    Book.original_file_path.startswith(p_res),
+                    Book.original_file_path.startswith(p_raw),
+                )
+            )
+        else:
+            prefix = library_filter.rstrip("/\\") + "/"
+            query = query.filter(Book.original_file_path.startswith(prefix))
 
     # Sorting
     if sort_by == "title":
@@ -96,13 +126,16 @@ def list_books():
 
     # Fetch user progress if user is authenticated or guest
     user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
     progress_map = {}
     book_ids = [b.id for b in pagination.items]
     if book_ids:
         records = db.session.scalars(
-            select(UserProgress).where(
-                UserProgress.user_id == user_id, UserProgress.book_id.in_(book_ids)
-            )
+            select(UserProgress).where(user_cond, UserProgress.book_id.in_(book_ids))
         ).all()
         progress_map = {
             r.book_id: {
@@ -147,6 +180,35 @@ def list_books():
     )
 
 
+@api_bp.route("/libraries", methods=["GET"])
+def list_libraries():
+    from aarkib.services.scanner import get_library_definitions
+
+    lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+    total_books = db.session.scalar(select(func.count(Book.id))) or 0
+    results = []
+    for lib_def in lib_defs:
+        p_res = str(lib_def["path"].resolve()).rstrip("/\\") + "/"
+        p_raw = str(lib_def["path"]).rstrip("/\\") + "/"
+        lib_cond = or_(
+            Book.original_file_path.startswith(p_res),
+            Book.original_file_path.startswith(p_raw),
+        )
+        count = db.session.scalar(select(func.count(Book.id)).where(lib_cond)) or 0
+        if count == 0 and len(lib_defs) == 1 and total_books > 0:
+            count = total_books
+
+        results.append(
+            {
+                "id": lib_def["id"],
+                "name": lib_def["name"],
+                "path": str(lib_def["path"]),
+                "count": count,
+            }
+        )
+    return jsonify({"libraries": results})
+
+
 @api_bp.route("/books/<int:book_id>", methods=["GET"])
 def get_book(book_id: int):
     book = db.session.get(Book, book_id)
@@ -154,11 +216,14 @@ def get_book(book_id: int):
         abort(404, description="Book not found")
 
     user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
     prog = None
     prog_record = db.session.scalar(
-        select(UserProgress).where(
-            UserProgress.user_id == user_id, UserProgress.book_id == book.id
-        )
+        select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
     )
     if prog_record:
         prog = {
@@ -442,6 +507,11 @@ def book_progress(book_id: int):
         abort(404)
 
     user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
 
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
@@ -450,9 +520,7 @@ def book_progress(book_id: int):
         is_completed = bool(data.get("is_completed", False) or percentage >= 99.0)
 
         record = db.session.scalar(
-            select(UserProgress).where(
-                UserProgress.user_id == user_id, UserProgress.book_id == book.id
-            )
+            select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
         )
 
         if not record:
@@ -483,9 +551,7 @@ def book_progress(book_id: int):
 
     # GET request
     record = db.session.scalar(
-        select(UserProgress).where(
-            UserProgress.user_id == user_id, UserProgress.book_id == book.id
-        )
+        select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
     )
 
     if record:

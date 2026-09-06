@@ -87,3 +87,28 @@ def test_api_books_and_progress(client, app, sample_epub):
     res = client.get(f"/api/books/{book_id}/progress")
     assert res.status_code == 200
     assert res.get_json()["percentage"] == 42.5
+
+
+def test_api_libraries_and_library_filter(client, app, sample_epub):
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        assert book is not None
+
+    # Test GET /api/libraries
+    res = client.get("/api/libraries")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "libraries" in data
+    assert len(data["libraries"]) >= 1
+    lib = data["libraries"][0]
+    assert "id" in lib
+    assert "name" in lib
+    assert "path" in lib
+    assert "count" in lib
+
+    # Test GET /api/books?library=
+    res = client.get(f"/api/books?library={lib['id']}")
+    assert res.status_code == 200
+    books_data = res.get_json()
+    assert "books" in books_data

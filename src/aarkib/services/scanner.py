@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,7 +12,12 @@ from sqlalchemy import select
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from aarkib.config import Config, get_env_library_dirs, split_path_string
+from aarkib.config import (
+    NAMED_DIR_REGEX,
+    Config,
+    get_env_library_dirs,
+    split_path_string,
+)
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Series, Tag
 from aarkib.services.parsers.base import extract_metadata_from_file
@@ -127,6 +133,92 @@ def get_library_dirs(app: Flask | None = None) -> list[Path]:
         return [fallback]
 
     return final_paths
+
+
+def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
+    """Resolves all configured library definitions with human-friendly metadata and display names."""
+    dirs = get_library_dirs(app)
+    if not dirs:
+        return []
+
+    # Discover explicit named environment variables (e.g. AARKIB_LIBRARY_DIR_MANGA)
+    named_map: dict[str, str] = {}
+    for k, v in os.environ.items():
+        m = NAMED_DIR_REGEX.match(k)
+        if m:
+            suffix = m.group(1)
+            if not suffix.isdigit():
+                display_name = suffix.replace("_", " ").title()
+                for p_str in split_path_string(v):
+                    if not p_str.strip():
+                        continue
+                    try:
+                        norm = str(Path(p_str).expanduser().resolve())
+                        named_map[norm] = display_name
+                    except Exception:
+                        pass
+
+    # Also check app config for custom library names if defined (e.g. app.config["LIBRARY_NAMES"])
+    if app is not None:
+        cfg_names = app.config.get("LIBRARY_NAMES")
+        if isinstance(cfg_names, dict):
+            for k, v in cfg_names.items():
+                try:
+                    norm = str(Path(k).expanduser().resolve())
+                    named_map[norm] = str(v)
+                except Exception:
+                    pass
+
+    definitions: list[dict[str, Any]] = []
+    seen_ids: dict[str, int] = {}
+    seen_names: dict[str, int] = {}
+
+    for idx, p in enumerate(dirs):
+        try:
+            p_resolved = p.resolve()
+            p_str = str(p_resolved)
+        except Exception:
+            p_resolved = p
+            p_str = str(p)
+
+        # Determine friendly display name
+        if p_str in named_map:
+            name = named_map[p_str]
+        else:
+            folder_name = p.name
+            if not folder_name or folder_name in (".", "/", "data"):
+                name = "Books" if len(dirs) == 1 else f"Library {idx + 1}"
+            else:
+                name = folder_name.replace("_", " ").replace("-", " ").title()
+
+        # Disambiguate duplicate names
+        if name in seen_names:
+            seen_names[name] += 1
+            name = f"{name} ({seen_names[name]})"
+        else:
+            seen_names[name] = 1
+
+        # Generate slug ID
+        base_id = (
+            re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or f"lib-{idx + 1}"
+        )
+        if base_id in seen_ids:
+            seen_ids[base_id] += 1
+            lib_id = f"{base_id}-{seen_ids[base_id]}"
+        else:
+            seen_ids[base_id] = 1
+            lib_id = base_id
+
+        definitions.append(
+            {
+                "id": lib_id,
+                "name": name,
+                "path": p_resolved,
+                "path_str": p_str,
+            }
+        )
+
+    return definitions
 
 
 def index_single_book(

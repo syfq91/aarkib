@@ -186,3 +186,111 @@ def test_settings_page_displays_multiple_directories(tmp_path):
     assert b"Library Storage (2 folders):" in res.data
     assert str(dir1).encode() in res.data
     assert str(dir2).encode() in res.data
+
+
+def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_epub):
+    from pathlib import Path
+
+    from aarkib.services.scanner import index_single_book
+
+    # Empty state initially
+    res_empty = client.get("/")
+    assert res_empty.status_code == 200
+    assert b"No books found in library" in res_empty.data
+
+    # Index a book
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        index_single_book(sample_epub, covers_dir)
+
+    res = client.get("/")
+    assert res.status_code == 200
+    assert b"Recently Added" in res.data
+    assert b"Sample Test Book" in res.data
+    assert b"dashboard-shelves" in res.data
+    assert b"view-shelves-btn" in res.data
+
+
+def test_homepage_in_progress_row(client, app, sample_epub):
+    from pathlib import Path
+
+    from aarkib.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        book_id = book.id
+
+    # Initially before reading, no Continue Reading shelf
+    res_before = client.get("/")
+    assert res_before.status_code == 200
+    assert b"Continue Reading" not in res_before.data
+
+    # Save 45% progress
+    res_prog = client.post(
+        f"/api/books/{book_id}/progress",
+        json={"location": "cfi_step_1", "percentage": 45.0, "is_completed": False},
+    )
+    assert res_prog.status_code == 200
+
+    # Homepage should now render Continue Reading shelf
+    res_after = client.get("/")
+    assert res_after.status_code == 200
+    assert b"Continue Reading" in res_after.data
+    assert b"45%" in res_after.data
+    assert b"Resume" in res_after.data
+
+    # Complete book (100%)
+    client.post(
+        f"/api/books/{book_id}/progress",
+        json={"location": "end", "percentage": 100.0, "is_completed": True},
+    )
+    res_completed = client.get("/")
+    assert res_completed.status_code == 200
+    assert b"Continue Reading" not in res_completed.data
+
+
+def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample_cbz):
+    import shutil
+    from pathlib import Path
+
+    from aarkib import create_app
+    from aarkib.config import TestConfig
+    from aarkib.extensions import db
+    from aarkib.services.scanner import index_single_book
+
+    manga_dir = tmp_path / "manga"
+    novels_dir = tmp_path / "novels"
+    manga_dir.mkdir()
+    novels_dir.mkdir()
+
+    # Place files in respective directories
+    manga_file = manga_dir / "manga1.cbz"
+    shutil.copyfile(sample_cbz, manga_file)
+
+    novel_file = novels_dir / "novel1.epub"
+    shutil.copyfile(sample_epub, novel_file)
+
+    class MultiLibConfig(TestConfig):
+        DATA_DIR = tmp_path / "data"
+        LIBRARY_DIR = f"{novels_dir}:{manga_dir}"
+        COVERS_DIR = tmp_path / "data" / "covers"
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/multi_lib.db"
+
+    app = create_app(MultiLibConfig)
+    client = app.test_client()
+
+    with app.app_context():
+        db.create_all()
+        covers_dir = Path(app.config["COVERS_DIR"])
+        index_single_book(manga_file, covers_dir)
+        index_single_book(novel_file, covers_dir)
+
+    res = client.get("/")
+    assert res.status_code == 200
+    # Both library shelves should be dynamically generated and rendered
+    assert b"Novels" in res.data
+    assert b"Manga" in res.data
+    assert b"Recently Added" in res.data
+    assert b"shelf-lib-novels" in res.data
+    assert b"shelf-lib-manga" in res.data

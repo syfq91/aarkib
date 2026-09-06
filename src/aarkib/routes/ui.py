@@ -10,7 +10,7 @@ from flask import (
     send_from_directory,
 )
 from flask_login import current_user
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Series, Tag, User, UserProgress
@@ -27,24 +27,100 @@ def index():
     tags = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
     total_books = db.session.scalar(select(func.count(Book.id))) or 0
 
-    # Initial books for instant SSR rendering
-    initial_books = db.session.scalars(
-        select(Book)
-        .order_by(Book.created_at.desc())
-        .limit(current_app.config.get("PAGE_SIZE", 24))
+    user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
+
+    # 1. In-progress books for the current user
+    in_progress_books = []
+    prog_stmt = (
+        select(Book, UserProgress)
+        .join(UserProgress, Book.id == UserProgress.book_id)
+        .where(
+            user_cond,
+            UserProgress.percentage > 0,
+            UserProgress.percentage < 100,
+            UserProgress.is_completed.is_(False),
+        )
+        .order_by(UserProgress.last_read_at.desc())
+        .limit(16)
+    )
+    in_progress_rows = db.session.execute(prog_stmt).all()
+    for b, p in in_progress_rows:
+        in_progress_books.append(
+            {
+                "book": b,
+                "progress": p,
+                "percentage": round(p.percentage, 1),
+            }
+        )
+
+    # 2. Recently added books across all libraries
+    recent_books = db.session.scalars(
+        select(Book).order_by(Book.created_at.desc()).limit(16)
     ).all()
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    # 3. Dynamic shelves based on configured libraries
+    from aarkib.services.scanner import get_library_definitions
+
+    lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+    library_shelves = []
+    for lib in lib_defs:
+        p_res = str(lib["path"].resolve()).rstrip("/\\") + "/"
+        p_raw = str(lib["path"]).rstrip("/\\") + "/"
+        lib_filter = or_(
+            Book.original_file_path.startswith(p_res),
+            Book.original_file_path.startswith(p_raw),
+        )
+        lib_count = (
+            db.session.scalar(select(func.count(Book.id)).where(lib_filter)) or 0
+        )
+
+        # Resilient fallback if only 1 library configured and test books indexed outside prefix
+        if lib_count == 0 and len(lib_defs) == 1 and total_books > 0:
+            lib_count = total_books
+            lib_books = recent_books
+        else:
+            lib_books = db.session.scalars(
+                select(Book)
+                .where(lib_filter)
+                .order_by(Book.created_at.desc())
+                .limit(16)
+            ).all()
+
+        library_shelves.append(
+            {
+                "id": lib["id"],
+                "name": lib["name"],
+                "path": str(lib["path"]),
+                "count": lib_count,
+                "books": lib_books,
+            }
+        )
+
+    # Compile progress map for all books shown across shelves
+    all_book_ids = {b.id for b in recent_books}
+    for item in in_progress_books:
+        all_book_ids.add(item["book"].id)
+    for shelf in library_shelves:
+        for b in shelf["books"]:
+            all_book_ids.add(b.id)
+
     progress_map: dict[int, float] = {}
-    if initial_books:
-        book_ids = [b.id for b in initial_books]
+    if all_book_ids:
         records = db.session.scalars(
             select(UserProgress).where(
-                UserProgress.user_id == user_id,
-                UserProgress.book_id.in_(book_ids),
+                user_cond,
+                UserProgress.book_id.in_(all_book_ids),
             )
         ).all()
         progress_map = {r.book_id: r.percentage for r in records}
+
+    # Initial books for SSR / grid fallback
+    initial_books = recent_books[: current_app.config.get("PAGE_SIZE", 24)]
 
     return render_template(
         "library.html",
@@ -53,6 +129,9 @@ def index():
         tags=tags,
         total_books=total_books,
         initial_books=initial_books,
+        in_progress_books=in_progress_books,
+        recent_books=recent_books,
+        library_shelves=library_shelves,
         progress_map=progress_map,
     )
 
@@ -65,9 +144,14 @@ def book_detail(book_id: int):
         abort(404, description="Book not found")
 
     user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
     progress = db.session.scalar(
         select(UserProgress).where(
-            UserProgress.user_id == user_id,
+            user_cond,
             UserProgress.book_id == book.id,
         )
     )
