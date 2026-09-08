@@ -57,20 +57,6 @@
     </div>
   </div>
 
-  <!-- Library Upload & Indexing Card -->
-  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
-    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-      <span>📥</span> Upload Books
-    </h3>
-    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-      Upload `.epub` or `.cbz` files to import and index them immediately.
-    </p>
-    <form id="upload-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
-      <input type="file" id="book-file-input" accept=".epub,.cbz,.zip" class="input-text" required>
-      <button type="submit" id="upload-btn" class="btn btn-primary">Upload & Index Book</button>
-    </form>
-  </div>
-
   <!-- Library Maintenance & Metadata Enrichment -->
   <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
     <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -251,38 +237,6 @@ function promptResetPassword(userId, username) {
   document.getElementById("reset-new-password").value = newPass;
   form.submit();
 }
-
-document.getElementById("upload-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const fileInput = document.getElementById("book-file-input");
-  if (!fileInput.files.length) return;
-
-  const btn = document.getElementById("upload-btn");
-  btn.disabled = true;
-  btn.innerText = "⏳ Uploading...";
-
-  const formData = new FormData();
-  formData.append("file", fileInput.files[0]);
-
-  try {
-    const res = await fetch("/api/library/upload", {
-      method: "POST",
-      body: formData
-    });
-    const data = await res.json();
-    if (res.ok) {
-      showToast(`Uploaded "${data.title}" successfully!`, "success");
-      fileInput.value = "";
-    } else {
-      showToast(data.description || "Upload failed", "error");
-    }
-  } catch (err) {
-    showToast("Network error uploading book", "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerText = "Upload & Index Book";
-  }
-});
 
 async function enrichLibrary() {
   const btn = document.getElementById("enrich-all-btn");

@@ -237,8 +237,8 @@ class Config:
         os.getenv("AARKIB_PAGE_SIZE", os.getenv("BUUKUU_PAGE_SIZE", "24"))
     )
 
-    # Upload limits (500 MB)
-    MAX_CONTENT_LENGTH: int = 500 * 1024 * 1024
+    # Maximum request payload limit (16 MB)
+    MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 
 
 class TestConfig(Config):

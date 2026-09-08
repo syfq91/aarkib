@@ -8,12 +8,11 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from flask_login import current_user, login_user
 from sqlalchemy import func, or_, select
-from werkzeug.utils import secure_filename
 
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Bookmark, Series, Tag, User, UserProgress
 from aarkib.services.parsers.cbz import IMAGE_EXTENSIONS, natural_sort_key
-from aarkib.services.scanner import index_single_book, scan_library
+from aarkib.services.scanner import scan_library
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -639,39 +638,6 @@ def delete_bookmark(bookmark_id: int):
 def trigger_scan():
     result = scan_library(current_app._get_current_object())  # type: ignore
     return jsonify({"status": "success", "result": result})
-
-
-@api_bp.route("/library/upload", methods=["POST"])
-def upload_file():
-    if "file" not in request.files:
-        abort(400, description="No file uploaded")
-
-    file = request.files["file"]
-    if not file.filename:
-        abort(400, description="Empty filename")
-
-    filename = secure_filename(file.filename)
-    ext = Path(filename).suffix.lower()
-    if ext not in (".epub", ".cbz", ".zip"):
-        abort(400, description="Unsupported format. Only EPUB and CBZ are supported.")
-
-    from aarkib.services.scanner import get_library_dirs
-
-    library_dirs = get_library_dirs(current_app)
-    library_dir = library_dirs[0]
-    covers_dir = Path(current_app.config["COVERS_DIR"])
-    library_dir.mkdir(parents=True, exist_ok=True)
-    covers_dir.mkdir(parents=True, exist_ok=True)
-
-    dest_path = library_dir / filename
-    file.save(dest_path)
-
-    auto_enrich = current_app.config.get("AUTO_ENRICH", False)
-    book = index_single_book(dest_path, covers_dir, auto_enrich=auto_enrich)
-    if not book:
-        abort(500, description="Failed to index uploaded book")
-
-    return jsonify({"status": "success", "book_id": book.id, "title": book.title})
 
 
 @api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
