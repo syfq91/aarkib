@@ -119,11 +119,21 @@ sequenceDiagram
     Scanner->>DB: Remove records whose files no longer exist on disk
 ```
 
+- **Generic Media Folder Architecture & WebUI Configuration**:
+  - Media directories are managed in SQLite via the `Library` model (`libraries` table).
+  - Each library defines a distinct `media_type`:
+    - `all`: Mixed / Auto-detect by extension (`.epub` → `book`, `.cbz`/`.cbr`/`.zip` → `comic`, `.mp4`/`.mkv`/etc. → `video`).
+    - `book`: Enforces `book` categorization for all documents in that folder.
+    - `comic`: Enforces `comic` categorization for all archives/manga in that folder.
+    - `video`: Enforces `video` categorization for movies and television series.
+  - **Dynamic WebUI & API Control**: Users can configure, inspect item counts, change media types, rescan, or add/delete folders via the WebUI Settings page or REST API (`/api/libraries`). Changing a folder's `media_type` automatically re-classifies all existing items in the database.
+- **Direct Folder Drops (No Upload UI)**:
+  - Users add media simply by copying or mounting files into storage folders (`./data/media`, `./data/books`, external drives). The scanner and filesystem watcher handle indexing automatically without requiring web upload forms.
 - **Multi-Directory Discovery**: Supported via multiple environment conventions:
-  - `AARKIB_LIBRARY_DIR` or `AARKIB_BOOKS_DIR` (supports colon, semicolon, comma, or newline delimiters; legacy `BUUKUU_*` supported).
-  - Numbered environment variables: `AARKIB_LIBRARY_DIR1`, `AARKIB_LIBRARY_DIR2`, `DIR1`, `DIR2` (or `BUUKUU_LIBRARY_DIR1`, ...).
-  - Named variables: `AARKIB_LIBRARY_DIR_MANGA`, `AARKIB_LIBRARY_DIR_AUDIO`, `AARKIB_LIBRARY_DIR_VIDEO`.
-- **Deduplication & Integrity**: Every book or media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading history or metadata customizations.
+  - `AARKIB_MEDIA_DIR`, `AARKIB_LIBRARY_DIR`, `AARKIB_BOOKS_DIR`, `MEDIA_DIR` (supports colon, semicolon, comma, or newline delimiters).
+  - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, `DIR1`, `DIR2`.
+  - Named variables: `AARKIB_MEDIA_DIR_MANGA`, `AARKIB_MEDIA_DIR_MOVIES`, `AARKIB_MEDIA_DIR_VIDEO`.
+- **Deduplication & Integrity**: Every media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading/playback history or metadata customizations.
 - **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `AARKIB_WATCH_LIBRARY=true`.
 
 ---
@@ -240,10 +250,11 @@ Aarkib features a decoupled, extensible plugin architecture designed to manage d
    - **Data Model** (`AudioTrackMixin`): Pre-defined database columns for `duration` (runtime in seconds), `bitrate` (kbps), `album`, `track_number`, and `disc_number`.
    - **Planned Capabilities**: Tag metadata parsing, chapter detection for audiobooks, cover art extraction, and a dedicated in-browser web audio player with listening resume position.
 
-4. **Video Support (Work In Progress)**:
-   - **Target Formats**: `.mp4`, `.mkv`, `.webm`.
-   - **Data Model** (`VideoItemMixin`): Pre-defined database columns for `duration`, `resolution_width`, `resolution_height`, `codec`, `season`, and `episode`.
-   - **Planned Capabilities**: Video metadata extraction, poster frame generation, responsive HTML5 web video player with subtitle track support, and stream progress persistence.
+4. **Video Support (Implemented)**:
+   - **Supported Formats**: `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v`.
+   - **Plugin & Parser** (`VideoMediaPlugin`): Pure-Python MP4 box parser extracting duration, dimensions (`mvhd`/`tkhd` boxes), filename episode parser (`S01E02`/`1x02`), and cover/poster extractor.
+   - **HTTP 206 Streaming**: Custom `send_byte_range()` implementation supporting arbitrary chunk seeking, playback resume, and fast forward / rewind.
+   - **In-Browser HTML5 Player** (`/reader/video/<id>`): Dedicated responsive player with keyboard shortcuts, speed options (0.75x–2.0x), automatic next-episode countdown, and real-time playback position sync.
 
 ---
 
@@ -258,6 +269,16 @@ erDiagram
     Book }|--|{ Author : "written_by"
     Book }|--|{ Series : "belongs_to"
     Book }|--|{ Tag : "categorized_under"
+
+    Library {
+        int id PK
+        string slug UK
+        string name
+        string path UK
+        string media_type
+        datetime created_at
+        datetime updated_at
+    }
 
     User {
         int id PK
@@ -323,10 +344,11 @@ erDiagram
     }
 ```
 
-### Multi-Media Schema Mixins (`models/media.py`)
-- **`MediaItemMixin`**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps).
-- **`AudioTrackMixin` (WIP)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`.
-- **`VideoItemMixin` (WIP)**: Schema extension columns for video media: `duration` (seconds), `resolution_width`, `resolution_height`, `codec`, `season`, `episode`.
+### Multi-Media Schema Mixins & Models (`models/`)
+- **`Library` (`models/library.py`)**: Persistent media library directory configuration (`slug`, `name`, `path`, `media_type`).
+- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps).
+- **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
+- **`AudioTrackMixin` (`models/media.py`, WIP)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`.
 
 ### Database Pragmas & Concurrency
 - Configured with SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).

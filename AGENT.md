@@ -18,9 +18,9 @@ graph TD
         
         subgraph Routes
             UIRoutes[UI Views: / /book/:id /authors /series /settings]
-            APIRoutes[REST API: /api/books /api/books/:id/edit /progress]
+            APIRoutes[REST API: /api/books /api/libraries /progress]
             OPDSRoutes[OPDS 1.2 / 2.0 / Progression 1.0: /opds]
-            ReaderRoutes[Web Readers: /reader/epub /reader/cbz]
+            ReaderRoutes[Web Readers & Players: /reader/epub /reader/cbz /reader/video]
             AuthRoutes[Auth & User Management: /auth]
         end
         
@@ -36,7 +36,7 @@ graph TD
         
         subgraph Storage
             DB[(SQLite with WAL mode: aarkib.db)]
-            BooksDir[(Media Storage: ./data/books + Multi-Dir Scan)]
+            BooksDir[(Media Storage: ./data/media or ./data/books + Multi-Dir Scan)]
             CoversDir[(Covers Storage: ./data/covers)]
             OptimizedDir[(Optimized E-Ink Cache: ./data/optimized)]
         end
@@ -45,7 +45,7 @@ graph TD
     Client -->|HTTP / PWA| UIRoutes
     Client -->|REST API| APIRoutes
     Client -->|OPDS / Sync| OPDSRoutes
-    Client -->|Web Readers| ReaderRoutes
+    Client -->|Web Readers & Players| ReaderRoutes
     Client -->|Login / Register| AuthRoutes
     
     UIRoutes --> Auth
@@ -74,11 +74,12 @@ graph TD
 ```text
 aarkib/
 ├── src/aarkib/
-│   ├── __init__.py           # Flask app factory (create_app), CLI commands (scan, enrich, create-user, list-users)
-│   ├── config.py             # Config dataclass, defaults, and AARKIB_* / AARKIB_LIBRARY_DIR* multi-folder discovery
+│   ├── __init__.py           # Flask app factory (create_app), DB migrations, CLI commands
+│   ├── config.py             # Config dataclass, defaults, and AARKIB_MEDIA_DIR* multi-folder discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
 │   │   ├── __init__.py       # Model exports and aliases (Creator=Author, Collection=Series)
+│   │   ├── library.py        # Library model (persisted media folders with slug, path, media_type, counts)
 │   │   ├── media.py          # MediaItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum (book, comic, audio, video)
 │   │   ├── book.py           # Book, Author, Series, Tag, and association tables
 │   │   ├── author.py         # Author / Creator model and book_authors table
@@ -95,8 +96,8 @@ aarkib/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
 │   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
-│   │   ├── api.py            # REST endpoints: list, book detail, download, cover, progress, edit metadata, scan, /health
-│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, and Video
+│   │   ├── api.py            # REST endpoints: books, libraries CRUD, stream, progress, metadata, scan, /health
+│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, and Video (HTML5 player)
 │   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   ├── services/
 │   │   ├── __init__.py
@@ -165,13 +166,13 @@ aarkib/
    * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients (authenticating `current_user` via Flask-Login's `request_loader`). `/api/health` and book covers are publicly accessible without authentication.
    * OPDS endpoints (`/opds/*`) return `401 Unauthorized` with `WWW-Authenticate: Basic realm="Aarkib OPDS"` and an `application/opds-authentication+json` document.
 
-2. **Multi-Media Plugin Architecture & WIP Video/Audio Support**:
+2. **Multi-Media Plugin Architecture & Video/Audio Support**:
    * All media items share [`MediaItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L19) containing core attributes (`title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`).
+   * **Video Media (Implemented)**: Handled by [`VideoMediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/video.py) with MP4 metadata parsing, HTTP 206 byte-range seeking, smart `S01E02` TV detection, and in-browser HTML5 video player with resume positions.
    * **Audio Media (WIP)**: Defined via [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98) with `duration`, `bitrate`, `album`, `track_number`, `disc_number`. Planned extensions include ID3 tag parsing and in-browser audio player.
-   * **Video Media (WIP)**: Defined via [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L108) with `duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`. Planned extensions include container metadata extraction and HTML5 video streaming with resume location.
    * Custom media handlers inherit from [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) and register with [`plugin_registry`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L55).
 
-3. **Reading Progression & Syncing**:
+3. **Reading & Playback Progression & Syncing**:
    * `UserProgress.percentage` is stored as a float between `0.0` and `100.0`.
    * **OPDS Progression 1.0**: The specification requires progression as a float between `0.0` and `1.0`. `opds.py` translates between internal percentage (`0-100`) and OPDS standard (`0.0-1.0`).
    * When updating progression via `PUT /opds/books/<id>/progression`, if the incoming payload has an older `modified` timestamp than existing server state, return `409 Conflict` with `application/problem+json` and type `https://registry.opds.io/error#progression-date`.
@@ -187,8 +188,19 @@ aarkib/
      4. Regex heuristic on filename/title (`extract_series_from_title`).
      5. Manual editing via `POST /api/books/<id>/edit`.
 
-6. **Database WAL Mode**:
+6. **Database WAL Mode & Auto-Migrations**:
    * SQLite is configured in WAL (Write-Ahead Logging) mode via SQLAlchemy engine connect event listener in `src/aarkib/__init__.py`. Always preserve this for concurrency.
+   * Startup database migration automatically detects new model columns and tables without requiring Alembic migration scripts.
+
+7. **Generic Media Folders & WebUI Configuration**:
+   * Media libraries are stored in SQLite `libraries` table ([`Library`](file:///home/syafiq/code/aarkib/src/aarkib/models/library.py) model).
+   * Configured folders can have their `media_type` set to `all` (auto-detect by format), `book` (books only), `comic` (comics & manga), or `video` (movies & TV shows).
+   * When a folder's `media_type` is changed via WebUI or `PUT /api/libraries/<id>`, all catalog entries under that folder are automatically reclassified.
+   * Folders can be added via `POST /api/libraries` or removed via `DELETE /api/libraries/<id>`.
+
+8. **Folder-Based File Drops (No Upload UI)**:
+   * Users manage media by placing files into mounted storage folders (`./data/media`, `./data/books`, NAS mounts).
+   * Filesystem watcher and scanner service automatically detect additions, modifications, and deletions without a manual upload web form.
 
 ---
 

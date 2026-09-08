@@ -132,14 +132,42 @@ Aarkib exposes standard OPDS feeds as well as on-demand auto-optimizing feeds fo
 
 ---
 
-## 🎧 Video & Audio Support (Work In Progress)
+## 🎬 Video & Audio Support
 
-Aarkib is actively expanding beyond books and comics into a unified personal media server. The multi-media data model and plugin layer are designed for seamless extension:
+Aarkib has expanded from books and comics into a full-featured personal media server:
 
-- **Media Plugin Interface** (`MediaPlugin`): Encapsulates file extension matching, metadata parsing, artwork extraction, and web player routing.
-- **Audio Track Data Model** (`AudioTrackMixin`): Pre-defined schema columns for duration, bitrate, album, track number, and disc number.
-- **Video Item Data Model** (`VideoItemMixin`): Pre-defined schema columns for video runtime duration, resolution dimensions, video codec, season, and episode indexing.
-- **Unified Progression**: The progression database schema stores continuous position markers and completion status across both books (CFI / page indices) and AV media (millisecond timestamps).
+- **Movies & TV Shows (Implemented)**:
+  - Supports `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, and `.m4v`.
+  - HTTP 206 byte-range seeking for smooth video playback and random seeking.
+  - Automated TV show detection (`S01E02` / `1x02`) and movie naming parsing.
+  - Pure-Python MP4 container metadata parser (extracts runtime duration, width, height without requiring ffmpeg).
+  - Responsive in-browser HTML5 video player with playback position resume, keyboard shortcuts (Space, Arrow keys, Fullscreen, Mute), playback speed selection (0.75x–2.0x), and next-episode autoplay countdown.
+- **Audiobooks & Music (In Progress)**:
+  - Pre-defined schema columns via `AudioTrackMixin` for runtime duration, bitrate, album, track number, and disc number.
+  - Architectural foundation ready for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`).
+- **Unified Media Progression**:
+  - Continuous position markers and completion status across both books (CFI / page indices) and AV media (millisecond timestamps).
+
+---
+
+## 🔌 REST API Endpoints
+
+Aarkib exposes clean REST APIs for integration and automation:
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/books` | `GET` | List catalog items (supports `q`, `media_type`, `library`, `sort_by`, `page`). |
+| `/api/books/<id>` | `GET` | Retrieve full item details and user progress. |
+| `/api/books/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
+| `/api/books/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
+| `/api/books/<id>/progress`| `GET`, `POST`| Fetch or update playback / reading progress. |
+| `/api/books/<id>/edit` | `POST` | Edit title, authors, series, and tags metadata. |
+| `/api/libraries` | `GET`, `POST` | List all configured media folders or add a new folder with custom `media_type`. |
+| `/api/libraries/<id>` | `GET`, `PUT`, `DELETE` | View, update `media_type` / name, or remove media folder. |
+| `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
+| `/api/library/scan` | `POST` | Trigger full scan across all configured media folders. |
+| `/api/library/enrich` | `POST` | Enrich books with Google Books & Open Library metadata. |
+| `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 
 ---
 
@@ -148,7 +176,7 @@ Aarkib is actively expanding beyond books and comics into a unified personal med
 Aarkib includes a CLI for server administration:
 
 ```bash
-# Scan and index books in data/books
+# Scan and index media in configured folders
 uv run aarkib scan
 
 # Scan library and auto-fetch metadata from Google Books / Open Library
@@ -169,7 +197,7 @@ uv run aarkib list-users
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (61+ tests)
+# Run pytest test suite (70 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff
