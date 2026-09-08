@@ -28,7 +28,7 @@ graph TD
             PluginRegistry[Media Plugin Registry]
             BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP]
             AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC - WIP]
-            VideoPlugin[VideoMediaPlugin: MP4, MKV - WIP]
+            VideoPlugin[VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V]
             Scanner[Library Scanner & File Crawler]
             Optimizer[E-Ink Device EPUB Optimizer]
             Enricher[Google Books & Open Library Enricher]
@@ -89,13 +89,14 @@ aarkib/
 │   ├── plugins/
 │   │   ├── __init__.py       # Plugin registry initialization and exports
 │   │   ├── base.py           # MediaPlugin abstract base class and PluginRegistry
-│   │   └── book.py           # BookMediaPlugin (EPUB, CBZ, CBR, ZIP metadata, covers, player URLs)
+│   │   ├── book.py           # BookMediaPlugin (EPUB, CBZ, CBR, ZIP metadata, covers, player URLs)
+│   │   └── video.py          # VideoMediaPlugin (MP4, MKV, WEBM, AVI, MOV, M4V metadata, covers, player URLs)
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
 │   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
 │   │   ├── api.py            # REST endpoints: list, book detail, download, cover, progress, edit metadata, scan, /health
-│   │   ├── reader.py         # In-browser reader views for EPUB and CBZ
+│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, and Video
 │   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   ├── services/
 │   │   ├── __init__.py

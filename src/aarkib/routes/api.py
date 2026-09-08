@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import mimetypes
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -163,9 +164,16 @@ def list_books():
                 "file_format": b.file_format,
                 "file_size": b.file_size,
                 "cover_url": f"/api/books/{b.id}/cover",
+                "player_url": b.player_url,
                 "series": b.series.name if b.series else None,
                 "series_index": b.series_index,
                 "tags": [t.name for t in b.tags],
+                "duration": b.duration,
+                "resolution_width": b.resolution_width,
+                "resolution_height": b.resolution_height,
+                "codec": b.codec,
+                "season": b.season,
+                "episode": b.episode,
                 "progress": progress_map.get(
                     b.id, {"percentage": 0.0, "location": "0", "completed": False}
                 ),
@@ -256,9 +264,19 @@ def get_book(book_id: int):
             "series_index": book.series_index,
             "tags": [t.name for t in book.tags],
             "page_count": book.page_count,
+            "duration": book.duration,
+            "formatted_duration": book.formatted_duration,
+            "resolution_width": book.resolution_width,
+            "resolution_height": book.resolution_height,
+            "resolution_label": book.resolution_label,
+            "codec": book.codec,
+            "season": book.season,
+            "episode": book.episode,
+            "episode_code": book.episode_code,
             "cover_url": f"/api/books/{book.id}/cover",
             "download_url": f"/api/books/{book.id}/download",
             "file_url": f"/api/books/{book.id}/file",
+            "player_url": book.player_url,
             "progress": prog,
             "created_at": book.created_at.isoformat() if book.created_at else None,
         }
@@ -278,6 +296,38 @@ def get_book_cover(book_id: int):
             return send_file(cover_file, mimetype="image/webp")
 
     # Generate fallback SVG cover
+    if book.is_video:
+        title = book.title[:30] + ("..." if len(book.title) > 30 else "")
+        sub = (
+            f"S{book.season:02d}E{book.episode:02d}"
+            if (book.season is not None and book.episode is not None)
+            else (
+                book.publication_date
+                or (book.file_format.upper() if book.file_format else "VIDEO")
+            )
+        )
+        svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
+        <defs>
+            <linearGradient id="vidGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0f172a"/>
+                <stop offset="100%" stop-color="#1e1b4b"/>
+            </linearGradient>
+        </defs>
+        <rect width="300" height="450" fill="url(#vidGrad)" rx="8"/>
+        <rect x="12" y="12" width="276" height="426" fill="none" stroke="#4338ca" stroke-width="2" rx="6" stroke-dasharray="6,4"/>
+        <text x="150" y="130" font-size="48" text-anchor="middle">🎬</text>
+        <text x="150" y="210" fill="#f8fafc" font-size="18" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
+        <text x="150" y="250" fill="#a5b4fc" font-size="14" font-family="system-ui, sans-serif" text-anchor="middle">{sub}</text>
+        <rect x="90" y="295" width="120" height="28" rx="6" fill="#4338ca"/>
+        <text x="150" y="314" fill="#ffffff" font-size="12" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{(book.file_format or "video").upper()}</text>
+        <text x="150" y="410" fill="#6366f1" font-size="12" font-family="system-ui, sans-serif" letter-spacing="2" text-anchor="middle">AARKIB VIDEO</text>
+    </svg>"""
+        return (
+            io.BytesIO(svg.encode("utf-8")).getvalue(),
+            200,
+            {"Content-Type": "image/svg+xml"},
+        )
+
     title = book.title[:30] + ("..." if len(book.title) > 30 else "")
     author = book.authors_display[:25]
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
@@ -306,11 +356,22 @@ def get_book_file(book_id: int, filename: str | None = None):
     if not file_path.exists():
         abort(404, description="File missing from storage")
 
-    mimetype = (
-        "application/epub+zip"
-        if book.file_format == "epub"
-        else "application/vnd.comicbook+zip"
-    )
+    guessed, _ = mimetypes.guess_type(str(file_path))
+    if guessed:
+        mimetype = guessed
+    elif book.file_format == "epub":
+        mimetype = "application/epub+zip"
+    elif book.file_format in ("cbz", "zip", "cbr"):
+        mimetype = "application/vnd.comicbook+zip"
+    elif book.file_format == "mp4":
+        mimetype = "video/mp4"
+    elif book.file_format == "webm":
+        mimetype = "video/webm"
+    elif book.file_format == "mkv":
+        mimetype = "video/x-matroska"
+    else:
+        mimetype = "application/octet-stream"
+
     return send_file(file_path, mimetype=mimetype, conditional=True)
 
 
@@ -359,7 +420,11 @@ def download_book_file(book_id: int, preset: str | None = None):
             )
 
     filename = f"{book.title}.{book.file_format}"
-    return send_file(file_path, as_attachment=True, download_name=filename)
+    guessed, _ = mimetypes.guess_type(str(file_path))
+    mimetype = guessed or "application/octet-stream"
+    return send_file(
+        file_path, as_attachment=True, download_name=filename, mimetype=mimetype
+    )
 
 
 @api_bp.route("/optimizer/presets", methods=["GET"])

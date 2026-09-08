@@ -11,7 +11,17 @@
     <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="detail-cover">
     
     <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
-      {% if book.file_format == 'epub' %}
+      {% if book.is_video %}
+        <a href="/reader/video/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+          {% if progress and progress.is_completed %}
+            🎬 Watch Again
+          {% elif progress and progress.percentage > 0 %}
+            🎬 Resume Watching ({{ progress.percentage|round(0)|int }}%)
+          {% else %}
+            🎬 Watch Video
+          {% endif %}
+        </a>
+      {% elif book.file_format == 'epub' %}
         <a href="/reader/epub/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
           {% if progress and progress.is_completed %}
             📖 Read Again (EPUB)
@@ -69,12 +79,14 @@
       {% endif %}
 
       <button id="edit-metadata-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="openEditModal()">
-        ✏️ Edit Book & Series
+        ✏️ Edit Metadata
       </button>
 
+      {% if book.is_book %}
       <button id="enrich-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="enrichCurrentBook()">
         ✨ Fetch Metadata Online
       </button>
+      {% endif %}
     </div>
   </div>
 
@@ -85,13 +97,13 @@
       {% for author in book.authors %}
         <a href="/?author_id={{ author.id }}" style="color: var(--accent); text-decoration: none;">{{ author.name }}</a>{% if not loop.last %}, {% endif %}
       {% else %}
-        <span>Unknown Author</span>
+        <span>Unknown Creator</span>
       {% endfor %}
     </h3>
 
     <div style="background-color: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
       <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
-        <span>Reading Progress</span>
+        <span>{{ 'Watching Progress' if book.is_video else 'Reading Progress' }}</span>
         <span style="font-weight: 600; color: var(--accent);">{{ progress.percentage|round(1) if progress else 0 }}%</span>
       </div>
       <div class="progress-bar-container">
@@ -124,13 +136,39 @@
       </div>
       {% if book.series %}
       <div class="meta-item">
-        <span class="meta-label">Series</span>
+        <span class="meta-label">{{ 'TV Show / Series' if book.is_video else 'Series' }}</span>
         <span class="meta-value">
           <a href="/?series_id={{ book.series.id }}" style="color: var(--accent); text-decoration: none; font-weight: 600;">
-            📚 {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}
+            {{ '📺' if book.is_video else '📚' }} {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}
           </a>
         </span>
       </div>
+      {% endif %}
+      {% if book.is_video %}
+        {% if book.formatted_duration %}
+        <div class="meta-item">
+          <span class="meta-label">Duration</span>
+          <span class="meta-value">⏱️ {{ book.formatted_duration }}</span>
+        </div>
+        {% endif %}
+        {% if book.resolution_label or (book.resolution_width and book.resolution_height) %}
+        <div class="meta-item">
+          <span class="meta-label">Resolution</span>
+          <span class="meta-value">{{ book.resolution_label or (book.resolution_width ~ '×' ~ book.resolution_height) }}</span>
+        </div>
+        {% endif %}
+        {% if book.codec %}
+        <div class="meta-item">
+          <span class="meta-label">Codec</span>
+          <span class="meta-value">{{ book.codec }}</span>
+        </div>
+        {% endif %}
+        {% if book.season is not none and book.episode is not none %}
+        <div class="meta-item">
+          <span class="meta-label">Episode</span>
+          <span class="meta-value">{{ book.episode_code }} (Season {{ book.season }}, Episode {{ book.episode }})</span>
+        </div>
+        {% endif %}
       {% endif %}
       {% if book.page_count %}
       <div class="meta-item">

@@ -32,7 +32,18 @@ from aarkib.plugins import plugin_registry
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_EXTENSIONS = {".epub", ".cbz", ".zip", ".cbr"}
+DEFAULT_EXTENSIONS = {
+    ".epub",
+    ".cbz",
+    ".zip",
+    ".cbr",
+    ".mp4",
+    ".mkv",
+    ".webm",
+    ".avi",
+    ".mov",
+    ".m4v",
+}
 
 
 def get_supported_extensions() -> set[str]:
@@ -289,10 +300,28 @@ def index_single_book(
         book.publication_date = metadata.publication_date
         book.page_count = getattr(metadata, "page_count", None)
         book.media_type = getattr(metadata, "media_type", None) or (
-            "comic" if metadata.file_format in ("cbz", "cbr", "zip") else "book"
+            "comic"
+            if metadata.file_format in ("cbz", "cbr", "zip")
+            else "video"
+            if metadata.file_format in ("mp4", "mkv", "webm", "avi", "mov", "m4v")
+            else "book"
         )
         if cover_rel_path:
             book.cover_image_path = cover_rel_path
+
+        # Video metadata attributes
+        if hasattr(book, "duration"):
+            book.duration = getattr(metadata, "duration", None)
+        if hasattr(book, "resolution_width"):
+            book.resolution_width = getattr(metadata, "resolution_width", None)
+        if hasattr(book, "resolution_height"):
+            book.resolution_height = getattr(metadata, "resolution_height", None)
+        if hasattr(book, "codec"):
+            book.codec = getattr(metadata, "codec", None)
+        if hasattr(book, "season"):
+            book.season = getattr(metadata, "season", None)
+        if hasattr(book, "episode"):
+            book.episode = getattr(metadata, "episode", None)
 
         # Handle Authors / Creators
         author_objs = []
@@ -342,10 +371,12 @@ def index_single_book(
         book.tags = tag_objs
 
         db.session.commit()
-        logger.info("Indexed book: %s (%s)", book.title, book.file_format)
+        logger.info(
+            "Indexed %s: %s (%s)", book.media_type, book.title, book.file_format
+        )
 
-        # Optional auto enrichment if enabled
-        if auto_enrich:
+        # Optional auto enrichment if enabled (books only)
+        if auto_enrich and book.is_book:
             try:
                 from aarkib.services.enricher import enrich_book
 

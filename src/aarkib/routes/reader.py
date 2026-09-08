@@ -64,3 +64,61 @@ def read_cbz(book_id: int):
         book=book,
         initial_page=initial_page,
     )
+
+
+@reader_bp.route("/video/<int:book_id>")
+@optional_or_required_auth
+def watch_video(book_id: int):
+    book = db.session.get(Book, book_id)
+    if not book:
+        abort(404, description="Video not found")
+    if not book.is_video and book.file_format not in (
+        "mp4",
+        "mkv",
+        "webm",
+        "avi",
+        "mov",
+        "m4v",
+    ):
+        abort(400, description="Item is not a video")
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            UserProgress.user_id == user_id,
+            UserProgress.book_id == book.id,
+        )
+    )
+
+    initial_time = 0.0
+    if progress and progress.progress_location:
+        try:
+            initial_time = max(0.0, float(progress.progress_location))
+        except ValueError, TypeError:
+            initial_time = 0.0
+
+    # Next / previous episode navigation if part of a series / show
+    next_video = None
+    prev_video = None
+    if book.series_id:
+        episodes = db.session.scalars(
+            select(Book)
+            .where(Book.series_id == book.series_id)
+            .order_by(Book.series_index.asc(), Book.id.asc())
+        ).all()
+        for idx, ep in enumerate(episodes):
+            if ep.id == book.id:
+                if idx + 1 < len(episodes):
+                    next_video = episodes[idx + 1]
+                if idx > 0:
+                    prev_video = episodes[idx - 1]
+                break
+
+    return render_template(
+        "reader_video.html",
+        book=book,
+        initial_time=initial_time,
+        progress=progress,
+        next_video=next_video,
+        prev_video=prev_video,
+    )

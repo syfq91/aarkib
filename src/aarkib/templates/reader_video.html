@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ book.title }}{% if book.episode_code %} ({{ book.episode_code }}){% endif %} - Aarkib Video Player</title>
+  
+  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      color: #f8fafc;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .player-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+    }
+
+    /* Floating Header Overlay */
+    .player-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.25rem;
+      z-index: 30;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .player-header.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+    }
+
+    .player-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      min-width: 0;
+    }
+
+    .back-btn {
+      color: #f8fafc;
+      text-decoration: none;
+      font-size: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      transition: background 0.2s;
+    }
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .video-title {
+      font-weight: 600;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 50vw;
+    }
+
+    .video-subtitle {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-left: 0.5rem;
+    }
+
+    .player-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background 0.2s;
+    }
+    .header-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Video element */
+    video {
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      background: #000;
+      outline: none;
+    }
+
+    /* Resume indicator pill */
+    #resume-pill {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #4338ca;
+      color: #e0e7ff;
+      padding: 0.5rem 1.25rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      z-index: 25;
+      display: none;
+      pointer-events: none;
+      animation: fadeInOut 3s ease forwards;
+    }
+
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translate(-50%, 10px); }
+      15% { opacity: 1; transform: translate(-50%, 0); }
+      80% { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -10px); }
+    }
+
+    /* Next Episode Overlay on Ended */
+    #next-episode-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      z-index: 40;
+    }
+
+    #next-episode-overlay h3 {
+      font-size: 1.5rem;
+      margin: 0;
+    }
+
+    .overlay-actions {
+      display: flex;
+      gap: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="player-container" id="container">
+  <!-- Top Navigation Overlay -->
+  <div class="player-header" id="player-header">
+    <div class="player-title-wrap">
+      <a href="/book/{{ book.id }}" class="back-btn" title="Back to Details">←</a>
+      <div>
+        <span class="video-title">
+          {% if book.series %}
+            {{ book.series.name }}{% if book.episode_code %} • {{ book.episode_code }}{% endif %} -
+          {% endif %}
+          {{ book.title }}
+        </span>
+        {% if book.resolution_label or book.file_format %}
+          <span class="video-subtitle">[{{ book.resolution_label or book.file_format|upper }}]</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="player-header-actions">
+      {% if prev_video %}
+        <a href="/reader/video/{{ prev_video.id }}" class="header-btn" title="Previous Episode: {{ prev_video.title }}">
+          ⏮️ Prev
+        </a>
+      {% endif %}
+
+      {% if next_video %}
+        <a href="/reader/video/{{ next_video.id }}" class="header-btn" title="Next Episode: {{ next_video.title }}">
+          ⏭️ Next
+        </a>
+      {% endif %}
+
+      <select id="speed-select" class="header-btn" style="padding: 0.3rem 0.5rem;" title="Playback Speed">
+        <option value="0.75">0.75x</option>
+        <option value="1.0" selected>1.0x</option>
+        <option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2.0">2.0x</option>
+      </select>
+
+      <button id="fullscreen-btn" class="header-btn" title="Toggle Fullscreen">⛶</button>
+    </div>
+  </div>
+
+  <!-- HTML5 Video Player with Native & Keyboard Controls -->
+  <video
+    id="video-player"
+    controls
+    playsinline
+    preload="metadata"
+    poster="/api/books/{{ book.id }}/cover"
+    tabindex="0"
+  >
+    <source src="/api/books/{{ book.id }}/file" type="video/{{ 'mp4' if book.file_format == 'mp4' else ('webm' if book.file_format == 'webm' else 'mp4') }}">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Resume toast pill -->
+  <div id="resume-pill"></div>
+
+  <!-- Up next overlay -->
+  {% if next_video %}
+  <div id="next-episode-overlay">
+    <div style="font-size: 2.5rem;">⏭️</div>
+    <h3>Next Episode Up</h3>
+    <div style="color: #cbd5e1; font-size: 1.1rem;">
+      {% if next_video.series %}{{ next_video.series.name }} - {% endif %}
+      {% if next_video.episode_code %}{{ next_video.episode_code }}: {% endif %}
+      {{ next_video.title }}
+    </div>
+    <div id="countdown-text" style="color: #94a3b8; font-size: 0.9rem;">Starting in 5s...</div>
+    <div class="overlay-actions">
+      <a href="/reader/video/{{ next_video.id }}" id="play-next-btn" class="btn btn-primary" style="padding: 0.6rem 1.5rem;">
+        Play Now
+      </a>
+      <button class="btn btn-secondary" onclick="cancelNextEpisode()">
+        Stay Here
+      </button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  const BOOK_ID = {{ book.id }};
+  const INITIAL_TIME = {{ initial_time }};
+  const HAS_NEXT = {{ 'true' if next_video else 'false' }};
+  const NEXT_URL = "{{ '/reader/video/' ~ next_video.id if next_video else '' }}";
+
+  const video = document.getElementById("video-player");
+  const container = document.getElementById("container");
+  const header = document.getElementById("player-header");
+  const speedSelect = document.getElementById("speed-select");
+  const fullscreenBtn = document.getElementById("fullscreen-btn");
+  const resumePill = document.getElementById("resume-pill");
+  const nextOverlay = document.getElementById("next-episode-overlay");
+
+  let controlsTimer = null;
+  let syncTimer = null;
+  let nextCountdownInterval = null;
+  let hasResumed = false;
+
+  function formatTime(seconds) {
+    const s = Math.floor(seconds);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    const remS = s % 60;
+    if (h > 0) {
+      return `${h}:${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+    }
+    return `${remM}:${remS.toString().padStart(2, '0')}`;
+  }
+
+  // Restore initial progress position
+  video.addEventListener("loadedmetadata", () => {
+    if (!hasResumed && INITIAL_TIME > 3 && INITIAL_TIME < (video.duration - 5)) {
+      video.currentTime = INITIAL_TIME;
+      hasResumed = true;
+      resumePill.innerText = `⏳ Resumed from ${formatTime(INITIAL_TIME)}`;
+      resumePill.style.display = "block";
+      setTimeout(() => { resumePill.style.display = "none"; }, 3000);
+    }
+  });
+
+  // Save Progress Function
+  async function saveProgress(force = false) {
+    if (!video.duration || isNaN(video.duration)) return;
+    const currentTime = video.currentTime;
+    const percentage = Math.min(100, Math.max(0, (currentTime / video.duration) * 100));
+
+    try {
+      await fetch(`/api/books/${BOOK_ID}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: currentTime.toFixed(1),
+          percentage: parseFloat(percentage.toFixed(1))
+        }),
+        keepalive: true
+      });
+    } catch (e) {
+      console.debug("Failed saving video progress:", e);
+    }
+  }
+
+  // Periodic progress saving (every 5 seconds)
+  video.addEventListener("play", () => {
+    if (syncTimer) clearInterval(syncTimer);
+    syncTimer = setInterval(() => saveProgress(), 5000);
+  });
+
+  video.addEventListener("pause", () => {
+    if (syncTimer) clearInterval(syncTimer);
+    saveProgress(true);
+  });
+
+  video.addEventListener("seeked", () => {
+    saveProgress(true);
+  });
+
+  window.addEventListener("beforeunload", () => {
+    saveProgress(true);
+  });
+
+  // Handle Video Ended
+  video.addEventListener("ended", () => {
+    saveProgress(true);
+    if (HAS_NEXT && nextOverlay) {
+      nextOverlay.style.display = "flex";
+      let count = 5;
+      const cdEl = document.getElementById("countdown-text");
+      nextCountdownInterval = setInterval(() => {
+        count--;
+        if (cdEl) cdEl.innerText = `Starting in ${count}s...`;
+        if (count <= 0) {
+          clearInterval(nextCountdownInterval);
+          window.location.href = NEXT_URL;
+        }
+      }, 1000);
+    }
+  });
+
+  function cancelNextEpisode() {
+    if (nextCountdownInterval) clearInterval(nextCountdownInterval);
+    if (nextOverlay) nextOverlay.style.display = "none";
+  }
+
+  // Playback speed control
+  speedSelect.addEventListener("change", (e) => {
+    video.playbackRate = parseFloat(e.target.value);
+  });
+
+  // Fullscreen toggle
+  fullscreenBtn.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      container.requestFullscreen?.() || video.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener("keydown", (e) => {
+    if (["input", "select", "textarea"].includes(e.target.tagName.toLowerCase())) return;
+
+    switch (e.key.toLowerCase()) {
+      case " ":
+      case "k":
+        e.preventDefault();
+        video.paused ? video.play() : video.pause();
+        break;
+      case "arrowleft":
+      case "j":
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 5);
+        showControls();
+        break;
+      case "arrowright":
+      case "l":
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration, video.currentTime + 5);
+        showControls();
+        break;
+      case "arrowup":
+        e.preventDefault();
+        video.volume = Math.min(1, video.volume + 0.1);
+        break;
+      case "arrowdown":
+        e.preventDefault();
+        video.volume = Math.max(0, video.volume - 0.1);
+        break;
+      case "m":
+        video.muted = !video.muted;
+        break;
+      case "f":
+        fullscreenBtn.click();
+        break;
+    }
+  });
+
+  // Header autohide on inactivity
+  function showControls() {
+    header.classList.remove("hidden");
+    clearTimeout(controlsTimer);
+    if (!video.paused) {
+      controlsTimer = setTimeout(() => {
+        header.classList.add("hidden");
+      }, 3000);
+    }
+  }
+
+  container.addEventListener("mousemove", showControls);
+  container.addEventListener("touchstart", showControls);
+  video.addEventListener("pause", () => header.classList.remove("hidden"));
+  video.addEventListener("play", () => {
+    controlsTimer = setTimeout(() => header.classList.add("hidden"), 2500);
+  });
+</script>
+
+</body>
+</html>

@@ -1,6 +1,6 @@
 # 🏛️ Aarkib
 
-> A modern, lightweight, self-hosted media server built with Flask, SQLite, and PWA capabilities. Built for books & comics with OPDS 1.2, OPDS 2.0, and **OPDS Progression 1.0** reading sync, e-ink optimization, and browser-based readers — with an extensible plugin architecture and **work-in-progress (WIP) support for video and audio**.
+> A modern, lightweight, self-hosted media server built with Flask, SQLite, and PWA capabilities. Built for books, comics, and video streaming (movies & TV shows) with OPDS 1.2, OPDS 2.0, **OPDS Progression 1.0** reading sync, e-ink optimization, and in-browser readers & media players — with an extensible plugin architecture and planned audio support.
 
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -11,15 +11,16 @@
 
 ## ✨ Features
 
-- 📖 **E-Books & Comics (Supported)**: Native support for `.epub`, `.cbz`, `.cbr`, and `.zip` formats with automatic metadata & cover extraction.
+- 📖 **E-Books & Comics**: Native support for `.epub`, `.cbz`, `.cbr`, and `.zip` formats with automatic metadata & cover extraction.
+- 🎬 **Movies & TV Shows**: Streaming for `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v` with HTTP 206 byte-range seeking, smart TV show (`S01E02`) / movie naming detection, pure-Python MP4 container metadata (duration, width, height), and poster extraction.
 - 🎵 **Audiobooks & Music (WIP / In Progress)**: Foundational architecture (`AudioTrackMixin`, `MediaType.AUDIO`) in progress for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`) with duration, bitrate, album, and listening progress synchronization.
-- 🎬 **Video & Movies (WIP / In Progress)**: Foundational architecture (`VideoItemMixin`, `MediaType.VIDEO`) in progress for video playback (`.mp4`, `.mkv`, `.webm`) with resolution, codec, season/episode metadata, and stream resume.
 - 🔌 **Extensible Media Plugin System**: Pluggable architecture (`MediaPlugin` & `PluginRegistry`) allowing modular media parsers, artwork extractors, and in-browser player routes for different media types.
 - 📡 **OPDS 1.2 & OPDS 2.0 Feeds**: Full OPDS catalog feeds compatible with e-readers like KOReader, Thorium Reader, Cantook, Panels, and Moon+ Reader.
 - 🔄 **OPDS Progression 1.0**: Built-in support for the latest [OPDS Progression 1.0](https://github.com/opds-community/drafts/blob/main/opds-progression-1.0.md) standard to sync reading positions across devices with conflict resolution.
-- 🌐 **In-Browser Web Readers**:
+- 🌐 **In-Browser Web Readers & Players**:
   - **EPUB Web Reader**: Fast in-memory array buffer decoding via ePub.js & JSZip, with themes (Dark, Sepia, OLED, Light), font sizing, and bookmarking.
   - **CBZ Comic Reader**: Smooth canvas & image viewer with continuous scroll, single-page flip, zoom, reading direction (LTR/RTL), page spreads, and fullscreen support.
+  - **HTML5 Video Player**: Clean player with position resume, keyboard shortcuts (Space, Arrow keys, Fullscreen, Mute), playback speed selector (0.75x–2.0x), and automatic next-episode countdown.
 - 👥 **Multi-User & Role Management**:
   - Isolated reading progress, bookmarks, and statistics per user.
   - Admin dashboard to manage users, reset passwords, and toggle roles.

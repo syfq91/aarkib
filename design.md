@@ -34,14 +34,14 @@ graph TD
         UIRoutes[UI Blueprint: /book/:id, /authors, /series]
         APIRoutes[REST API Blueprint: /api/books, /api/progress]
         OPDSRoutes[OPDS Blueprint: /opds, /opds/v2, /opds/:device]
-        ReaderRoutes[Reader Blueprint: /reader/epub/:id, /reader/cbz/:id]
+        ReaderRoutes[Reader & Player: /reader/epub/:id, /reader/cbz/:id, /reader/video/:id]
     end
 
     subgraph Service & Plugin Layer
         PluginRegistry[Plugin Registry: plugin_registry]
         BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP]
         AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC - WIP]
-        VideoPlugin[VideoMediaPlugin: MP4, MKV - WIP]
+        VideoPlugin[VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V]
         Scanner[Scanner & Watchdog Service]
         Optimizer[E-Ink Device Optimizer]
         Enricher[Metadata Enricher: Google Books & Open Library]

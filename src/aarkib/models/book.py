@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 from aarkib.models.author import book_authors
-from aarkib.models.media import MediaItemMixin, MediaType
+from aarkib.models.media import MediaItemMixin, MediaType, VideoItemMixin
 from aarkib.models.tag import book_tags
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from aarkib.models.tag import Tag
 
 
-class Book(db.Model, MediaItemMixin):
+class Book(db.Model, MediaItemMixin, VideoItemMixin):
     __tablename__ = "books"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -52,9 +52,51 @@ class Book(db.Model, MediaItemMixin):
             fmt = (kwargs.get("file_format") or "").lower()
             if fmt in ("cbz", "cbr", "zip"):
                 kwargs["media_type"] = MediaType.COMIC.value
+            elif fmt in ("mp4", "mkv", "webm", "avi", "mov", "m4v"):
+                kwargs["media_type"] = MediaType.VIDEO.value
             else:
                 kwargs["media_type"] = MediaType.BOOK.value
         super().__init__(**kwargs)
+
+    @property
+    def formatted_duration(self) -> str:
+        """Returns video duration formatted as '1h 45m' or '45m 12s'."""
+        if not self.duration:
+            return ""
+        total_seconds = int(self.duration)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        if hours > 0:
+            return f"{hours}h {minutes:02d}m"
+        if minutes > 0:
+            return f"{minutes}m {seconds:02d}s"
+        return f"{seconds}s"
+
+    @property
+    def resolution_label(self) -> str:
+        """Returns standard resolution label (4K, 1080p, 720p, etc.)."""
+        if not self.resolution_height:
+            return ""
+        h = self.resolution_height
+        if h >= 2160:
+            return "4K"
+        elif h >= 1440:
+            return "1440p"
+        elif h >= 1080:
+            return "1080p"
+        elif h >= 720:
+            return "720p"
+        elif h >= 480:
+            return "480p"
+        return f"{h}p"
+
+    @property
+    def episode_code(self) -> str:
+        """Returns episode code e.g. 'S01E02' if both season and episode are set."""
+        if self.season is not None and self.episode is not None:
+            return f"S{self.season:02d}E{self.episode:02d}"
+        return ""
 
     @property
     def authors_display(self) -> str:

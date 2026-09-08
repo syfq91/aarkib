@@ -38,6 +38,28 @@ class ParsedBookMetadata(BaseParsedMetadata):
             self.creators = list(self.authors)
 
 
+@dataclass
+class ParsedVideoMetadata(BaseParsedMetadata):
+    """Video/Movie/TV show parsed metadata."""
+
+    duration: float | None = None
+    resolution_width: int | None = None
+    resolution_height: int | None = None
+    codec: str | None = None
+    season: int | None = None
+    episode: int | None = None
+    series: str | None = None
+    series_index: float | None = None
+    authors: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.media_type = "video"
+        if not self.authors and self.creators:
+            self.authors = list(self.creators)
+        elif self.authors and not self.creators:
+            self.creators = list(self.authors)
+
+
 ParserFunc = Callable[[Path], BaseParsedMetadata | None]
 PARSER_REGISTRY: dict[str, ParserFunc] = {}
 
@@ -65,5 +87,9 @@ def extract_metadata_from_file(file_path: Path) -> BaseParsedMetadata | None:
         from aarkib.services.parsers.cbz import parse_cbz
 
         return parse_cbz(file_path)
+    elif ext in (".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v"):
+        from aarkib.services.parsers.video import parse_video
+
+        return parse_video(file_path)
 
     return None
