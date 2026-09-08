@@ -31,6 +31,17 @@ def load_user(user_id: str) -> User | None:
         return None
 
 
+@login_manager.request_loader
+def load_user_from_request(req: Any) -> User | None:
+    """Authenticates API and OPDS requests using HTTP Basic Auth."""
+    auth = req.authorization
+    if auth and auth.username and auth.password:
+        user = db.session.scalar(select(User).where(User.username == auth.username))
+        if user and user.check_password(auth.password):
+            return user
+    return None
+
+
 def optional_or_required_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """Requires login if AUTH_REQUIRED is enabled in config; otherwise allows guests."""
 
@@ -63,6 +74,9 @@ def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
 def is_safe_url(target: str | None) -> bool:
     """Verifies that a redirect target URL is safe and relative to this application."""
     if not target:
+        return False
+    # Disallow backslashes to prevent protocol-relative URL bypasses like /\example.com
+    if "\\" in target:
         return False
     ref_url = urlsplit(request.host_url)
     test_url = urlsplit(target)

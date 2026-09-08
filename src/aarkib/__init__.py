@@ -100,6 +100,9 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     def set_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
         return response
 
     with app.app_context():
@@ -242,7 +245,12 @@ def main() -> None:
     import os
 
     port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug = (
+        os.getenv("FLASK_DEBUG")
+        or os.getenv("AARKIB_DEBUG")
+        or str(app.config.get("DEBUG", False))
+    ).lower() in ("true", "1", "yes")
+    app.run(host="0.0.0.0", port=port, debug=debug)
 
 
 if __name__ == "__main__":

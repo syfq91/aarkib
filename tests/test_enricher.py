@@ -141,3 +141,23 @@ def test_api_enrich_endpoints(client, app, sample_epub):
         assert res.status_code == 200
         data = res.get_json()
         assert data["status"] == "success"
+
+
+def test_is_safe_http_url():
+    from aarkib.services.enricher import (
+        _http_get_bytes,
+        _http_get_json,
+        _is_safe_http_url,
+    )
+
+    assert _is_safe_http_url("https://example.com/api") is True
+    assert _is_safe_http_url("http://example.com/image.jpg") is True
+    assert _is_safe_http_url("file:///etc/passwd") is False
+    assert _is_safe_http_url("ftp://example.com/resource") is False
+    assert _is_safe_http_url("javascript:alert(1)") is False
+    assert _is_safe_http_url("") is False
+    assert _is_safe_http_url(None) is False  # type: ignore
+
+    # Verify functions reject non-http schemes without making network calls
+    assert _http_get_json("file:///etc/passwd") is None
+    assert _http_get_bytes("file:///etc/passwd") is None

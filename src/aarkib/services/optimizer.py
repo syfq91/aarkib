@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+import defusedxml.ElementTree as DefusedET
 from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
@@ -249,7 +250,7 @@ def optimize_epub(
             if "META-INF/container.xml" in src_zip.namelist():
                 container_data = src_zip.read("META-INF/container.xml")
                 try:
-                    c_tree = ET.fromstring(container_data)
+                    c_tree = DefusedET.fromstring(container_data)
                     for rf in c_tree.findall(
                         ".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
                     ):
@@ -273,7 +274,7 @@ def optimize_epub(
                     ET.register_namespace("dc", "http://purl.org/dc/elements/1.1/")
                     ET.register_namespace("opf", "http://www.idpf.org/2007/opf")
 
-                    opf_tree = ET.fromstring(opf_data)
+                    opf_tree = DefusedET.fromstring(opf_data)
                     opf_dir = Path(opf_path).parent if "/" in opf_path else Path("")
 
                     manifest = opf_tree.find("{http://www.idpf.org/2007/opf}manifest")

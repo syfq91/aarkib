@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, render_template
 from flask_login import current_user
+from sqlalchemy import select
 
 from aarkib.extensions import db
 from aarkib.models import Book, UserProgress
@@ -20,10 +21,11 @@ def read_epub(book_id: int):
         abort(400, description="Book is not an EPUB")
 
     user_id = current_user.id if current_user.is_authenticated else None
-    progress = (
-        db.session.query(UserProgress)
-        .filter_by(user_id=user_id, book_id=book.id)
-        .first()
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            UserProgress.user_id == user_id,
+            UserProgress.book_id == book.id,
+        )
     )
 
     return render_template(
@@ -43,10 +45,11 @@ def read_cbz(book_id: int):
         abort(400, description="Book is not a CBZ comic")
 
     user_id = current_user.id if current_user.is_authenticated else None
-    progress = (
-        db.session.query(UserProgress)
-        .filter_by(user_id=user_id, book_id=book.id)
-        .first()
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            UserProgress.user_id == user_id,
+            UserProgress.book_id == book.id,
+        )
     )
 
     initial_page = 1

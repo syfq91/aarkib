@@ -284,3 +284,58 @@ def test_auth_required_enforcement(client, app, sample_epub):
     res = client.get("/api/books")
     assert res.status_code == 200
     assert len(res.get_json()["books"]) >= 1
+
+    # 5. Public healthcheck endpoint succeeds without auth
+    client.get("/auth/logout", follow_redirects=True)
+    res_health = client.get("/api/health")
+    assert res_health.status_code == 200
+    assert res_health.get_json()["status"] == "healthy"
+
+    # 6. HTTP Basic Auth successfully authenticates and links progress to current_user
+    import base64
+
+    b64_creds = base64.b64encode(b"auth_tester:pass123").decode("ascii")
+    headers = {"Authorization": f"Basic {b64_creds}"}
+
+    res_api = client.get("/api/books", headers=headers)
+    assert res_api.status_code == 200
+
+    # Post progress via Basic Auth
+    res_prog = client.post(
+        f"/api/books/{book_id}/progress",
+        json={"location": "cfi_basic_auth", "percentage": 77.0},
+        headers=headers,
+    )
+    assert res_prog.status_code == 200
+    assert res_prog.get_json()["percentage"] == 77.0
+
+    # Verify progress record in database belongs to auth_tester
+    from aarkib.models import UserProgress
+
+    with app.app_context():
+        user_record = db.session.scalar(
+            select(User).where(User.username == "auth_tester")
+        )
+        prog_record = db.session.scalar(
+            select(UserProgress).where(
+                UserProgress.user_id == user_record.id,
+                UserProgress.book_id == book_id,
+            )
+        )
+        assert prog_record is not None
+        assert prog_record.percentage == 77.0
+        assert prog_record.progress_location == "cfi_basic_auth"
+
+
+def test_is_safe_url_backslash_rejection(app):
+    from aarkib.routes.auth import is_safe_url
+
+    with app.test_request_context("/"):
+        assert is_safe_url("/books") is True
+        assert is_safe_url("/settings") is True
+        assert is_safe_url("//attacker.com") is False
+        assert is_safe_url("/\\attacker.com") is False
+        assert is_safe_url("\\attacker.com") is False
+        assert is_safe_url("https://attacker.com") is False
+        assert is_safe_url("") is False
+        assert is_safe_url(None) is False

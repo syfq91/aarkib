@@ -343,13 +343,16 @@ erDiagram
    - If the database contains zero users, the application automatically redirects visitors to `/auth/register` to establish the initial Administrator account.
 2. **Dual-Credential Interceptor**:
    - Web sessions are secured with signed HTTP-only cookies (`Lax` SameSite policy).
-   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. If present, credentials are authenticated directly against the `User` model, allowing headless readers to connect seamlessly without browser session cookies.
+   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. When present, Flask-Login's `request_loader` validates credentials against the `User` model and populates `current_user`, allowing headless readers to sync progress and access collections seamlessly without browser cookies.
 3. **Security Headers**:
-   - Injected on all outgoing responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`.
+   - Injected on all outgoing responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
 4. **Data Isolation**:
    - All reading positions, progress markers, and bookmarks are strictly partitioned by `user_id`. One user cannot read or alter another user's progress.
 5. **Administrative Boundaries**:
    - Modifying book metadata, triggering full-library scans, creating users, and changing user permissions are protected by `@admin_required`.
+6. **Defensive Parsing & SSRF Protection**:
+   - All external XML processing (`parsers/epub.py`, `parsers/cbz.py`, and `services/optimizer.py`) utilizes `defusedxml` to defend against XML entity expansion (Billion Laughs) and XXE vulnerabilities.
+   - The metadata enricher verifies URL schemes (`http`, `https`) before issuing outbound requests to prevent SSRF or arbitrary local file disclosure (`file://`).
 
 ---
 
@@ -358,7 +361,7 @@ erDiagram
 ### Packaging & Environment
 - **Python Version**: `>=3.14`
 - **Dependency Management**: `uv` using pinned `uv.lock`.
-- **Container Strategy**: Multi-stage `Dockerfile` using `python:3.14-slim` and `uv` for minimal attack surface and lightweight image footprints.
+- **Container Strategy**: Multi-stage `Dockerfile` using `python:3.14-slim` and `uv` for minimal attack surface and lightweight image footprints. Runs as an unprivileged user (`USER aarkib`) with a standard container `HEALTHCHECK` querying `/api/health`.
 - **Persistent Volumes**:
   - `/app/data`: Houses `aarkib.db`, `covers/`, and `optimized/`.
   - `/app/data/books` (or external mounts like `/media/audio`, `/media/video`): Primary read-only media storage.

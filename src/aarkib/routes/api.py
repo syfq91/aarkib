@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
-from flask_login import current_user
+from flask_login import current_user, login_user
 from sqlalchemy import func, or_, select
 from werkzeug.utils import secure_filename
 
@@ -20,22 +20,28 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 @api_bp.before_request
 def enforce_api_auth():
+    # Endpoints exempt from authentication
+    if request.endpoint in ("api.get_book_cover", "api.health"):
+        return None
+
+    # Authenticate via HTTP Basic auth if credentials are provided
+    auth = request.authorization
+    if auth and auth.username and auth.password:
+        user = db.session.scalar(select(User).where(User.username == auth.username))
+        if user and user.check_password(auth.password):
+            login_user(user)
+
     if (
         current_app.config.get("AUTH_REQUIRED", False)
         and not current_user.is_authenticated
     ):
-        # Support HTTP Basic auth for API clients
-        auth = request.authorization
-        if auth and auth.username and auth.password:
-            user = db.session.scalar(select(User).where(User.username == auth.username))
-            if user and user.check_password(auth.password):
-                return None
-
-        # Allow public cover viewing if desired
-        if request.endpoint == "api.get_book_cover":
-            return None
-
         return jsonify({"error": "Authentication required"}), 401
+
+
+@api_bp.route("/health", methods=["GET"])
+def health():
+    """Healthcheck endpoint for container monitoring."""
+    return jsonify({"status": "healthy", "app": "aarkib"})
 
 
 @api_bp.route("/books", methods=["GET"])
@@ -486,7 +492,7 @@ def get_cbz_page_image(book_id: int, page_num: int):
                 ".tiff": "image/tiff",
             }
             return (
-                io.BytesIO(data).getvalue(),
+                data,
                 200,
                 {
                     "Content-Type": mimetypes.get(ext, "image/jpeg"),

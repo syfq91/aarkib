@@ -94,7 +94,7 @@ aarkib/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
 │   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
-│   │   ├── api.py            # REST endpoints: list, book detail, download, cover, progress, edit metadata, scan
+│   │   ├── api.py            # REST endpoints: list, book detail, download, cover, progress, edit metadata, scan, /health
 │   │   ├── reader.py         # In-browser reader views for EPUB and CBZ
 │   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   ├── services/
@@ -161,7 +161,7 @@ aarkib/
 1. **Authentication Enforcement (`AARKIB_AUTH_REQUIRED`)**:
    * Default is `AARKIB_AUTH_REQUIRED=true` (with `BUUKUU_AUTH_REQUIRED` as fallback).
    * Unauthenticated web visitors are redirected to `/auth/login?next=<url>` (or `/auth/register` if no users exist in the system).
-   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients.
+   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients (authenticating `current_user` via Flask-Login's `request_loader`). `/api/health` and book covers are publicly accessible without authentication.
    * OPDS endpoints (`/opds/*`) return `401 Unauthorized` with `WWW-Authenticate: Basic realm="Aarkib OPDS"` and an `application/opds-authentication+json` document.
 
 2. **Multi-Media Plugin Architecture & WIP Video/Audio Support**:

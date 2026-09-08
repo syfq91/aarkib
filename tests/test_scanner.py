@@ -149,3 +149,22 @@ def test_scan_multiple_directories_via_env(
     res = scan_library(app)
     assert res["scanned"] == 3
     assert res["added_or_updated"] == 3
+
+
+def test_compute_sort_title():
+    from aarkib.services.scanner import compute_sort_title
+
+    # Leading articles should be stripped
+    assert compute_sort_title("The Hobbit") == "Hobbit"
+    assert compute_sort_title("the hobbit") == "hobbit"
+    assert compute_sort_title("A Tale of Two Cities") == "Tale of Two Cities"
+    assert compute_sort_title("An American Tragedy") == "American Tragedy"
+
+    # Words beginning with 'The', 'A', 'An' that are NOT articles should remain intact
+    assert compute_sort_title("Theater of Shadows") == "Theater of Shadows"
+    assert compute_sort_title("Theory of Computation") == "Theory of Computation"
+    assert compute_sort_title("Apple") == "Apple"
+    assert compute_sort_title("Athens") == "Athens"
+    assert compute_sort_title("Animal Farm") == "Animal Farm"
+    assert compute_sort_title("Another World") == "Another World"
+    assert compute_sort_title("") == ""

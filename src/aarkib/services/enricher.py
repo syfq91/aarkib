@@ -39,8 +39,22 @@ class EnrichedMetadata:
     source: str = ""
 
 
+def _is_safe_http_url(url: str) -> bool:
+    """Verifies that a URL strictly uses http or https schemes."""
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+    except Exception:
+        return False
+
+
 def _http_get_json(url: str) -> dict[str, Any] | list[Any] | None:
     """Helper to perform HTTP GET requests returning parsed JSON."""
+    if not _is_safe_http_url(url):
+        logger.debug("Rejected non-HTTP/HTTPS URL: %s", url)
+        return None
     try:
         req = urllib.request.Request(
             url,
@@ -60,6 +74,9 @@ def _http_get_json(url: str) -> dict[str, Any] | list[Any] | None:
 
 def _http_get_bytes(url: str) -> bytes | None:
     """Helper to download raw binary bytes (e.g., covers)."""
+    if not _is_safe_http_url(url):
+        logger.debug("Rejected non-HTTP/HTTPS URL: %s", url)
+        return None
     try:
         req = urllib.request.Request(
             url,

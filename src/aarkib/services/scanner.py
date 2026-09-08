@@ -44,6 +44,17 @@ def get_supported_extensions() -> set[str]:
 SUPPORTED_EXTENSIONS = DEFAULT_EXTENSIONS
 
 
+def compute_sort_title(title: str) -> str:
+    """Returns a clean sort title by stripping leading articles (The, A, An)."""
+    if not title:
+        return ""
+    lower = title.lower()
+    for prefix in ("the ", "a ", "an "):
+        if lower.startswith(prefix):
+            return title[len(prefix) :].strip()
+    return title
+
+
 def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
@@ -267,7 +278,7 @@ def index_single_book(
         db.session.add(book)
 
         book.title = metadata.title or file_path.stem
-        book.sort_title = book.title.lstrip("The ").lstrip("A ").lstrip("An ")
+        book.sort_title = compute_sort_title(book.title)
         book.file_format = metadata.file_format
         book.file_size = file_size
         book.file_hash = file_hash

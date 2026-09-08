@@ -33,7 +33,7 @@
   - Auto-enrich books using Google Books & Open Library APIs.
   - Interactive "✏️ Edit Book & Series" metadata modal on book details.
   - Smart automatic series volume detection from filenames and EPUB 3 / Calibre OPF tags.
-- 🐳 **Docker & Production Ready**: Docker & Docker Compose setup with persistent SQLite WAL storage.
+- 🐳 **Docker & Production Ready**: Hardened container running as unprivileged user (`USER aarkib`), built-in healthcheck endpoint (`/api/health`), and persistent SQLite WAL storage.
 
 ---
 
@@ -83,6 +83,7 @@ Your library books placed in `./data/books` will be mounted automatically.
 | `AARKIB_LIBRARY_DIR` | `./data/books` | Primary library directory (or delimited list: `/dir1:/dir2`). |
 | `AARKIB_LIBRARY_DIR1`, `DIR2`, ... | *(none)* | Additional numbered library directories (`AARKIB_LIBRARY_DIR1`, `AARKIB_LIBRARY_DIR2`, `DIR1`, etc.). |
 | `AARKIB_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
+| `AARKIB_OPTIMIZED_DIR` | `./data/optimized` | Cache directory for on-demand e-ink optimized EPUBs. |
 | `DATABASE_URL` | `sqlite:///data/aarkib.db` | SQLAlchemy database URI. |
 | `AARKIB_AUTH_REQUIRED` | `true` | When `true`, visitors must log in to browse or download. |
 | `AARKIB_ALLOW_REGISTRATION` | `true` | Allow new readers to sign up from the web UI. |
@@ -91,6 +92,7 @@ Your library books placed in `./data/books` will be mounted automatically.
 | `AARKIB_AUTO_ENRICH` | `false` | Automatically fetch metadata on library scan. |
 | `AARKIB_METADATA_PROVIDER` | `all` | Online enrichment provider: `googlebooks`, `openlibrary`, or `all`. |
 | `AARKIB_PAGE_SIZE` | `24` | Number of items per page in UI views. |
+| `FLASK_DEBUG` | `0` | Enable Flask development debugger (disabled by default in production). |
 | `PORT` | `5000` | Server listening port. |
 
 > **💡 Multiple Library Folders & Media**: You can specify multiple folders in `.env` using numbered variables like `AARKIB_LIBRARY_DIR1=/mnt/nas/books`, `AARKIB_LIBRARY_DIR2=/media/manga`, `AARKIB_LIBRARY_DIR3=/home/user/calibre` (or `DIR1`, `DIR2`), or as a delimited list in `AARKIB_LIBRARY_DIR=/books:/manga`. Named folders like `AARKIB_LIBRARY_DIR_AUDIO=/media/audio` and `AARKIB_LIBRARY_DIR_VIDEO=/media/video` are also supported.
@@ -160,7 +162,7 @@ uv run aarkib list-users
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (54+ tests)
+# Run pytest test suite (61+ tests)
 uv run pytest
 
 # Check code quality & formatting with ruff
