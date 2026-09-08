@@ -1,7 +1,30 @@
 from pathlib import Path
 
+from aarkib.models import User
 from aarkib.services.parsers.epub import extract_series_from_title
 from aarkib.services.scanner import index_single_book
+
+
+def _create_admin(app):
+    """Create an admin user for tests requiring authenticated admin access."""
+    admin = User(username="test_admin", is_admin=True)
+    admin.set_password("adminpass")
+    with app.app_context():
+        from aarkib.extensions import db
+
+        db.session.add(admin)
+        db.session.commit()
+        admin_id = admin.id
+    return admin_id
+
+
+def _login_admin(client, app):
+    _create_admin(app)
+    client.post(
+        "/auth/login",
+        data={"username": "test_admin", "password": "adminpass"},
+        follow_redirects=True,
+    )
 
 
 def test_extract_series_from_title():
@@ -43,7 +66,8 @@ def test_api_books_and_progress(client, app, sample_epub):
     data = res.get_json()
     assert data["title"] == "Sample Test Book"
 
-    # Edit metadata and assign series
+    # Edit metadata and assign series (admin only)
+    _login_admin(client, app)
     res = client.post(
         f"/api/books/{book_id}/edit",
         json={
@@ -116,6 +140,9 @@ def test_api_libraries_and_library_filter(client, app, sample_epub):
 
 def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample_epub):
     import shutil
+
+    # Admin operations require an authenticated admin user
+    _login_admin(client, app)
 
     # Create a new custom media directory with an epub file
     custom_media_dir = tmp_path / "my_comics_folder"

@@ -7,6 +7,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, render_template, request
 from flask_login import current_user
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Series, Tag, User, UserProgress
@@ -355,7 +356,10 @@ def opds2_recent(preset: str | None = None):
     base_url = request.host_url.rstrip("/")
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     books = db.session.scalars(
-        select(Book).order_by(Book.created_at.desc()).limit(50)
+        select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.series))
+        .order_by(Book.created_at.desc())
+        .limit(50)
     ).all()
 
     publications = []
@@ -460,7 +464,11 @@ def root_catalog(preset: str | None = None):
 def recent_feed(preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     per_page = 30
-    query = select(Book).order_by(Book.created_at.desc())
+    query = (
+        select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.tags))
+        .order_by(Book.created_at.desc())
+    )
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
     now_iso = datetime.now(UTC).isoformat()
@@ -516,6 +524,7 @@ def author_books(author_id: int, preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     query = (
         select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.tags))
         .filter(Book.authors.any(Author.id == author_id))
         .order_by(Book.title.asc())
     )
@@ -573,6 +582,7 @@ def series_books(series_id: int, preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     query = (
         select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.tags))
         .filter(Book.series_id == series_id)
         .order_by(Book.series_index.asc(), Book.title.asc())
     )
@@ -629,7 +639,10 @@ def tag_books(tag_id: int, preset: str | None = None):
 
     page = request.args.get("page", 1, type=int)
     query = (
-        select(Book).filter(Book.tags.any(Tag.id == tag_id)).order_by(Book.title.asc())
+        select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.tags))
+        .filter(Book.tags.any(Tag.id == tag_id))
+        .order_by(Book.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
@@ -677,7 +690,7 @@ def search_feed(preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     per_page = 30
 
-    query = select(Book)
+    query = select(Book).options(selectinload(Book.authors), selectinload(Book.tags))
     if q:
         search_filter = or_(
             Book.title.ilike(f"%{q}%"),

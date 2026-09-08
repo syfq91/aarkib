@@ -6,8 +6,10 @@ from pathlib import Path
 
 import click
 from flask import Flask
-from sqlalchemy import event, inspect, select, text
+from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import Boolean, Integer, event, inspect, select, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.sql import sqltypes as sa_types
 
 from aarkib.config import Config
 from aarkib.extensions import db, login_manager
@@ -18,6 +20,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("aarkib")
+
+# Global CSRF protection. API and OPDS endpoints are exempt because they
+# authenticate via HTTP Basic Auth (and cookies), which browsers cannot forge
+# in a cross-site request; the HTML form-based UI (auth) uses CSRF tokens.
+csrf = CSRFProtect()
 
 
 @event.listens_for(Engine, "connect")
@@ -30,28 +37,81 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.close()
 
 
+_NON_NULL_DEFAULTS: tuple[tuple[type, str], ...] = (
+    (Integer, "0"),
+    (Boolean, "0"),
+)
+
+
+def _render_default(col) -> str:
+    """Render a SQLAlchemy column default as a safe SQLite literal."""
+    arg = col.default.arg
+    if callable(arg):
+        return "''"
+    if isinstance(col.type, Integer):
+        return str(int(arg))
+    if isinstance(arg, bool):
+        return "1" if arg else "0"
+    if isinstance(arg, (int, float)):
+        return repr(arg)
+    escaped = str(arg).replace("'", "''")
+    return f"'{escaped}'"
+
+
 def migrate_database() -> None:
-    """Ensure database tables and columns match the declared SQLAlchemy models."""
+    """Ensure database tables and columns match the declared SQLAlchemy models.
+
+    Handles adding missing columns with appropriate nullable/default clauses so
+    existing rows are not affected. JSON and other complex types fall back to
+    TEXT for SQLite compatibility.
+    """
     db.create_all()
-    inspector = inspect(db.engine)
-    existing_tables = set(inspector.get_table_names())
 
     with db.engine.begin() as conn:
+        inspector = inspect(db.engine)
+        existing_tables = set(inspector.get_table_names())
+
         for table_name, table in db.metadata.tables.items():
             if table_name not in existing_tables:
                 continue
             existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
             for col in table.columns:
-                if col.name not in existing_cols:
-                    col_type = col.type.compile(conn.dialect)
-                    stmt = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}"
-                    logger.info(
-                        "Auto-migrating %s: added missing column %s (%s)",
-                        table_name,
-                        col.name,
-                        col_type,
+                if col.name in existing_cols:
+                    continue
+
+                # SQLite cannot add a standalone JSON column via ALTER; and
+                # non-nullable columns without a default need a value.
+                is_json = isinstance(col.type, sa_types.JSON)
+                type_sql = "TEXT" if is_json else col.type.compile(conn.dialect)
+
+                if col.default is not None:
+                    default_sql = f" DEFAULT {_render_default(col)}"
+                else:
+                    literal = next(
+                        (
+                            default
+                            for col_type, default in _NON_NULL_DEFAULTS
+                            if isinstance(col.type, col_type)
+                        ),
+                        "",
                     )
-                    conn.execute(text(stmt))
+                    if not col.nullable and literal:
+                        default_sql = f" DEFAULT {literal}"
+                    else:
+                        default_sql = ""
+
+                nullable_sql = "" if col.nullable else " NOT NULL"
+                stmt = (
+                    f"ALTER TABLE {table_name} ADD COLUMN "
+                    f"{col.name}{' ' + type_sql}{nullable_sql}{default_sql}"
+                )
+                logger.info(
+                    "Auto-migrating %s: added missing column %s (%s)",
+                    table_name,
+                    col.name,
+                    type_sql,
+                )
+                conn.execute(text(stmt))
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
@@ -78,6 +138,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
+    csrf.init_app(app)
+
+    # API and OPDS endpoints authenticate via HTTP Basic Auth and JSON payloads
+    # (not HTML forms), so they are exempt from CSRF token requirements.
+    csrf.exempt(api_bp)
+    csrf.exempt(opds_bp)
 
     # Initialize media plugins
     from aarkib.plugins import init_plugins
@@ -95,6 +161,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     # Security settings & headers
     app.config.setdefault("SESSION_COOKIE_HTTPONLY", True)
     app.config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
+    app.config.setdefault("SESSION_COOKIE_SECURE", not app.debug)
 
     @app.after_request
     def set_security_headers(response):

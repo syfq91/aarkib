@@ -50,6 +50,7 @@
     <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
       <h3 style="margin-bottom: 1rem;">Change Password</h3>
       <form method="POST" action="/auth/profile" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Current Password</label>
           <input type="password" name="current_password" class="input-text" required placeholder="••••••••">

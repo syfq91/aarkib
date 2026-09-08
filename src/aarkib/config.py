@@ -173,12 +173,41 @@ def discover_library_dirs(
 class Config:
     """Base application configuration."""
 
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "aarkib-secret-key-change-in-production")
+    # SECRET_KEY handling:
+    # - If the env var is set to a non-default value, it is used as-is.
+    # - If it is set to the old known-insecure default, we refuse to start.
+    # - Otherwise a random key is generated and persisted to DATA_DIR so that
+    #   sessions survive restarts. Operators should always set SECRET_KEY in
+    #   production.
+    _env_secret = os.getenv("SECRET_KEY")
+    if _env_secret and _env_secret != "aarkib-secret-key-change-in-production":
+        SECRET_KEY: str = _env_secret
+    elif _env_secret:
+        raise RuntimeError(
+            "SECRET_KEY is set to the known-insecure default "
+            "'aarkib-secret-key-change-in-production'. Please set a unique "
+            "SECRET_KEY environment variable, e.g. via "
+            '`python -c "import secrets; print(secrets.token_hex(32))"`.'
+        )
 
-    # Data storage paths
     DATA_DIR: Path = Path(
         os.getenv("AARKIB_DATA_DIR", os.getenv("BUUKUU_DATA_DIR", BASE_DIR / "data"))
     )
+    if "SECRET_KEY" not in locals():
+        # Persist a generated key so sessions survive restarts (dev convenience).
+        _key_path = DATA_DIR / "secret_key"
+        if _key_path.exists():
+            SECRET_KEY = _key_path.read_text().strip()
+        else:
+            import secrets as _secrets
+
+            SECRET_KEY = _secrets.token_hex(32)
+            try:
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                _key_path.write_text(SECRET_KEY)
+                os.chmod(_key_path, 0o600)
+            except OSError:
+                pass
     LIBRARY_DIRS: list[Path] = discover_library_dirs(DATA_DIR)
     LIBRARY_DIR: Path = LIBRARY_DIRS[0] if LIBRARY_DIRS else (DATA_DIR / "books")
     COVERS_DIR: Path = Path(
@@ -257,3 +286,5 @@ class TestConfig(Config):
     AUTO_SCAN_ON_START: bool = False
     WATCH_LIBRARY: bool = False
     AUTO_ENRICH: bool = False
+    # CSRF is disabled in tests so request payloads don't need tokens.
+    WTF_CSRF_ENABLED: bool = False

@@ -154,10 +154,25 @@ def test_optimize_epub_end_to_end(tmp_path):
 
 
 def test_api_download_optimized(client, app, sample_epub, tmp_path):
+    from aarkib.models import User
+
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
         book = index_single_book(sample_epub, covers_dir)
         book_id = book.id
+
+        # Optimize API requires an authenticated admin user
+        admin = User(username="opt_admin", is_admin=True)
+        admin.set_password("adminpass")
+        from aarkib.extensions import db
+
+        db.session.add(admin)
+        db.session.commit()
+    client.post(
+        "/auth/login",
+        data={"username": "opt_admin", "password": "adminpass"},
+        follow_redirects=True,
+    )
 
     # Test presets endpoint
     presets_res = client.get("/api/optimizer/presets")

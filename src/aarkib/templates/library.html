@@ -219,6 +219,14 @@
 let currentPage = 1;
 let currentMode = "shelves"; // 'shelves' or 'grid'
 
+// HTML-escape a string for safe interpolation into innerHTML.
+function esc(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 let activeAuthorId = urlParams.get("author_id");
 let activeSeriesId = urlParams.get("series_id");
@@ -397,12 +405,15 @@ function renderBooks(books) {
 
   grid.innerHTML = books.map(book => {
     const progressPercent = book.progress ? Math.round(book.progress.percentage) : 0;
-    
+    const title = esc(book.title);
+    const format = esc(book.file_format);
+    const authors = esc(book.authors_display);
+
     return `
       <a href="/book/${book.id}" class="book-card">
         <div class="book-cover-wrap">
-          <img src="${book.cover_url}" alt="${book.title}" class="book-cover-img" loading="lazy">
-          <span class="badge-format">${book.file_format}</span>
+          <img src="${book.cover_url}" alt="${title}" class="book-cover-img" loading="lazy">
+          <span class="badge-format">${format}</span>
         </div>
         ${progressPercent > 0 ? `
           <div class="progress-bar-container" title="${progressPercent}% completed">
@@ -410,8 +421,8 @@ function renderBooks(books) {
           </div>
         ` : ''}
         <div class="book-info">
-          <div class="book-title" title="${book.title}">${book.title}</div>
-          <div class="book-author">${book.authors_display}</div>
+          <div class="book-title" title="${title}">${title}</div>
+          <div class="book-author">${authors}</div>
         </div>
       </a>
     `;

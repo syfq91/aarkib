@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import io
 import mimetypes
-import re
 import zipfile
 from datetime import UTC, datetime
+from functools import wraps
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
-from flask_login import current_user, login_user
-from sqlalchemy import func, or_, select, update
+from flask_login import current_user, login_required, login_user
+from sqlalchemy import or_, select, update
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import (
@@ -22,10 +23,37 @@ from aarkib.models import (
     User,
     UserProgress,
 )
+from aarkib.services.book_service import (
+    MEDIA_TYPE_CHOICES,
+    VIDEO_EXTENSIONS,
+    count_books_in_library,
+    generate_slug,
+    library_path_conditions,
+    resolve_library,
+)
 from aarkib.services.parsers.cbz import IMAGE_EXTENSIONS, natural_sort_key
 from aarkib.services.scanner import scan_library
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+def api_admin_required(view):
+    """Require an authenticated admin user for API endpoints.
+
+    Unlike the generic ``admin_required`` in auth.py (which redirects to the UI
+    for HTML pages), this returns a 401/403 JSON response suitable for API
+    clients. It is applied in addition to the before_request auth check, so it
+    is safe even when ``AUTH_REQUIRED`` is disabled.
+    """
+
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if not current_user.is_admin:
+            return jsonify({"error": "Administrator privileges required"}), 403
+        return view(*args, **kwargs)
+
+    return wrapped
 
 
 @api_bp.before_request
@@ -76,7 +104,11 @@ def list_books():
         "per_page", current_app.config.get("PAGE_SIZE", 24), type=int
     )
 
-    query = select(Book)
+    query = select(Book).options(
+        selectinload(Book.authors),
+        selectinload(Book.series),
+        selectinload(Book.tags),
+    )
 
     if q:
         search_filter = or_(
@@ -224,10 +256,8 @@ def list_libraries():
 
 
 @api_bp.route("/libraries", methods=["POST"])
+@api_admin_required
 def add_library():
-    if current_user.is_authenticated and not current_user.is_admin:
-        return jsonify({"error": "Administrator privileges required"}), 403
-
     data = request.get_json(silent=True) or {}
     raw_path = str(data.get("path", "")).strip()
     if not raw_path:
@@ -260,16 +290,10 @@ def add_library():
         )
 
     media_type = str(data.get("media_type", "all")).strip().lower()
-    if media_type not in ("all", "book", "comic", "video"):
+    if media_type not in MEDIA_TYPE_CHOICES:
         media_type = "all"
 
-    base_slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or "media"
-    slug = base_slug
-    counter = 1
-    all_slugs = set(db.session.scalars(select(Library.slug)).all())
-    while slug in all_slugs:
-        counter += 1
-        slug = f"{base_slug}-{counter}"
+    slug = generate_slug(name if name else folder_name)
 
     new_lib = Library(
         slug=slug,
@@ -300,35 +324,20 @@ def add_library():
 
 @api_bp.route("/libraries/<identifier>", methods=["GET"])
 def get_library_info(identifier: str):
-    lib = None
-    if identifier.isdigit():
-        lib = db.session.get(Library, int(identifier))
-    if not lib:
-        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
-    if not lib:
+    try:
+        lib = resolve_library(identifier)
+    except KeyError:
         return jsonify({"error": "Library not found"}), 404
 
-    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
-    p_raw = str(lib.path).rstrip("/\\") + "/"
-    cond = or_(
-        Book.original_file_path.startswith(p_res),
-        Book.original_file_path.startswith(p_raw),
-    )
-    count = db.session.scalar(select(func.count(Book.id)).where(cond)) or 0
-    return jsonify({"library": lib.to_dict(count=count)})
+    return jsonify({"library": lib.to_dict(count=count_books_in_library(lib))})
 
 
 @api_bp.route("/libraries/<identifier>", methods=["PUT"])
+@api_admin_required
 def update_library(identifier: str):
-    if current_user.is_authenticated and not current_user.is_admin:
-        return jsonify({"error": "Administrator privileges required"}), 403
-
-    lib = None
-    if identifier.isdigit():
-        lib = db.session.get(Library, int(identifier))
-    if not lib:
-        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
-    if not lib:
+    try:
+        lib = resolve_library(identifier)
+    except KeyError:
         return jsonify({"error": "Library not found"}), 404
 
     data = request.get_json(silent=True) or {}
@@ -337,12 +346,11 @@ def update_library(identifier: str):
 
     if "media_type" in data:
         new_media_type = str(data["media_type"]).strip().lower()
-        if new_media_type in ("all", "book", "comic", "video"):
+        if new_media_type in MEDIA_TYPE_CHOICES:
             lib.media_type = new_media_type
 
             # Propagate media_type update to all books indexed in this folder
-            p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
-            p_raw = str(lib.path).rstrip("/\\") + "/"
+            p_res, p_raw = library_path_conditions(lib)
             cond = or_(
                 Book.original_file_path.startswith(p_res),
                 Book.original_file_path.startswith(p_raw),
@@ -356,14 +364,7 @@ def update_library(identifier: str):
                 for b in books:
                     if b.file_format in ("cbz", "cbr", "zip"):
                         b.media_type = "comic"
-                    elif b.file_format in (
-                        "mp4",
-                        "mkv",
-                        "webm",
-                        "avi",
-                        "mov",
-                        "m4v",
-                    ):
+                    elif b.file_format in VIDEO_EXTENSIONS:
                         b.media_type = "video"
                     else:
                         b.media_type = "book"
@@ -371,33 +372,24 @@ def update_library(identifier: str):
     lib.updated_at = datetime.now(UTC)
     db.session.commit()
 
-    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
-    p_raw = str(lib.path).rstrip("/\\") + "/"
-    cond = or_(
-        Book.original_file_path.startswith(p_res),
-        Book.original_file_path.startswith(p_raw),
+    return jsonify(
+        {
+            "status": "success",
+            "library": lib.to_dict(count=count_books_in_library(lib)),
+        }
     )
-    count = db.session.scalar(select(func.count(Book.id)).where(cond)) or 0
-
-    return jsonify({"status": "success", "library": lib.to_dict(count=count)})
 
 
 @api_bp.route("/libraries/<identifier>", methods=["DELETE"])
+@api_admin_required
 def delete_library(identifier: str):
-    if current_user.is_authenticated and not current_user.is_admin:
-        return jsonify({"error": "Administrator privileges required"}), 403
-
-    lib = None
-    if identifier.isdigit():
-        lib = db.session.get(Library, int(identifier))
-    if not lib:
-        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
-    if not lib:
+    try:
+        lib = resolve_library(identifier)
+    except KeyError:
         return jsonify({"error": "Library not found"}), 404
 
     # Remove books indexed under this library
-    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
-    p_raw = str(lib.path).rstrip("/\\") + "/"
+    p_res, p_raw = library_path_conditions(lib)
     cond = or_(
         Book.original_file_path.startswith(p_res),
         Book.original_file_path.startswith(p_raw),
@@ -420,10 +412,8 @@ def delete_library(identifier: str):
 
 
 @api_bp.route("/libraries/<identifier>/scan", methods=["POST"])
+@api_admin_required
 def scan_single_library(identifier: str):
-    if current_user.is_authenticated and not current_user.is_admin:
-        return jsonify({"error": "Administrator privileges required"}), 403
-
     result = scan_library(
         current_app._get_current_object(),
         library_id=identifier,  # type: ignore
@@ -433,7 +423,15 @@ def scan_single_library(identifier: str):
 
 @api_bp.route("/books/<int:book_id>", methods=["GET"])
 def get_book(book_id: int):
-    book = db.session.get(Book, book_id)
+    book = db.session.scalar(
+        select(Book)
+        .options(
+            selectinload(Book.authors),
+            selectinload(Book.series),
+            selectinload(Book.tags),
+        )
+        .where(Book.id == book_id)
+    )
     if not book:
         abort(404, description="Book not found")
 
@@ -645,6 +643,7 @@ def get_optimizer_presets():
 
 
 @api_bp.route("/books/<int:book_id>/optimize", methods=["POST"])
+@api_admin_required
 def precompute_book_optimization(book_id: int):
     """Pre-generate optimized EPUB cache for a book."""
     book = db.session.get(Book, book_id)
@@ -909,12 +908,14 @@ def delete_bookmark(bookmark_id: int):
 
 
 @api_bp.route("/library/scan", methods=["POST"])
+@api_admin_required
 def trigger_scan():
     result = scan_library(current_app._get_current_object())  # type: ignore
     return jsonify({"status": "success", "result": result})
 
 
 @api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
+@api_admin_required
 def enrich_single_book(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
@@ -934,6 +935,7 @@ def enrich_single_book(book_id: int):
 
 
 @api_bp.route("/library/enrich", methods=["POST"])
+@api_admin_required
 def enrich_library():
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
@@ -952,87 +954,16 @@ def enrich_library():
 
 
 @api_bp.route("/books/<int:book_id>/edit", methods=["POST"])
+@api_admin_required
 def edit_book_metadata(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
         abort(404, description="Book not found")
 
+    from aarkib.services.book_service import edit_book_metadata as apply_edits
+
     data = request.get_json(silent=True) or request.form
-
-    title = data.get("title", "").strip() if data.get("title") else None
-    if title:
-        book.title = title
-
-    # Authors
-    authors_input = data.get("authors")
-    if authors_input is not None:
-        if isinstance(authors_input, str):
-            author_names = [a.strip() for a in authors_input.split(",") if a.strip()]
-        else:
-            author_names = [str(a).strip() for a in authors_input if str(a).strip()]
-
-        book_authors_list = []
-        for name in author_names:
-            author = db.session.scalar(select(Author).where(Author.name == name))
-            if not author:
-                author = Author(name=name)
-                db.session.add(author)
-                db.session.flush()
-            book_authors_list.append(author)
-        if book_authors_list:
-            book.authors = book_authors_list
-
-    # Series
-    series_name = data.get("series", "").strip() if data.get("series") else None
-    series_index_raw = data.get("series_index")
-    if series_name:
-        series_obj = db.session.scalar(select(Series).where(Series.name == series_name))
-        if not series_obj:
-            series_obj = Series(name=series_name)
-            db.session.add(series_obj)
-            db.session.flush()
-        book.series = series_obj
-        if series_index_raw not in (None, ""):
-            try:
-                book.series_index = float(series_index_raw)
-            except ValueError:
-                pass
-        else:
-            book.series_index = None
-    elif "series" in data:
-        book.series = None
-        book.series_index = None
-
-    # Tags / Categories
-    tags_input = data.get("tags")
-    if tags_input is not None:
-        if isinstance(tags_input, str):
-            tag_names = [t.strip() for t in tags_input.split(",") if t.strip()]
-        else:
-            tag_names = [str(t).strip() for t in tags_input if str(t).strip()]
-
-        book_tags_list = []
-        for tag_name in tag_names:
-            tag = db.session.scalar(select(Tag).where(Tag.name == tag_name))
-            if not tag:
-                tag = Tag(name=tag_name)
-                db.session.add(tag)
-                db.session.flush()
-            book_tags_list.append(tag)
-        book.tags = book_tags_list
-
-    # Optional descriptive fields
-    if "description" in data:
-        book.description = data.get("description") or None
-    if "publisher" in data:
-        book.publisher = data.get("publisher") or None
-    if "publication_date" in data:
-        book.publication_date = data.get("publication_date") or None
-    if "isbn" in data:
-        book.isbn = data.get("isbn") or None
-    if "language" in data:
-        book.language = data.get("language") or "en"
-
+    apply_edits(book, data)
     db.session.commit()
     return jsonify(
         {

@@ -120,6 +120,20 @@ def test_api_enrich_endpoints(client, app, sample_epub):
         assert book is not None
         book_id = book.id
 
+    # Enrich endpoints require an authenticated admin user
+    from aarkib.models import User
+
+    with app.app_context():
+        admin = User(username="enrich_admin", is_admin=True)
+        admin.set_password("adminpass")
+        db.session.add(admin)
+        db.session.commit()
+    client.post(
+        "/auth/login",
+        data={"username": "enrich_admin", "password": "adminpass"},
+        follow_redirects=True,
+    )
+
     mock_meta = EnrichedMetadata(
         title="Sample Test Book",
         description="Enriched via API test",
