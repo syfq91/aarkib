@@ -150,7 +150,7 @@
     <section class="shelf-section" id="shelf-lib-{{ shelf.id }}">
       <div class="shelf-header">
         <div class="shelf-title-wrap">
-          <h2 class="shelf-title">📁 {{ shelf.name }}</h2>
+          <h2 class="shelf-title">{% if shelf.media_type == 'video' %}🎬{% elif shelf.media_type == 'comic' %}🎨{% elif shelf.media_type == 'book' %}📚{% else %}📁{% endif %} {{ shelf.name }}</h2>
           <span class="shelf-count-badge">{{ shelf.count }} {% if shelf.count == 1 %}item{% else %}items{% endif %}</span>
         </div>
         <div class="shelf-actions">

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -19,7 +19,7 @@ from aarkib.config import (
     split_path_string,
 )
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Series, Tag
+from aarkib.models import Author, Book, Library, Series, Tag
 from aarkib.services.parsers.base import extract_metadata_from_file
 from aarkib.services.thumbnail import generate_cover_webp
 
@@ -74,8 +74,8 @@ def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
     return sha256.hexdigest()
 
 
-def get_library_dirs(app: Flask | None = None) -> list[Path]:
-    """Resolves one or more library directories from app config and environment variables."""
+def get_library_dirs_from_config(app: Flask | None = None) -> list[Path]:
+    """Resolves one or more library directories directly from app config and environment variables."""
     raw_candidates: list[Any] = []
 
     if app is not None:
@@ -109,10 +109,16 @@ def get_library_dirs(app: Flask | None = None) -> list[Path]:
                 else:
                     raw_candidates.append(raw)
             else:
-                data_dir = app.config.get("DATA_DIR", "data")
-                raw_candidates.append(Path(data_dir) / "books")
+                data_dir = Path(app.config.get("DATA_DIR", "data"))
+                if (data_dir / "books").exists() and not (data_dir / "media").exists():
+                    raw_candidates.append(data_dir / "books")
+                else:
+                    raw_candidates.append(data_dir / "media")
         else:
-            raw_candidates.append(Path("data/books"))
+            if Path("data/books").exists() and not Path("data/media").exists():
+                raw_candidates.append(Path("data/books"))
+            else:
+                raw_candidates.append(Path("data/media"))
 
     # Parse and deduplicate
     final_paths: list[Path] = []
@@ -147,23 +153,69 @@ def get_library_dirs(app: Flask | None = None) -> list[Path]:
                 final_paths.append(path_obj)
 
     if not final_paths:
-        fallback = (
-            Path(app.config.get("DATA_DIR", "data")) / "books"
+        data_dir = (
+            Path(app.config.get("DATA_DIR", "data"))
             if app is not None
-            else Path("data/books")
+            else Path("data")
         )
-        return [fallback]
+        if (data_dir / "books").exists() and not (data_dir / "media").exists():
+            return [data_dir / "books"]
+        return [data_dir / "media"]
 
     return final_paths
 
 
-def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
-    """Resolves all configured library definitions with human-friendly metadata and display names."""
-    dirs = get_library_dirs(app)
-    if not dirs:
+def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
+    """Synchronizes configured environment/default directories with the database Library table.
+
+    Returns the complete list of persisted Library records.
+    """
+    from sqlalchemy import inspect
+
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table("libraries"):
+            return []
+    except Exception:
         return []
 
-    # Discover explicit named environment variables (e.g. AARKIB_LIBRARY_DIR_MANGA)
+    try:
+        existing_libs = list(
+            db.session.scalars(select(Library).order_by(Library.id.asc())).all()
+        )
+    except Exception:
+        db.session.rollback()
+        return []
+
+    # If database has no libraries yet, seed from config/env/defaults.
+    # If database already has libraries, only sync any newly declared explicit env vars or custom app config dirs.
+    if not existing_libs:
+        target_dirs = get_library_dirs_from_config(app)
+    else:
+        target_dirs = get_env_library_dirs()
+        if app is not None:
+            custom_dirs = app.config.get("LIBRARY_DIRS")
+            if custom_dirs and custom_dirs != Config.LIBRARY_DIRS:
+                items = (
+                    custom_dirs
+                    if isinstance(custom_dirs, (list, tuple, set))
+                    else [custom_dirs]
+                )
+                for d in items:
+                    p = Path(d).expanduser() if not isinstance(d, Path) else d
+                    if p not in target_dirs:
+                        target_dirs.append(p)
+
+    # Build lookup of registered paths
+    existing_paths: set[str] = set()
+    for lib in existing_libs:
+        existing_paths.add(lib.path)
+        try:
+            existing_paths.add(str(Path(lib.path).expanduser().resolve()))
+        except Exception:
+            pass
+
+    # Named environment map for friendly names (e.g. AARKIB_LIBRARY_DIR_MANGA)
     named_map: dict[str, str] = {}
     for k, v in os.environ.items():
         m = NAMED_DIR_REGEX.match(k)
@@ -172,74 +224,193 @@ def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
             if not suffix.isdigit():
                 display_name = suffix.replace("_", " ").title()
                 for p_str in split_path_string(v):
-                    if not p_str.strip():
-                        continue
-                    try:
-                        norm = str(Path(p_str).expanduser().resolve())
-                        named_map[norm] = display_name
-                    except Exception:
-                        pass
+                    if p_str.strip():
+                        try:
+                            norm = str(Path(p_str).expanduser().resolve())
+                            named_map[norm] = display_name
+                        except Exception:
+                            pass
 
-    # Also check app config for custom library names if defined (e.g. app.config["LIBRARY_NAMES"])
-    if app is not None:
-        cfg_names = app.config.get("LIBRARY_NAMES")
-        if isinstance(cfg_names, dict):
-            for k, v in cfg_names.items():
-                try:
-                    norm = str(Path(k).expanduser().resolve())
-                    named_map[norm] = str(v)
-                except Exception:
-                    pass
-
-    definitions: list[dict[str, Any]] = []
-    seen_ids: dict[str, int] = {}
-    seen_names: dict[str, int] = {}
-
-    for idx, p in enumerate(dirs):
+    has_new = False
+    for p in target_dirs:
+        p_expanded = p.expanduser()
+        p_raw = str(p_expanded)
         try:
-            p_resolved = p.resolve()
-            p_str = str(p_resolved)
+            p_res = str(p_expanded.resolve())
         except Exception:
-            p_resolved = p
-            p_str = str(p)
+            p_res = p_raw
 
-        # Determine friendly display name
-        if p_str in named_map:
-            name = named_map[p_str]
+        if p_raw in existing_paths or p_res in existing_paths:
+            continue
+
+        # Determine display name
+        if p_res in named_map:
+            name = named_map[p_res]
+        elif p_raw in named_map:
+            name = named_map[p_raw]
         else:
-            folder_name = p.name
+            folder_name = p_expanded.name
             if not folder_name or folder_name in (".", "/", "data"):
-                name = "Books" if len(dirs) == 1 else f"Library {idx + 1}"
+                name = (
+                    "Media"
+                    if not existing_libs
+                    else f"Library {len(existing_libs) + 1}"
+                )
             else:
                 name = folder_name.replace("_", " ").replace("-", " ").title()
 
-        # Disambiguate duplicate names
-        if name in seen_names:
-            seen_names[name] += 1
-            name = f"{name} ({seen_names[name]})"
+        # Determine default media_type based on folder/name context
+        lower_name = (folder_name or name or "").lower()
+        if any(w in lower_name for w in ("comic", "manga", "cbz")):
+            media_type = "comic"
+        elif any(
+            w in lower_name for w in ("video", "movie", "film", "show", "tv", "anime")
+        ):
+            media_type = "video"
+        elif "book" in lower_name:
+            media_type = "book"
         else:
-            seen_names[name] = 1
+            media_type = "all"
 
-        # Generate slug ID
-        base_id = (
+        # Unique slug
+        base_slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or "media"
+        slug = base_slug
+        c = 1
+        all_slugs = {item.slug for item in existing_libs}
+        while slug in all_slugs:
+            c += 1
+            slug = f"{base_slug}-{c}"
+        all_slugs.add(slug)
+
+        new_lib = Library(
+            slug=slug,
+            name=name,
+            path=p_raw,
+            media_type=media_type,
+        )
+        db.session.add(new_lib)
+        existing_libs.append(new_lib)
+        existing_paths.add(p_raw)
+        existing_paths.add(p_res)
+        has_new = True
+
+    if has_new:
+        try:
+            db.session.commit()
+        except Exception as exc:
+            logger.warning("Error committing synced libraries: %s", exc)
+            db.session.rollback()
+
+    try:
+        return list(
+            db.session.scalars(select(Library).order_by(Library.id.asc())).all()
+        )
+    except Exception:
+        return existing_libs
+
+
+def get_library_dirs(app: Flask | None = None) -> list[Path]:
+    """Resolves one or more library directories from app config, database, or environment variables."""
+    try:
+        from flask import current_app, has_app_context
+
+        target_app = (
+            app
+            if app is not None
+            else (current_app._get_current_object() if has_app_context() else None)
+        )
+        if target_app is not None:
+            if has_app_context():
+                libs = sync_and_get_libraries(target_app)
+            else:
+                with target_app.app_context():
+                    libs = sync_and_get_libraries(target_app)
+            if libs:
+                return [Path(lib.path) for lib in libs]
+    except Exception:
+        pass
+
+    return get_library_dirs_from_config(app)
+
+
+def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
+    """Resolves all configured library definitions with human-friendly metadata, media_type, and counts."""
+    try:
+        from flask import current_app, has_app_context
+
+        target_app = (
+            app
+            if app is not None
+            else (current_app._get_current_object() if has_app_context() else None)
+        )
+        if target_app is not None:
+            if has_app_context():
+                libs = sync_and_get_libraries(target_app)
+            else:
+                with target_app.app_context():
+                    libs = sync_and_get_libraries(target_app)
+            if libs:
+                total_books = db.session.scalar(select(func.count(Book.id))) or 0
+                definitions: list[dict[str, Any]] = []
+                for lib in libs:
+                    p = Path(lib.path).expanduser()
+                    try:
+                        p_res = str(p.resolve()).rstrip("/\\") + "/"
+                    except Exception:
+                        p_res = str(p).rstrip("/\\") + "/"
+                    p_raw = str(p).rstrip("/\\") + "/"
+
+                    lib_cond = or_(
+                        Book.original_file_path.startswith(p_res),
+                        Book.original_file_path.startswith(p_raw),
+                        Book.original_file_path == str(p),
+                    )
+                    count = (
+                        db.session.scalar(select(func.count(Book.id)).where(lib_cond))
+                        or 0
+                    )
+                    if count == 0 and len(libs) == 1 and total_books > 0:
+                        count = total_books
+
+                    definitions.append(
+                        {
+                            "id": lib.slug,
+                            "db_id": lib.id,
+                            "name": lib.name,
+                            "path": p,
+                            "path_str": str(p),
+                            "media_type": lib.media_type,
+                            "count": count,
+                        }
+                    )
+                return definitions
+    except Exception as e:
+        logger.debug("Database library definitions fallback: %s", e)
+
+    # Fallback to pure config/env parsing
+    dirs = get_library_dirs_from_config(app)
+    definitions = []
+    for idx, p in enumerate(dirs):
+        folder_name = p.name
+        name = (
+            "Media"
+            if not folder_name or folder_name in (".", "/", "data")
+            else folder_name.replace("_", " ").title()
+        )
+        slug = (
             re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or f"lib-{idx + 1}"
         )
-        if base_id in seen_ids:
-            seen_ids[base_id] += 1
-            lib_id = f"{base_id}-{seen_ids[base_id]}"
-        else:
-            seen_ids[base_id] = 1
-            lib_id = base_id
-
         definitions.append(
             {
-                "id": lib_id,
+                "id": slug,
+                "db_id": None,
                 "name": name,
-                "path": p_resolved,
-                "path_str": p_str,
+                "path": p,
+                "path_str": str(p),
+                "media_type": "all",
+                "count": 0,
             }
         )
-
     return definitions
 
 
@@ -247,6 +418,7 @@ def index_single_book(
     file_path: Path,
     covers_dir: Path,
     auto_enrich: bool = False,
+    library_media_type: str | None = None,
 ) -> Book | None:
     """Parses and updates or inserts a single book record in the database."""
     supported = get_supported_extensions()
@@ -262,6 +434,13 @@ def index_single_book(
             select(Book).where(Book.original_file_path == resolved_path)
         )
         if existing_book and existing_book.file_hash == file_hash:
+            if (
+                library_media_type
+                and library_media_type != "all"
+                and existing_book.media_type != library_media_type
+            ):
+                existing_book.media_type = library_media_type
+                db.session.commit()
             return existing_book
 
         plugin = plugin_registry.get_plugin_for_extension(file_path.suffix)
@@ -299,13 +478,39 @@ def index_single_book(
         book.isbn = getattr(metadata, "isbn", None)
         book.publication_date = metadata.publication_date
         book.page_count = getattr(metadata, "page_count", None)
-        book.media_type = getattr(metadata, "media_type", None) or (
-            "comic"
-            if metadata.file_format in ("cbz", "cbr", "zip")
-            else "video"
-            if metadata.file_format in ("mp4", "mkv", "webm", "avi", "mov", "m4v")
-            else "book"
-        )
+
+        # Determine media type:
+        if library_media_type and library_media_type != "all":
+            assigned_media_type = library_media_type
+        else:
+            matching_type = None
+            try:
+                all_libs = db.session.scalars(select(Library)).all()
+                for lib_record in all_libs:
+                    p_res = str(Path(lib_record.path).resolve()).rstrip("/\\") + "/"
+                    p_raw = str(lib_record.path).rstrip("/\\") + "/"
+                    if resolved_path.startswith(p_res) or resolved_path.startswith(
+                        p_raw
+                    ):
+                        if lib_record.media_type and lib_record.media_type != "all":
+                            matching_type = lib_record.media_type
+                            break
+            except Exception:
+                pass
+
+            if matching_type:
+                assigned_media_type = matching_type
+            else:
+                assigned_media_type = getattr(metadata, "media_type", None) or (
+                    "comic"
+                    if metadata.file_format in ("cbz", "cbr", "zip")
+                    else "video"
+                    if metadata.file_format
+                    in ("mp4", "mkv", "webm", "avi", "mov", "m4v")
+                    else "book"
+                )
+
+        book.media_type = assigned_media_type
         if cover_rel_path:
             book.cover_image_path = cover_rel_path
 
@@ -392,42 +597,83 @@ def index_single_book(
         return None
 
 
-def scan_library(app: Flask) -> dict[str, int]:
-    """Scans all configured library directories (and symlinked directories) for changes."""
+def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, int]:
+    """Scans configured library directories for changes. Supports scanning a specific library."""
     with app.app_context():
-        library_dirs = get_library_dirs(app)
         covers_dir = Path(app.config["COVERS_DIR"])
         auto_enrich = app.config.get("AUTO_ENRICH", False)
-        for lib_dir in library_dirs:
-            lib_dir.mkdir(parents=True, exist_ok=True)
         covers_dir.mkdir(parents=True, exist_ok=True)
 
+        libraries = sync_and_get_libraries(app)
+        if library_id is not None:
+            if isinstance(library_id, int) or (
+                isinstance(library_id, str) and library_id.isdigit()
+            ):
+                libraries = [lib for lib in libraries if lib.id == int(library_id)]
+            else:
+                libraries = [lib for lib in libraries if lib.slug == str(library_id)]
+
+        if not libraries:
+            fallback_dirs = get_library_dirs_from_config(app)
+            libraries = [
+                Library(
+                    slug="default",
+                    name="Media",
+                    path=str(d),
+                    media_type="all",
+                )
+                for d in fallback_dirs
+            ]
+
         added = 0
-        existing_files = set()
+        existing_files: set[str] = set()
         supported = get_supported_extensions()
 
-        for lib_dir in library_dirs:
+        for lib in libraries:
+            lib_dir = Path(lib.path).expanduser()
+            lib_dir.mkdir(parents=True, exist_ok=True)
             for root, _, filenames in os.walk(lib_dir, followlinks=True):
                 for filename in filenames:
                     file_path = Path(root) / filename
                     if file_path.suffix.lower() in supported:
                         existing_files.add(str(file_path.resolve()))
                         book = index_single_book(
-                            file_path, covers_dir, auto_enrich=auto_enrich
+                            file_path,
+                            covers_dir,
+                            auto_enrich=auto_enrich,
+                            library_media_type=lib.media_type,
                         )
                         if book:
                             added += 1
 
         # Clean up deleted files from DB
-        all_books = db.session.scalars(select(Book)).all()
-        deleted = 0
-        for book in all_books:
-            if (
-                book.original_file_path not in existing_files
-                and not Path(book.original_file_path).exists()
-            ):
-                db.session.delete(book)
-                deleted += 1
+        if library_id is not None:
+            deleted = 0
+            for lib in libraries:
+                p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
+                p_raw = str(lib.path).rstrip("/\\") + "/"
+                lib_cond = or_(
+                    Book.original_file_path.startswith(p_res),
+                    Book.original_file_path.startswith(p_raw),
+                )
+                lib_books = db.session.scalars(select(Book).where(lib_cond)).all()
+                for book in lib_books:
+                    if (
+                        book.original_file_path not in existing_files
+                        and not Path(book.original_file_path).exists()
+                    ):
+                        db.session.delete(book)
+                        deleted += 1
+        else:
+            all_books = db.session.scalars(select(Book)).all()
+            deleted = 0
+            for book in all_books:
+                if (
+                    book.original_file_path not in existing_files
+                    and not Path(book.original_file_path).exists()
+                ):
+                    db.session.delete(book)
+                    deleted += 1
 
         if deleted > 0:
             db.session.commit()

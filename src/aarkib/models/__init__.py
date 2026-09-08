@@ -1,5 +1,6 @@
 from aarkib.models.author import Author, book_authors
 from aarkib.models.book import Book
+from aarkib.models.library import Library
 from aarkib.models.media import (
     AudioTrackMixin,
     MediaItemMixin,
@@ -18,6 +19,7 @@ Collection = Series
 __all__ = [
     "User",
     "Book",
+    "Library",
     "Author",
     "Creator",
     "Series",

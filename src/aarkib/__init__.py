@@ -107,6 +107,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
 
     with app.app_context():
         migrate_database()
+        from aarkib.services.scanner import sync_and_get_libraries
+
+        try:
+            sync_and_get_libraries(app)
+        except Exception as e:
+            logger.debug("Startup library sync skipped: %s", e)
 
     # Register CLI commands
     register_commands(app)

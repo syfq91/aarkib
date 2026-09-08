@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from sqlalchemy import select
+
 from aarkib import create_app
 from aarkib.config import TestConfig
 from aarkib.services.scanner import get_library_dirs, scan_library
@@ -168,3 +170,79 @@ def test_compute_sort_title():
     assert compute_sort_title("Animal Farm") == "Animal Farm"
     assert compute_sort_title("Another World") == "Another World"
     assert compute_sort_title("") == ""
+
+
+def test_library_media_type_override_and_detection(tmp_path, sample_epub):
+    import shutil
+
+    from aarkib.extensions import db
+    from aarkib.models import Book, Library
+    from tests.test_video import create_synthetic_mp4
+
+    comics_dir = tmp_path / "comics_dir"
+    mixed_dir = tmp_path / "mixed_dir"
+    comics_dir.mkdir()
+    mixed_dir.mkdir()
+
+    # Place an epub in comics_dir (should be treated as comic due to folder media_type)
+    shutil.copy(sample_epub, comics_dir / "manga_as_epub.epub")
+    # Place an epub and mp4 in mixed_dir (should auto-detect)
+    shutil.copy(sample_epub, mixed_dir / "regular_book.epub")
+    create_synthetic_mp4(mixed_dir / "movie.mp4")
+
+    class OverrideConfig(TestConfig):
+        DATA_DIR = tmp_path / "data"
+        COVERS_DIR = tmp_path / "data" / "covers"
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/override_test.db"
+
+    app = create_app(OverrideConfig)
+
+    with app.app_context():
+        # Create library records with specific media_types
+        lib_comic = Library(
+            slug="comics",
+            name="Comics Library",
+            path=str(comics_dir.resolve()),
+            media_type="comic",
+        )
+        lib_mixed = Library(
+            slug="mixed",
+            name="Mixed Media",
+            path=str(mixed_dir.resolve()),
+            media_type="all",
+        )
+        db.session.add_all([lib_comic, lib_mixed])
+        db.session.commit()
+
+        # Scan
+        res = scan_library(app)
+        assert res["scanned"] == 3
+        assert res["added_or_updated"] == 3
+
+        # Verify comics_dir epub is "comic"
+        comic_book = db.session.scalar(
+            select(Book).where(
+                Book.original_file_path
+                == str((comics_dir / "manga_as_epub.epub").resolve())
+            )
+        )
+        assert comic_book is not None
+        assert comic_book.media_type == "comic"
+
+        # Verify mixed_dir epub is "book" and mp4 is "video"
+        mixed_epub = db.session.scalar(
+            select(Book).where(
+                Book.original_file_path
+                == str((mixed_dir / "regular_book.epub").resolve())
+            )
+        )
+        assert mixed_epub is not None
+        assert mixed_epub.media_type == "book"
+
+        mixed_video = db.session.scalar(
+            select(Book).where(
+                Book.original_file_path == str((mixed_dir / "movie.mp4").resolve())
+            )
+        )
+        assert mixed_video is not None
+        assert mixed_video.media_type == "video"

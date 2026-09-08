@@ -2,16 +2,26 @@ from __future__ import annotations
 
 import io
 import mimetypes
+import re
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from flask_login import current_user, login_user
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Bookmark, Series, Tag, User, UserProgress
+from aarkib.models import (
+    Author,
+    Book,
+    Bookmark,
+    Library,
+    Series,
+    Tag,
+    User,
+    UserProgress,
+)
 from aarkib.services.parsers.cbz import IMAGE_EXTENSIONS, natural_sort_key
 from aarkib.services.scanner import scan_library
 
@@ -198,28 +208,227 @@ def list_libraries():
     from aarkib.services.scanner import get_library_definitions
 
     lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
-    total_books = db.session.scalar(select(func.count(Book.id))) or 0
     results = []
     for lib_def in lib_defs:
-        p_res = str(lib_def["path"].resolve()).rstrip("/\\") + "/"
-        p_raw = str(lib_def["path"]).rstrip("/\\") + "/"
-        lib_cond = or_(
-            Book.original_file_path.startswith(p_res),
-            Book.original_file_path.startswith(p_raw),
-        )
-        count = db.session.scalar(select(func.count(Book.id)).where(lib_cond)) or 0
-        if count == 0 and len(lib_defs) == 1 and total_books > 0:
-            count = total_books
-
         results.append(
             {
                 "id": lib_def["id"],
+                "db_id": lib_def.get("db_id"),
                 "name": lib_def["name"],
                 "path": str(lib_def["path"]),
-                "count": count,
+                "media_type": lib_def.get("media_type", "all"),
+                "count": lib_def.get("count", 0),
             }
         )
     return jsonify({"libraries": results})
+
+
+@api_bp.route("/libraries", methods=["POST"])
+def add_library():
+    if current_user.is_authenticated and not current_user.is_admin:
+        return jsonify({"error": "Administrator privileges required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    raw_path = str(data.get("path", "")).strip()
+    if not raw_path:
+        return jsonify({"error": "Folder path is required"}), 400
+
+    p = Path(raw_path).expanduser()
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        norm_path = str(p.resolve())
+    except Exception as e:
+        return jsonify({"error": f"Invalid folder path: {e}"}), 400
+
+    # Check for duplicate
+    existing = db.session.scalar(
+        select(Library).where(or_(Library.path == norm_path, Library.path == str(p)))
+    )
+    if existing:
+        return (
+            jsonify({"error": f"Library folder '{raw_path}' is already configured"}),
+            400,
+        )
+
+    folder_name = p.name
+    name = str(data.get("name", "")).strip()
+    if not name:
+        name = (
+            folder_name.replace("_", " ").replace("-", " ").title()
+            if folder_name and folder_name not in (".", "/", "data")
+            else "Media"
+        )
+
+    media_type = str(data.get("media_type", "all")).strip().lower()
+    if media_type not in ("all", "book", "comic", "video"):
+        media_type = "all"
+
+    base_slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or "media"
+    slug = base_slug
+    counter = 1
+    all_slugs = set(db.session.scalars(select(Library.slug)).all())
+    while slug in all_slugs:
+        counter += 1
+        slug = f"{base_slug}-{counter}"
+
+    new_lib = Library(
+        slug=slug,
+        name=name,
+        path=norm_path,
+        media_type=media_type,
+    )
+    db.session.add(new_lib)
+    db.session.commit()
+
+    # Automatically scan the newly added library folder
+    scan_res = scan_library(
+        current_app._get_current_object(),
+        library_id=new_lib.id,  # type: ignore
+    )
+
+    return (
+        jsonify(
+            {
+                "status": "success",
+                "library": new_lib.to_dict(count=scan_res.get("added_or_updated", 0)),
+                "scan": scan_res,
+            }
+        ),
+        201,
+    )
+
+
+@api_bp.route("/libraries/<identifier>", methods=["GET"])
+def get_library_info(identifier: str):
+    lib = None
+    if identifier.isdigit():
+        lib = db.session.get(Library, int(identifier))
+    if not lib:
+        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
+    if not lib:
+        return jsonify({"error": "Library not found"}), 404
+
+    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
+    p_raw = str(lib.path).rstrip("/\\") + "/"
+    cond = or_(
+        Book.original_file_path.startswith(p_res),
+        Book.original_file_path.startswith(p_raw),
+    )
+    count = db.session.scalar(select(func.count(Book.id)).where(cond)) or 0
+    return jsonify({"library": lib.to_dict(count=count)})
+
+
+@api_bp.route("/libraries/<identifier>", methods=["PUT"])
+def update_library(identifier: str):
+    if current_user.is_authenticated and not current_user.is_admin:
+        return jsonify({"error": "Administrator privileges required"}), 403
+
+    lib = None
+    if identifier.isdigit():
+        lib = db.session.get(Library, int(identifier))
+    if not lib:
+        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
+    if not lib:
+        return jsonify({"error": "Library not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "name" in data and str(data["name"]).strip():
+        lib.name = str(data["name"]).strip()
+
+    if "media_type" in data:
+        new_media_type = str(data["media_type"]).strip().lower()
+        if new_media_type in ("all", "book", "comic", "video"):
+            lib.media_type = new_media_type
+
+            # Propagate media_type update to all books indexed in this folder
+            p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
+            p_raw = str(lib.path).rstrip("/\\") + "/"
+            cond = or_(
+                Book.original_file_path.startswith(p_res),
+                Book.original_file_path.startswith(p_raw),
+            )
+            if new_media_type != "all":
+                db.session.execute(
+                    update(Book).where(cond).values(media_type=new_media_type)
+                )
+            else:
+                books = db.session.scalars(select(Book).where(cond)).all()
+                for b in books:
+                    if b.file_format in ("cbz", "cbr", "zip"):
+                        b.media_type = "comic"
+                    elif b.file_format in (
+                        "mp4",
+                        "mkv",
+                        "webm",
+                        "avi",
+                        "mov",
+                        "m4v",
+                    ):
+                        b.media_type = "video"
+                    else:
+                        b.media_type = "book"
+
+    lib.updated_at = datetime.now(UTC)
+    db.session.commit()
+
+    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
+    p_raw = str(lib.path).rstrip("/\\") + "/"
+    cond = or_(
+        Book.original_file_path.startswith(p_res),
+        Book.original_file_path.startswith(p_raw),
+    )
+    count = db.session.scalar(select(func.count(Book.id)).where(cond)) or 0
+
+    return jsonify({"status": "success", "library": lib.to_dict(count=count)})
+
+
+@api_bp.route("/libraries/<identifier>", methods=["DELETE"])
+def delete_library(identifier: str):
+    if current_user.is_authenticated and not current_user.is_admin:
+        return jsonify({"error": "Administrator privileges required"}), 403
+
+    lib = None
+    if identifier.isdigit():
+        lib = db.session.get(Library, int(identifier))
+    if not lib:
+        lib = db.session.scalar(select(Library).where(Library.slug == identifier))
+    if not lib:
+        return jsonify({"error": "Library not found"}), 404
+
+    # Remove books indexed under this library
+    p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
+    p_raw = str(lib.path).rstrip("/\\") + "/"
+    cond = or_(
+        Book.original_file_path.startswith(p_res),
+        Book.original_file_path.startswith(p_raw),
+    )
+    books = db.session.scalars(select(Book).where(cond)).all()
+    deleted_count = len(books)
+    for b in books:
+        db.session.delete(b)
+
+    db.session.delete(lib)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "status": "success",
+            "deleted_id": identifier,
+            "deleted_books": deleted_count,
+        }
+    )
+
+
+@api_bp.route("/libraries/<identifier>/scan", methods=["POST"])
+def scan_single_library(identifier: str):
+    if current_user.is_authenticated and not current_user.is_admin:
+        return jsonify({"error": "Administrator privileges required"}), 403
+
+    result = scan_library(
+        current_app._get_current_object(),
+        library_id=identifier,  # type: ignore
+    )
+    return jsonify({"status": "success", "result": result})
 
 
 @api_bp.route("/books/<int:book_id>", methods=["GET"])

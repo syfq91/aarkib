@@ -112,3 +112,77 @@ def test_api_libraries_and_library_filter(client, app, sample_epub):
     assert res.status_code == 200
     books_data = res.get_json()
     assert "books" in books_data
+
+
+def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample_epub):
+    import shutil
+
+    # Create a new custom media directory with an epub file
+    custom_media_dir = tmp_path / "my_comics_folder"
+    custom_media_dir.mkdir()
+    shutil.copy(sample_epub, custom_media_dir / "manga1.epub")
+
+    # 1. POST /api/libraries - Add new media folder with media_type="comic"
+    add_res = client.post(
+        "/api/libraries",
+        json={
+            "path": str(custom_media_dir),
+            "name": "My Comics",
+            "media_type": "comic",
+        },
+    )
+    assert add_res.status_code == 201
+    add_data = add_res.get_json()
+    assert add_data["status"] == "success"
+    assert add_data["library"]["name"] == "My Comics"
+    assert add_data["library"]["media_type"] == "comic"
+    lib_id = add_data["library"]["id"]
+    db_id = add_data["library"]["db_id"]
+
+    # Verify that the book scanned in this folder inherited media_type="comic"
+    books_res = client.get(f"/api/books?library={lib_id}")
+    assert books_res.status_code == 200
+    books = books_res.get_json()["books"]
+    assert len(books) == 1
+    assert books[0]["media_type"] == "comic"
+
+    # 2. GET /api/libraries/<identifier>
+    info_res = client.get(f"/api/libraries/{lib_id}")
+    assert info_res.status_code == 200
+    assert info_res.get_json()["library"]["media_type"] == "comic"
+    assert info_res.get_json()["library"]["count"] == 1
+
+    # By numeric db_id as well
+    info_db_res = client.get(f"/api/libraries/{db_id}")
+    assert info_db_res.status_code == 200
+    assert info_db_res.get_json()["library"]["id"] == lib_id
+
+    # 3. PUT /api/libraries/<identifier> - Change media_type to "video"
+    put_res = client.put(
+        f"/api/libraries/{lib_id}",
+        json={"media_type": "video", "name": "My Videos"},
+    )
+    assert put_res.status_code == 200
+    assert put_res.get_json()["library"]["media_type"] == "video"
+    assert put_res.get_json()["library"]["name"] == "My Videos"
+
+    # Verify that book in that folder was updated to "video"
+    book_check = client.get(f"/api/books/{books[0]['id']}")
+    assert book_check.status_code == 200
+    assert book_check.get_json()["media_type"] == "video"
+
+    # 4. POST /api/libraries/<identifier>/scan - Single library scan
+    scan_res = client.post(f"/api/libraries/{lib_id}/scan")
+    assert scan_res.status_code == 200
+    assert scan_res.get_json()["status"] == "success"
+
+    # 5. DELETE /api/libraries/<identifier> - Remove library
+    del_res = client.delete(f"/api/libraries/{lib_id}")
+    assert del_res.status_code == 200
+    assert del_res.get_json()["status"] == "success"
+
+    # Verify deleted from /api/libraries
+    list_res = client.get("/api/libraries")
+    assert list_res.status_code == 200
+    ids = [item["id"] for item in list_res.get_json()["libraries"]]
+    assert lib_id not in ids

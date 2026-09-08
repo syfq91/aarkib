@@ -96,21 +96,115 @@
     </div>
     <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.35rem;">
       <div>
-        <strong>Library Storage ({{ library_dirs|length if library_dirs else 1 }} folder{{ 's' if (library_dirs and library_dirs|length != 1) else '' }}):</strong>
+        <strong>Library Storage ({{ libraries|length if libraries else 1 }} folder{{ 's' if (libraries and libraries|length != 1) else '' }}):</strong>
         <div style="margin-top: 0.25rem; display: flex; flex-direction: column; gap: 0.2rem;">
-          {% if library_dirs %}
-            {% for dir_path in library_dirs %}
-              <code>{{ dir_path }}</code>
-            {% endfor %}
-          {% else %}
-            <code>{{ library_path }}</code>
-          {% endif %}
+          {% for lib in libraries %}
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+              <code style="word-break: break-all;">{{ lib.path_str }}</code>
+              <span style="font-size: 0.75rem; color: var(--accent); text-transform: uppercase; white-space: nowrap;">{{ lib.media_type }}</span>
+            </div>
+          {% endfor %}
         </div>
       </div>
       <div style="margin-top: 0.25rem;"><strong>Covers Storage:</strong> <code>{{ covers_path }}</code></div>
     </div>
   </div>
 
+</div>
+
+<!-- Media Folders & Libraries Configuration Section -->
+<div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📁</span> Media Folders & Libraries
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+        Manage media directories and select the content type (books, comics/manga, movies/TV shows, or mixed auto-detect).
+      </p>
+    </div>
+    <button class="btn btn-secondary" onclick="toggleAddFolderForm()" style="display: flex; align-items: center; gap: 0.35rem;">
+      <span id="add-folder-icon">➕</span> Add Media Folder
+    </button>
+  </div>
+
+  <!-- Add Media Folder Inline Form -->
+  <div id="add-folder-box" style="display: none; background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem; border: 1px dashed var(--border);">
+    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem;">➕ Add New Media Folder</h4>
+    <form id="add-folder-form" onsubmit="handleAddFolder(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto; gap: 0.75rem; align-items: end;">
+      <div>
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Folder Path *</label>
+        <input type="text" id="new-folder-path" class="input-text" required placeholder="/path/to/media or data/comics" style="width: 100%;">
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Library Name</label>
+        <input type="text" id="new-folder-name" class="input-text" placeholder="e.g. Manga & Comics" style="width: 100%;">
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Media Type</label>
+        <select id="new-folder-type" class="input-text" style="width: 100%;">
+          <option value="all">📁 Mixed / Auto-detect</option>
+          <option value="book">📚 Books Only</option>
+          <option value="comic">🎨 Comics & Manga</option>
+          <option value="video">🎬 Movies & TV Shows</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 0.35rem;">
+        <button type="submit" class="btn btn-primary" id="btn-save-new-folder">Add Folder</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleAddFolderForm()">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Libraries Table -->
+  <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
+          <th style="padding: 0.75rem 1rem;">Library Name</th>
+          <th style="padding: 0.75rem 1rem;">Folder Path</th>
+          <th style="padding: 0.75rem 1rem;">Media Type</th>
+          <th style="padding: 0.75rem 1rem;">Items</th>
+          <th style="padding: 0.75rem 1rem; text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lib in libraries %}
+        <tr style="border-bottom: 1px solid var(--border);" id="lib-row-{{ lib.id }}">
+          <td style="padding: 0.75rem 1rem;">
+            <strong style="color: var(--text-primary);">{{ lib.name }}</strong>
+          </td>
+          <td style="padding: 0.75rem 1rem;">
+            <code style="font-size: 0.8rem; background: var(--bg-tertiary); padding: 0.2rem 0.4rem; border-radius: var(--radius-sm);">{{ lib.path_str }}</code>
+          </td>
+          <td style="padding: 0.75rem 1rem;">
+            <select class="input-text" style="padding: 0.25rem 0.5rem; font-size: 0.85rem; width: auto;" onchange="updateLibraryMediaType('{{ lib.id }}', this.value, this)">
+              <option value="all" {% if lib.media_type == 'all' %}selected{% endif %}>📁 Mixed / Auto-detect</option>
+              <option value="book" {% if lib.media_type == 'book' %}selected{% endif %}>📚 Books Only</option>
+              <option value="comic" {% if lib.media_type == 'comic' %}selected{% endif %}>🎨 Comics & Manga</option>
+              <option value="video" {% if lib.media_type == 'video' %}selected{% endif %}>🎬 Movies & TV Shows</option>
+            </select>
+          </td>
+          <td style="padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+            <span class="badge" style="background: var(--bg-tertiary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm);">{{ lib.count }} items</span>
+          </td>
+          <td style="padding: 0.75rem 1rem; text-align: right;">
+            <div style="display: flex; gap: 0.4rem; justify-content: flex-end;">
+              <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="rescanSingleLibrary('{{ lib.id }}', this)" title="Rescan this folder">
+                🔄 Rescan
+              </button>
+              {% if libraries|length > 1 %}
+              <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--danger);" onclick="deleteLibrary('{{ lib.id }}', '{{ lib.name|e }}')" title="Remove this media folder">
+                🗑️
+              </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 {% if current_user.is_authenticated and current_user.is_admin %}
@@ -281,6 +375,113 @@ async function rescanLibrary() {
   } finally {
     btn.disabled = false;
     btn.innerText = "🔄 Rescan Library Folder";
+  }
+}
+
+function toggleAddFolderForm() {
+  const box = document.getElementById("add-folder-box");
+  const isHidden = box.style.display === "none";
+  box.style.display = isHidden ? "block" : "none";
+  if (isHidden) {
+    document.getElementById("new-folder-path").focus();
+  }
+}
+
+async function handleAddFolder(event) {
+  event.preventDefault();
+  const path = document.getElementById("new-folder-path").value.trim();
+  const name = document.getElementById("new-folder-name").value.trim();
+  const media_type = document.getElementById("new-folder-type").value;
+  const btn = document.getElementById("btn-save-new-folder");
+
+  if (!path) return;
+  btn.disabled = true;
+  btn.innerText = "Adding & Scanning...";
+
+  try {
+    const res = await fetch("/api/libraries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, name, media_type })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(`Added folder '${data.library.name}' and scanned ${data.scan ? data.scan.added_or_updated : 0} items`, "success");
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || "Failed to add folder", "error");
+      btn.disabled = false;
+      btn.innerText = "Add Folder";
+    }
+  } catch (err) {
+    showToast("Network error adding folder", "error");
+    btn.disabled = false;
+    btn.innerText = "Add Folder";
+  }
+}
+
+async function updateLibraryMediaType(libId, newType, selectEl) {
+  if (selectEl) selectEl.disabled = true;
+  try {
+    const res = await fetch(`/api/libraries/${libId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ media_type: newType })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(`Updated media type to '${newType}'`, "success");
+    } else {
+      showToast(data.error || "Failed to update media type", "error");
+    }
+  } catch (err) {
+    showToast("Network error updating media type", "error");
+  } finally {
+    if (selectEl) selectEl.disabled = false;
+  }
+}
+
+async function rescanSingleLibrary(libId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳...";
+  }
+  try {
+    const res = await fetch(`/api/libraries/${libId}/scan`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(`Scanned ${data.result.scanned} files (${data.result.added_or_updated} added/updated)`, "success");
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast(data.error || "Scan failed", "error");
+    }
+  } catch (err) {
+    showToast("Network error scanning folder", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "🔄 Rescan";
+    }
+  }
+}
+
+async function deleteLibrary(libId, libName) {
+  if (!confirm(`Are you sure you want to remove the media folder '${libName}'? Files on disk will NOT be deleted, but catalog entries will be removed.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/libraries/${libId}`, { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(`Removed folder '${libName}'`, "success");
+      const row = document.getElementById(`lib-row-${libId}`);
+      if (row) row.remove();
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || "Failed to remove folder", "error");
+    }
+  } catch (err) {
+    showToast("Network error removing folder", "error");
   }
 }
 </script>

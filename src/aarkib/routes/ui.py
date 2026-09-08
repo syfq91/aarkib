@@ -96,6 +96,7 @@ def index():
                 "id": lib["id"],
                 "name": lib["name"],
                 "path": str(lib["path"]),
+                "media_type": lib.get("media_type", "all"),
                 "count": lib_count,
                 "books": lib_books,
             }
@@ -188,9 +189,10 @@ def settings():
         if current_user.is_authenticated and current_user.is_admin
         else []
     )
-    from aarkib.services.scanner import get_library_dirs
+    from aarkib.services.scanner import get_library_definitions
 
-    library_dirs = [str(p) for p in get_library_dirs(current_app._get_current_object())]  # type: ignore
+    libraries = get_library_definitions(current_app._get_current_object())  # type: ignore
+    library_dirs = [str(lib["path"]) for lib in libraries]
     covers_path = str(current_app.config.get("COVERS_DIR", "data/covers"))
     book_count = db.session.scalar(select(func.count(Book.id))) or 0
     author_count = db.session.scalar(select(func.count(Author.id))) or 0
@@ -199,8 +201,9 @@ def settings():
     return render_template(
         "settings.html",
         users=users,
+        libraries=libraries,
         library_dirs=library_dirs,
-        library_path=library_dirs[0] if library_dirs else "data/books",
+        library_path=library_dirs[0] if library_dirs else "data/media",
         covers_path=covers_path,
         book_count=book_count,
         author_count=author_count,

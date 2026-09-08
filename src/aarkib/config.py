@@ -7,10 +7,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 PRIMARY_DIR_VARS: tuple[str, ...] = (
+    "AARKIB_MEDIA_DIR",
+    "AARKIB_MEDIA_DIRS",
     "AARKIB_LIBRARY_DIR",
     "AARKIB_LIBRARY_DIRS",
     "AARKIB_BOOKS_DIR",
     "AARKIB_BOOKS_DIRS",
+    "MEDIA_DIR",
+    "MEDIA_DIRS",
     "BUUKUU_LIBRARY_DIR",
     "BUUKU_LIBRARY_DIR",
     "BUUKUU_LIBRARY_DIRS",
@@ -24,10 +28,11 @@ PRIMARY_DIR_VARS: tuple[str, ...] = (
 )
 
 NUMBERED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_)?DIR_?(\d+)$", re.IGNORECASE
+    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_|MEDIA_)?DIR_?(\d+)$", re.IGNORECASE
 )
 NAMED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_)?DIR_([A-Za-z0-9_]+)$", re.IGNORECASE
+    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_|MEDIA_)?DIR_([A-Za-z0-9_]+)$",
+    re.IGNORECASE,
 )
 
 
@@ -154,13 +159,15 @@ def discover_library_dirs(
     data_dir: Path | str | None = None,
     env: dict[str, str] | None = None,
 ) -> list[Path]:
-    """Discovers all library directories from environment variables or returns default data/books."""
+    """Discovers all library directories from environment variables or returns default data/media or data/books."""
     env_paths = get_env_library_dirs(env=env)
     if env_paths:
         return env_paths
 
     data_path = Path(data_dir) if data_dir else (BASE_DIR / "data")
-    return [data_path / "books"]
+    if (data_path / "books").exists() and not (data_path / "media").exists():
+        return [data_path / "books"]
+    return [data_path / "media"]
 
 
 class Config:

@@ -81,8 +81,9 @@ Your library books placed in `./data/books` will be mounted automatically.
 | :--- | :--- | :--- |
 | `SECRET_KEY` | `aarkib-secret-key-change-in-production` | Secret key for session security & signing. |
 | `AARKIB_DATA_DIR` | `./data` | Base storage directory. |
-| `AARKIB_LIBRARY_DIR` | `./data/books` | Primary library directory (or delimited list: `/dir1:/dir2`). |
-| `AARKIB_LIBRARY_DIR1`, `DIR2`, ... | *(none)* | Additional numbered library directories (`AARKIB_LIBRARY_DIR1`, `AARKIB_LIBRARY_DIR2`, `DIR1`, etc.). |
+| `AARKIB_MEDIA_DIR` / `AARKIB_LIBRARY_DIR` | `./data/media` or `./data/books` | Primary media folder (or delimited list: `/dir1:/dir2`). |
+| `AARKIB_MEDIA_DIRS` / `MEDIA_DIRS` | *(none)* | Delimited list of multiple media directories. |
+| `AARKIB_MEDIA_DIR1`, `DIR2`, ... | *(none)* | Additional numbered media folders (`AARKIB_MEDIA_DIR1`, `MEDIA_DIR2`, `DIR1`, etc.). |
 | `AARKIB_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
 | `AARKIB_OPTIMIZED_DIR` | `./data/optimized` | Cache directory for on-demand e-ink optimized EPUBs. |
 | `DATABASE_URL` | `sqlite:///data/aarkib.db` | SQLAlchemy database URI. |
@@ -96,9 +97,14 @@ Your library books placed in `./data/books` will be mounted automatically.
 | `FLASK_DEBUG` | `0` | Enable Flask development debugger (disabled by default in production). |
 | `PORT` | `5000` | Server listening port. |
 
-> **💡 Multiple Library Folders & Media**: You can specify multiple folders in `.env` using numbered variables like `AARKIB_LIBRARY_DIR1=/mnt/nas/books`, `AARKIB_LIBRARY_DIR2=/media/manga`, `AARKIB_LIBRARY_DIR3=/home/user/calibre` (or `DIR1`, `DIR2`), or as a delimited list in `AARKIB_LIBRARY_DIR=/books:/manga`. Named folders like `AARKIB_LIBRARY_DIR_AUDIO=/media/audio` and `AARKIB_LIBRARY_DIR_VIDEO=/media/video` are also supported.
->
-> *(Legacy `BUUKUU_*` variables are also supported for backward compatibility).*
+> **💡 Generic Media Folders & WebUI Configuration**:
+> - **WebUI Media Folders Management**: Head to **Settings → 📁 Media Folders & Libraries** in the web interface to view all folders, add new media directories, and customize each folder's media type:
+>   - **Mixed / Auto-detect (`all`)**: Automatically detects books (`.epub`), comics/manga (`.cbz`, `.cbr`, `.zip`), and videos (`.mp4`, `.mkv`, etc.).
+>   - **Books Only (`book`)**: Catalogs files inside as books.
+>   - **Comics & Manga (`comic`)**: Catalogs files inside as comics/manga.
+>   - **Movies & TV Shows (`video`)**: Catalogs video media files inside as movies & shows.
+> - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies` (or `MEDIA_DIR1`, `DIR1`), or named variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
+> - *(Legacy `AARKIB_LIBRARY_DIR` and `BUUKUU_*` variables are fully supported for backward compatibility).*
 
 ---
 
