@@ -51,7 +51,7 @@ cd aarkib
 uv sync
 
 # 3. Create your storage folders
-mkdir -p data/books data/covers
+mkdir -p data/media data/covers
 
 # 4. Copy environment configuration
 cp .env.example .env
@@ -71,7 +71,7 @@ Visit **`http://localhost:5000`** in your browser. On your first visit, you will
 docker compose up -d
 ```
 
-Your library books placed in `./data/books` will be mounted automatically.
+Your library media placed in `./data` (or subdirectories `./data/media`, `./data/books`, `./data/videos`) will be mounted automatically.
 
 ---
 
@@ -157,18 +157,18 @@ Aarkib exposes clean REST APIs for integration and automation:
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/books` | `GET` | List catalog items (supports `q`, `media_type`, `library`, `sort_by`, `page`). |
-| `/api/books/<id>` | `GET` | Retrieve full item details and user progress. |
-| `/api/books/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
-| `/api/books/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
-| `/api/books/<id>/progress`| `GET`, `POST`| Fetch or update playback / reading progress. |
-| `/api/books/<id>/edit` | `POST` | Edit title, authors, series, and tags metadata. *(Legacy — prefer `PATCH /api/books/<id>`.)* |
-| `/api/books/<id>` | `PATCH` | Canonical RESTful metadata edit (title, authors, series, tags). |
+| `/api/media` / `/api/books` | `GET` | List catalog items (supports `q`, `media_type`, `library`, `sort_by`, `page`). |
+| `/api/media/<id>` / `/api/books/<id>` | `GET` | Retrieve full item details and user progress. |
+| `/api/media/<id>/file` / `/api/books/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
+| `/api/media/<id>/cover` / `/api/books/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
+| `/api/media/<id>/progress` / `/api/books/<id>/progress` | `GET`, `POST`| Fetch or update playback / reading progress. |
+| `/api/media/<id>` / `/api/books/<id>` | `PATCH` | Canonical RESTful metadata edit (title, creators, series, tags). |
+| `/api/media/<id>/edit` / `/api/books/<id>/edit` | `POST` | Edit title, creators, series, and tags metadata. *(Legacy edit endpoint.)* |
 | `/api/libraries` | `GET`, `POST` | List all configured media folders or add a new folder with custom `media_type`. |
 | `/api/libraries/<id>` | `GET`, `PUT`, `DELETE` | View, update `media_type` / name, or remove media folder. |
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
 | `/api/libraries/scan` | `POST` | Trigger full scan across all configured media folders. *(Canonical — legacy `/api/library/scan` also works.)* |
-| `/api/libraries/enrich` | `POST` | Enrich books with Google Books & Open Library metadata. *(Canonical — legacy `/api/library/enrich` also works.)* |
+| `/api/libraries/enrich` | `POST` | Enrich catalog items with Google Books & Open Library metadata. |
 | `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 
 ---
@@ -184,10 +184,10 @@ uv run aarkib scan
 # Scan library and auto-fetch metadata from Google Books / Open Library
 uv run aarkib scan --enrich
 
-# Fetch online metadata for all indexed books
+# Fetch online metadata for indexed books
 uv run aarkib enrich
 
-# Create a new reader or admin user
+# Create a new user or administrator
 uv run aarkib create-user --username alice --password secret123 --admin
 
 # List all registered users
@@ -199,7 +199,7 @@ uv run aarkib list-users
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (70 tests)
+# Run pytest test suite (72 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff

@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Book(db.Model, MediaItemMixin, VideoItemMixin):
+    """Unified catalog model representing books, comics, videos, and audio in Aarkib."""
+
     __tablename__ = "books"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -101,7 +103,11 @@ class Book(db.Model, MediaItemMixin, VideoItemMixin):
     @property
     def authors_display(self) -> str:
         if not self.authors:
-            return "Unknown Author"
+            return (
+                "Unknown Creator"
+                if (self.is_video or self.is_audio)
+                else "Unknown Author"
+            )
         return ", ".join(a.name for a in self.authors)
 
     @property

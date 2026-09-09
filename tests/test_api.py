@@ -193,3 +193,46 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
     assert list_res.status_code == 200
     ids = [item["id"] for item in list_res.get_json()["libraries"]]
     assert lib_id not in ids
+
+
+def test_api_media_and_items_route_aliases(client, app, sample_epub):
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        book_id = book.id
+
+    # Test /api/media and /api/items aliases
+    res_media = client.get("/api/media")
+    assert res_media.status_code == 200
+    assert len(res_media.get_json()["books"]) >= 1
+
+    res_items = client.get("/api/items")
+    assert res_items.status_code == 200
+    assert len(res_items.get_json()["books"]) >= 1
+
+    # Test item detail aliases
+    res_item = client.get(f"/api/items/{book_id}")
+    assert res_item.status_code == 200
+    assert res_item.get_json()["id"] == book_id
+
+    res_med = client.get(f"/api/media/{book_id}")
+    assert res_med.status_code == 200
+    assert res_med.get_json()["id"] == book_id
+
+    # Test file & cover aliases
+    res_file = client.get(f"/api/media/{book_id}/file")
+    assert res_file.status_code == 200
+
+    # Test progress alias
+    res_prog = client.post(
+        f"/api/media/{book_id}/progress",
+        json={"location": "0.5", "percentage": 50.0},
+    )
+    assert res_prog.status_code == 200
+    assert res_prog.get_json()["percentage"] == 50.0
+
+    # Test UI route alias /media/<id> and /item/<id>
+    ui_item = client.get(f"/item/{book_id}")
+    assert ui_item.status_code == 200
+    ui_media = client.get(f"/media/{book_id}")
+    assert ui_media.status_code == 200

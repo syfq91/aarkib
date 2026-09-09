@@ -1,6 +1,6 @@
 # 🏛️ Aarkib System Architecture & Technical Design
 
-**Aarkib** is a modern, lightweight, self-hosted media server engineered with Python 3.14, Flask, and SQLite. It provides catalog management, in-browser reading, on-demand e-ink device optimization, OPDS catalog feeds, multi-client reading progress synchronization, and an extensible plugin system with work-in-progress (WIP) support for audio and video media.
+**Aarkib** is a modern, lightweight, self-hosted media server engineered with Python 3.14, Flask, and SQLite. It provides catalog management, in-browser reading, on-demand e-ink device optimization, OPDS catalog feeds, multi-client reading and playback progress synchronization, and an extensible plugin system with native support for books, comics, and video, alongside in-progress audio media capabilities.
 
 ---
 
@@ -11,9 +11,10 @@
    - **OPDS 1.2** (Atom XML) & **OPDS 2.0** (JSON-LD) for universal e-reader compatibility (KOReader, Moon+ Reader, Thorium, Cantook).
    - **OPDS Progression 1.0** for reading position synchronization with strict conflict resolution.
    - **OPDS Authentication Specification** (`application/opds-authentication+json`) alongside HTTP Basic Auth.
+   - **HTTP 206 Partial Content** for native video/audio range streaming and seeking.
 3. **E-Ink Native Experience**: Hardware-tailored processing pipeline that optimizes EPUB files on-demand (font stripping, CSS sanitization, image resizing/dithering) specifically for e-paper devices (Xteink, Kindle, Kobo).
 4. **Non-Destructive Storage**: Original media archives (`.epub`, `.cbz`, `.mp3`, `.mp4`) are strictly read-only and never modified. Extracted covers, thumbnails, and optimized device variants are cached separately.
-5. **Zero-Friction Web Reading & Media Access**: Built-in, responsive web readers for EPUB and CBZ with client-side progress tracking and offline asset caching via PWA Service Workers, with playback interfaces in progress for audiobooks, music, and video.
+5. **Zero-Friction Web Reading & Media Access**: Built-in, responsive web readers for EPUB and CBZ, and an HTML5 video player with client-side progress tracking and offline asset caching via PWA Service Workers, with persistent audio player in progress for audiobooks and music.
 6. **Extensible Multi-Media Plugin Architecture**: Core data models and scanner pipeline decoupled from file types through abstract `MediaPlugin` handlers and declarative mixins.
 
 ---
@@ -26,7 +27,7 @@ graph TD
         Web[Web Browser / PWA]
         EReader[E-Readers / Apps: KOReader, Moon+, Thorium]
         EInk[E-Ink Devices: Xteink, Kindle, Kobo]
-        MediaPlayer[Media Players: Web Audio/Video Player - WIP]
+        MediaPlayer[Media Players: Web Video & Audio Players]
     end
 
     subgraph Presentation & Routing Layer
@@ -226,7 +227,7 @@ Aarkib provides rich in-browser reading environments without external server plu
 
 ---
 
-### 3.6 Multi-Media Plugin Architecture & WIP Audio/Video Support (`plugins/`, `models/media.py`)
+### 3.6 Multi-Media Plugin Architecture: Video (Implemented) & Audio Support (In Progress) (`plugins/`, `models/media.py`)
 
 Aarkib features a decoupled, extensible plugin architecture designed to manage diverse personal media libraries under unified indexing, storage, and progress-tracking foundations:
 

@@ -196,7 +196,7 @@ def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_e
     # Empty state initially
     res_empty = client.get("/")
     assert res_empty.status_code == 200
-    assert b"No books found in library" in res_empty.data
+    assert b"No media found in library" in res_empty.data
 
     # Index a book
     with app.app_context():
@@ -221,10 +221,10 @@ def test_homepage_in_progress_row(client, app, sample_epub):
         book = index_single_book(sample_epub, covers_dir)
         book_id = book.id
 
-    # Initially before reading, no Continue Reading shelf
+    # Initially before reading, no Continue shelf
     res_before = client.get("/")
     assert res_before.status_code == 200
-    assert b"Continue Reading" not in res_before.data
+    assert b"Continue Watching & Reading" not in res_before.data
 
     # Save 45% progress
     res_prog = client.post(
@@ -233,10 +233,10 @@ def test_homepage_in_progress_row(client, app, sample_epub):
     )
     assert res_prog.status_code == 200
 
-    # Homepage should now render Continue Reading shelf
+    # Homepage should now render Continue shelf
     res_after = client.get("/")
     assert res_after.status_code == 200
-    assert b"Continue Reading" in res_after.data
+    assert b"Continue Watching & Reading" in res_after.data
     assert b"45%" in res_after.data
     assert b"Resume" in res_after.data
 
@@ -247,7 +247,7 @@ def test_homepage_in_progress_row(client, app, sample_epub):
     )
     res_completed = client.get("/")
     assert res_completed.status_code == 200
-    assert b"Continue Reading" not in res_completed.data
+    assert b"Continue Watching & Reading" not in res_completed.data
 
 
 def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample_cbz):

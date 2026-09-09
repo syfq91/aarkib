@@ -8,11 +8,11 @@
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
     <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
       <div style="font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem;">{{ reading_count }}</div>
-      <div style="font-size: 0.85rem; color: var(--text-secondary);">Currently Reading</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">Currently In Progress</div>
     </div>
     <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
       <div style="font-size: 2rem; font-weight: 700; color: var(--success); margin-bottom: 0.25rem;">{{ completed_count }}</div>
-      <div style="font-size: 0.85rem; color: var(--text-secondary);">Completed Books</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">Completed Items</div>
     </div>
     <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
       <div style="font-size: 2rem; font-weight: 700; color: #eab308; margin-bottom: 0.25rem;">{{ bookmarks_count }}</div>
@@ -31,7 +31,7 @@
         </div>
         <div>
           <span style="color: var(--text-secondary); font-size: 0.85rem; display: block;">Role</span>
-          <span>{{ "👑 Administrator" if user.is_admin else "👤 Reader" }}</span>
+          <span>{{ "👑 Administrator" if user.is_admin else "👤 User" }}</span>
         </div>
         <div>
           <span style="color: var(--text-secondary); font-size: 0.85rem; display: block;">Joined</span>

@@ -134,6 +134,8 @@ def index():
 
 
 @ui_bp.route("/book/<int:book_id>")
+@ui_bp.route("/item/<int:book_id>")
+@ui_bp.route("/media/<int:book_id>")
 @optional_or_required_auth
 def book_detail(book_id: int):
     book = db.session.get(Book, book_id)

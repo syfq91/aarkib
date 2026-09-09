@@ -107,6 +107,8 @@ def health():
 
 
 @api_bp.route("/books", methods=["GET"])
+@api_bp.route("/items", methods=["GET"])
+@api_bp.route("/media", methods=["GET"])
 def list_books():
     """List catalog items with filtering (q, media_type, library), pagination, and progress."""
     q = request.args.get("q", "").strip()
@@ -447,8 +449,10 @@ def scan_single_library(identifier: str):
 
 
 @api_bp.route("/books/<int:book_id>", methods=["GET"])
+@api_bp.route("/items/<int:book_id>", methods=["GET"])
+@api_bp.route("/media/<int:book_id>", methods=["GET"])
 def get_book(book_id: int):
-    """Return full item details, including user progress, for a single book."""
+    """Return full item details, including user progress, for a single catalog item."""
     book = db.session.scalar(
         select(Book)
         .options(
@@ -517,8 +521,10 @@ def get_book(book_id: int):
 
 
 @api_bp.route("/books/<int:book_id>/cover", methods=["GET"])
+@api_bp.route("/items/<int:book_id>/cover", methods=["GET"])
+@api_bp.route("/media/<int:book_id>/cover", methods=["GET"])
 def get_book_cover(book_id: int):
-    """Serve the cached WebP cover/poster image for a book."""
+    """Serve the cached WebP cover/poster image for a media item."""
     book = db.session.get(Book, book_id)
     if not book:
         abort(404)
@@ -581,6 +587,10 @@ def get_book_cover(book_id: int):
 @api_bp.route("/books/<int:book_id>/file", methods=["GET"])
 @api_bp.route("/books/<int:book_id>/file/<path:filename>", methods=["GET"])
 @api_bp.route("/books/<int:book_id>/book.epub", methods=["GET"])
+@api_bp.route("/items/<int:book_id>/file", methods=["GET"])
+@api_bp.route("/items/<int:book_id>/file/<path:filename>", methods=["GET"])
+@api_bp.route("/media/<int:book_id>/file", methods=["GET"])
+@api_bp.route("/media/<int:book_id>/file/<path:filename>", methods=["GET"])
 def get_book_file(book_id: int, filename: str | None = None):
     """Stream the original media file with HTTP 206 byte-range support."""
     book = db.session.get(Book, book_id)
@@ -810,6 +820,8 @@ def get_cbz_page_image(book_id: int, page_num: int):
 
 
 @api_bp.route("/books/<int:book_id>/progress", methods=["GET", "POST"])
+@api_bp.route("/items/<int:book_id>/progress", methods=["GET", "POST"])
+@api_bp.route("/media/<int:book_id>/progress", methods=["GET", "POST"])
 def book_progress(book_id: int):
     """Fetch or update reading/video progress for a book or media item."""
     book = db.session.get(Book, book_id)
@@ -881,8 +893,10 @@ def book_progress(book_id: int):
 
 
 @api_bp.route("/books/<int:book_id>/bookmarks", methods=["GET", "POST"])
+@api_bp.route("/items/<int:book_id>/bookmarks", methods=["GET", "POST"])
+@api_bp.route("/media/<int:book_id>/bookmarks", methods=["GET", "POST"])
 def bookmarks(book_id: int):
-    """List or create bookmarks for a book."""
+    """List or create bookmarks for a book or media item."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -1000,9 +1014,13 @@ def enrich_library():
 
 @api_bp.route("/books/<int:book_id>/edit", methods=["POST"])
 @api_bp.route("/books/<int:book_id>", methods=["PATCH"])
+@api_bp.route("/items/<int:book_id>/edit", methods=["POST"])
+@api_bp.route("/items/<int:book_id>", methods=["PATCH"])
+@api_bp.route("/media/<int:book_id>/edit", methods=["POST"])
+@api_bp.route("/media/<int:book_id>", methods=["PATCH"])
 @api_admin_required
 def edit_book_metadata(book_id: int):
-    """Manually edit a book's title, authors, series, tags, and descriptive fields."""
+    """Manually edit a media item's title, creators, series, tags, and descriptive fields."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)

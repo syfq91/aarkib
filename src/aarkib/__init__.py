@@ -204,7 +204,7 @@ def register_commands(app: Flask) -> None:
 
     @app.cli.command("scan")
     def scan_command():
-        """Scan the library directory for books."""
+        """Scan the library directories for books, comics, and media files."""
         from aarkib.services.scanner import scan_library
 
         click.echo("Scanning library...")
@@ -274,7 +274,7 @@ def register_commands(app: Flask) -> None:
         help="Metadata provider",
     )
     def enrich_command(book_id, overwrite, provider):
-        """Enrich book metadata using online sources."""
+        """Enrich catalog metadata using online sources (Google Books / Open Library)."""
         from aarkib.models import Book
         from aarkib.services.enricher import enrich_all_books, enrich_book
 

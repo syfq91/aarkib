@@ -17,13 +17,27 @@
     </select>
     {% endif %}
 
+    <select id="type-filter" class="select-input" style="width: auto;">
+      <option value="">All Media Types</option>
+      <option value="book">📚 Books</option>
+      <option value="comic">🎨 Comics & Manga</option>
+      <option value="video">🎬 Movies & TV Shows</option>
+      <option value="audio">🎵 Audio & Music</option>
+    </select>
+
     <select id="format-filter" class="select-input" style="width: auto;">
       <option value="">All Formats</option>
       <option value="epub">EPUB Books</option>
       <option value="cbz">CBZ / Comics</option>
+      <option value="cbr">CBR / Comics</option>
       <option value="mp4">MP4 Video</option>
       <option value="mkv">MKV Video</option>
       <option value="webm">WebM Video</option>
+      <option value="avi">AVI Video</option>
+      <option value="mov">MOV Video</option>
+      <option value="mp3">MP3 Audio</option>
+      <option value="m4b">M4B Audiobook</option>
+      <option value="flac">FLAC Audio</option>
     </select>
 
     <select id="sort-select" class="select-input" style="width: auto;">
@@ -58,22 +72,22 @@
 
 {% if total_books == 0 %}
 <div id="empty-library-state" style="text-align: center; padding: 5rem 1rem; color: var(--text-secondary);">
-  <div style="font-size: 3rem; margin-bottom: 1rem;">📚</div>
-  <h3 style="font-size: 1.4rem; color: var(--text-primary); margin-bottom: 0.5rem;">No books found in library</h3>
+  <div style="font-size: 3rem; margin-bottom: 1rem;">🏛️</div>
+  <h3 style="font-size: 1.4rem; color: var(--text-primary); margin-bottom: 0.5rem;">No media found in library</h3>
   <p style="font-size: 0.95rem; max-width: 450px; margin: 0 auto 1.5rem auto;">
-    Add your .epub, .cbz, or other media files to your configured library folders and click 'Scan' to start building your collection.
+    Add your .epub, .cbz, video (.mp4, .mkv), or audio files to your configured library folders and click 'Scan' to start building your collection.
   </p>
 </div>
 {% else %}
 
 {# --- DASHBOARD MULTI-ROW SHELVES VIEW --- #}
 <div id="dashboard-shelves" class="dashboard-shelves">
-  {# Row 1: Continue Reading (In-Progress Books) #}
+  {# Row 1: Continue Reading / Watching (In-Progress Media) #}
   {% if in_progress_books %}
   <section class="shelf-section" id="shelf-in-progress">
     <div class="shelf-header">
       <div class="shelf-title-wrap">
-        <h2 class="shelf-title">📖 Continue Reading</h2>
+        <h2 class="shelf-title">⏯️ Continue Watching & Reading</h2>
         <span class="shelf-count-badge">{{ in_progress_books|length }}</span>
       </div>
       <div class="shelf-actions">
@@ -84,12 +98,12 @@
     <div class="shelf-row-wrapper">
       <div class="shelf-row" id="row-in-progress">
         {% for item in in_progress_books %}
-          <a href="{{ item.book.reader_url }}" class="book-card" title="Continue reading {{ item.book.title }} ({{ item.percentage|round|int }}%)">
+          <a href="{{ item.book.reader_url }}" class="book-card" title="Continue {{ 'watching' if item.book.is_video else 'reading' }} {{ item.book.title }} ({{ item.percentage|round|int }}%)">
             <div class="book-cover-wrap">
               <img src="/api/books/{{ item.book.id }}/cover" alt="{{ item.book.title }}" class="book-cover-img" loading="lazy">
               <span class="badge-format">{{ item.book.file_format }}</span>
               <span class="badge-progress">{{ item.percentage|round|int }}%</span>
-              <span class="badge-resume">Resume →</span>
+              <span class="badge-resume">{% if item.book.is_video %}Watch →{% else %}Resume →{% endif %}</span>
             </div>
             <div class="progress-bar-container" title="{{ item.percentage|round|int }}% completed">
               <div class="progress-bar-fill" style="width: {{ item.percentage }}%;"></div>
@@ -282,11 +296,13 @@ function updateFilterBar() {
   const bar = document.getElementById("active-filter-bar");
   const label = document.getElementById("active-filter-label");
   const q = document.getElementById("search-input").value.trim();
+  const type = document.getElementById("type-filter") ? document.getElementById("type-filter").value : "";
   const format = document.getElementById("format-filter").value;
   const libFilter = libSelect ? libSelect.value : activeLibraryId;
 
   const filters = [];
   if (q) filters.push(`Search: "${q}"`);
+  if (type) filters.push(`Type: ${type.toUpperCase()}`);
   if (activeAuthorId) filters.push(`Author`);
   if (activeSeriesId) filters.push(`Series`);
   if (activeTagId) filters.push(`Tag`);
@@ -306,13 +322,15 @@ function updateFilterBar() {
 
 function hasActiveFilters() {
   const q = document.getElementById("search-input").value.trim();
+  const type = document.getElementById("type-filter") ? document.getElementById("type-filter").value : "";
   const format = document.getElementById("format-filter").value;
   const libFilter = libSelect ? libSelect.value : activeLibraryId;
-  return Boolean(q || format || libFilter || activeAuthorId || activeSeriesId || activeTagId);
+  return Boolean(q || type || format || libFilter || activeAuthorId || activeSeriesId || activeTagId);
 }
 
 function clearFilters() {
   document.getElementById("search-input").value = "";
+  if (document.getElementById("type-filter")) document.getElementById("type-filter").value = "";
   document.getElementById("format-filter").value = "";
   if (libSelect) libSelect.value = "";
   activeAuthorId = null;
@@ -359,6 +377,7 @@ function switchToGrid(options = {}) {
 async function fetchBooks() {
   updateFilterBar();
   const q = document.getElementById("search-input").value.trim();
+  const type = document.getElementById("type-filter") ? document.getElementById("type-filter").value : "";
   const format = document.getElementById("format-filter").value;
   const libFilter = libSelect ? libSelect.value : activeLibraryId;
   const [sort, order] = document.getElementById("sort-select").value.split(":");
@@ -369,6 +388,7 @@ async function fetchBooks() {
     order: order
   });
   if (q) params.append("q", q);
+  if (type) params.append("media_type", type);
   if (format) params.append("format", format);
   if (libFilter) params.append("library", libFilter);
   if (activeAuthorId) params.append("author_id", activeAuthorId);
@@ -397,7 +417,7 @@ function renderBooks(books) {
 
   if (!books || books.length === 0) {
     grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-secondary);">
-      <h3>No matching books found</h3>
+      <h3>No matching media found</h3>
       <p style="margin-top: 0.5rem; font-size: 0.9rem;">Try adjusting your search or filters.</p>
     </div>`;
     return;
@@ -469,6 +489,20 @@ document.getElementById("search-input").addEventListener("input", () => {
     }
   }, 300);
 });
+
+const typeFilterElem = document.getElementById("type-filter");
+if (typeFilterElem) {
+  typeFilterElem.addEventListener("change", () => {
+    currentPage = 1;
+    if (hasActiveFilters()) {
+      setViewMode("grid");
+      fetchBooks();
+    } else {
+      setViewMode("shelves");
+      updateFilterBar();
+    }
+  });
+}
 
 document.getElementById("format-filter").addEventListener("change", () => {
   currentPage = 1;
