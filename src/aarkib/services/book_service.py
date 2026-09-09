@@ -150,11 +150,33 @@ def resolve_library(identifier) -> Library:
     return lib
 
 
-def library_path_conditions(library: Library):
-    """Return (resolved_prefix, raw_prefix) for prefix matching a library path."""
-    p_res = str(Path(library.path).resolve()).rstrip("/\\") + "/"
-    p_raw = str(library.path).rstrip("/\\") + "/"
+def path_prefixes(path: str | Path) -> tuple[str, str]:
+    """Return (resolved_prefix, raw_prefix) for prefix-matching a filesystem path.
+
+    Used to match catalog item paths that fall within a configured library
+    folder while tolerating symlinked / non-normalized storage paths.
+    """
+    p = Path(path).expanduser()
+    try:
+        p_res = str(p.resolve()).rstrip("/\\") + "/"
+    except Exception:
+        p_res = str(p).rstrip("/\\") + "/"
+    p_raw = str(p).rstrip("/\\") + "/"
     return p_res, p_raw
+
+
+def library_path_conditions(library: Library) -> tuple[str, str]:
+    """Return (resolved_prefix, raw_prefix) for prefix matching a library path."""
+    return path_prefixes(library.path)
+
+
+def path_match_filter(path: str | Path):
+    """Return SQLAlchemy OR conditions matching items within a library path."""
+    p_res, p_raw = path_prefixes(path)
+    return or_(
+        Book.original_file_path.startswith(p_res),
+        Book.original_file_path.startswith(p_raw),
+    )
 
 
 def count_books_in_library(library: Library) -> int:

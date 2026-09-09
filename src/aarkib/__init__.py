@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from sqlalchemy import Boolean, Integer, event, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.sql import sqltypes as sa_types
 
-from aarkib.config import Config
+from aarkib.config import Config, ProductionConfig, TestConfig
 from aarkib.extensions import db, login_manager
 from aarkib.routes import api_bp, auth_bp, opds_bp, reader_bp, ui_bp
 
@@ -114,7 +115,14 @@ def migrate_database() -> None:
                 conn.execute(text(stmt))
 
 
-def create_app(config_class: type[Config] = Config) -> Flask:
+def create_app(config_class: type[Config] | None = None) -> Flask:
+    if config_class is None:
+        env = os.getenv("APP_ENV", "development").lower()
+        config_class = {
+            "production": ProductionConfig,
+            "testing": TestConfig,
+        }.get(env, Config)
+
     app = Flask(
         __name__,
         template_folder="templates",

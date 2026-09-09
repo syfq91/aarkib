@@ -95,6 +95,7 @@ Your library books placed in `./data/books` will be mounted automatically.
 | `AARKIB_METADATA_PROVIDER` | `all` | Online enrichment provider: `googlebooks`, `openlibrary`, or `all`. |
 | `AARKIB_PAGE_SIZE` | `24` | Number of items per page in UI views. |
 | `FLASK_DEBUG` | `0` | Enable Flask development debugger (disabled by default in production). |
+| `APP_ENV` | `development` | Runtime environment selecting the app config: `production` (enforces secure sessions), `testing`, or `development`. |
 | `PORT` | `5000` | Server listening port. |
 
 > **💡 Generic Media Folders & WebUI Configuration**:
@@ -161,12 +162,13 @@ Aarkib exposes clean REST APIs for integration and automation:
 | `/api/books/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
 | `/api/books/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
 | `/api/books/<id>/progress`| `GET`, `POST`| Fetch or update playback / reading progress. |
-| `/api/books/<id>/edit` | `POST` | Edit title, authors, series, and tags metadata. |
+| `/api/books/<id>/edit` | `POST` | Edit title, authors, series, and tags metadata. *(Legacy — prefer `PATCH /api/books/<id>`.)* |
+| `/api/books/<id>` | `PATCH` | Canonical RESTful metadata edit (title, authors, series, tags). |
 | `/api/libraries` | `GET`, `POST` | List all configured media folders or add a new folder with custom `media_type`. |
 | `/api/libraries/<id>` | `GET`, `PUT`, `DELETE` | View, update `media_type` / name, or remove media folder. |
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
-| `/api/library/scan` | `POST` | Trigger full scan across all configured media folders. |
-| `/api/library/enrich` | `POST` | Enrich books with Google Books & Open Library metadata. |
+| `/api/libraries/scan` | `POST` | Trigger full scan across all configured media folders. *(Canonical — legacy `/api/library/scan` also works.)* |
+| `/api/libraries/enrich` | `POST` | Enrich books with Google Books & Open Library metadata. *(Canonical — legacy `/api/library/enrich` also works.)* |
 | `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 
 ---

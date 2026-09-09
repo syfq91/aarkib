@@ -288,3 +288,12 @@ class TestConfig(Config):
     AUTO_ENRICH: bool = False
     # CSRF is disabled in tests so request payloads don't need tokens.
     WTF_CSRF_ENABLED: bool = False
+
+
+class ProductionConfig(Config):
+    """Production configuration with stricter security defaults."""
+
+    DEBUG: bool = False
+    TESTING: bool = False
+    SESSION_COOKIE_SECURE: bool = True
+    PERMANENT_SESSION_LIFETIME: int = 3600 * 8  # 8 hours

@@ -105,10 +105,12 @@ aarkib/
 │   │   ├── optimizer.py      # E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── enricher.py       # Google Books & Open Library metadata enrichment client
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
+│   │   ├── book_service.py   # Shared book/library service: edit_book_metadata, resolve_or_create_authors/series/tags, generate_slug, resolve_library, path_match_filter, library_path_conditions, VIDEO_EXTENSIONS
 │   │   └── parsers/
 │   │       ├── base.py       # BaseParsedMetadata, ParsedBookMetadata dataclasses, and parser registry
 │   │       ├── epub.py       # EPUB 2/3 XML & OPF metadata, cover extractor, collection/series parser
-│   │       └── cbz.py        # CBZ archive extractor, natural image sorting, ComicInfo.xml parser
+│   │       ├── cbz.py        # CBZ archive extractor, natural image sorting, ComicInfo.xml parser
+│   │       └── video.py      # Video container metadata (duration, dimensions) and chapter extraction
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css       # Core design system, top navbar, user dropdown, mobile bottom nav, themes
@@ -186,7 +188,7 @@ aarkib/
      2. EPUB 3 `<meta property="belongs-to-collection">` and `<meta property="group-position">`.
      3. CBZ `ComicInfo.xml` (`<Series>`, `<Number>`).
      4. Regex heuristic on filename/title (`extract_series_from_title`).
-     5. Manual editing via `POST /api/books/<id>/edit`.
+     5. Manual editing via `PATCH /api/books/<id>` (legacy `POST /api/books/<id>/edit` kept for backward compatibility).
 
 6. **Database WAL Mode & Auto-Migrations**:
    * SQLite is configured in WAL (Write-Ahead Logging) mode via SQLAlchemy engine connect event listener in `src/aarkib/__init__.py`. Always preserve this for concurrency.

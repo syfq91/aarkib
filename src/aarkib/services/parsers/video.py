@@ -14,9 +14,6 @@ from aarkib.services.parsers.base import ParsedVideoMetadata
 
 logger = logging.getLogger(__name__)
 
-# Common video file extensions
-VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v"}
-
 # TV Show pattern matchers
 TV_PATTERNS = [
     re.compile(
@@ -315,7 +312,7 @@ def extract_video_cover(file_path: Path) -> bytes | None:
                 if len(data) > 100:
                     return data
             except Exception:
-                pass
+                logger.debug("Failed to read cover file %s: %s", c_path, exc_info=True)
 
     # 2. If ffmpeg is installed, grab a snapshot frame at 5 seconds (or 10%)
     if shutil.which("ffmpeg"):

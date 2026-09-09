@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from aarkib.services.parsers.base import register_parser
+from aarkib.services.parsers.base import PARSER_REGISTRY, register_parser
 
 if TYPE_CHECKING:
     from flask import Blueprint, Flask
@@ -58,10 +58,12 @@ class PluginRegistry:
     def __init__(self) -> None:
         self._plugins: dict[str, MediaPlugin] = {}
         self._ext_map: dict[str, MediaPlugin] = {}
+        self._media_type_map: dict[str, MediaPlugin] = {}
 
     def register(self, plugin: MediaPlugin) -> None:
         """Registers a MediaPlugin instance and wires its extensions into the parser registry."""
         self._plugins[plugin.name] = plugin
+        self._media_type_map[plugin.media_type] = plugin
         for ext in plugin.supported_extensions:
             norm_ext = ext.lower() if ext.startswith(".") else f".{ext.lower()}"
             self._ext_map[norm_ext] = plugin
@@ -70,9 +72,13 @@ class PluginRegistry:
 
     def unregister(self, plugin_name: str) -> None:
         """Unregisters a media plugin."""
-        if plugin_name in self._plugins:
-            plugin = self._plugins.pop(plugin_name)
+        plugin = self._plugins.pop(plugin_name, None)
+        if plugin:
+            self._media_type_map.pop(plugin.media_type, None)
             self._ext_map = {k: v for k, v in self._ext_map.items() if v != plugin}
+            for ext in plugin.supported_extensions:
+                norm = ext.lower().lstrip(".")
+                PARSER_REGISTRY.pop(f".{norm}", None)
 
     def get_plugin_for_extension(self, extension: str) -> MediaPlugin | None:
         """Looks up the handler plugin for a given file extension."""
@@ -83,10 +89,7 @@ class PluginRegistry:
 
     def get_plugin_for_media_type(self, media_type: str) -> MediaPlugin | None:
         """Looks up a plugin by its media_type identifier."""
-        for plugin in self._plugins.values():
-            if plugin.media_type == media_type:
-                return plugin
-        return None
+        return self._media_type_map.get(media_type)
 
     def get_plugin(self, name: str) -> MediaPlugin | None:
         """Looks up a plugin by its name."""

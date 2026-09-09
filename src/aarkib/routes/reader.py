@@ -7,6 +7,7 @@ from sqlalchemy import select
 from aarkib.extensions import db
 from aarkib.models import Book, UserProgress
 from aarkib.routes.auth import optional_or_required_auth
+from aarkib.services.book_service import VIDEO_EXTENSIONS
 
 reader_bp = Blueprint("reader", __name__, url_prefix="/reader")
 
@@ -72,14 +73,7 @@ def watch_video(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
         abort(404, description="Video not found")
-    if not book.is_video and book.file_format not in (
-        "mp4",
-        "mkv",
-        "webm",
-        "avi",
-        "mov",
-        "m4v",
-    ):
+    if not book.is_video and book.file_format not in VIDEO_EXTENSIONS:
         abort(400, description="Item is not a video")
 
     user_id = current_user.id if current_user.is_authenticated else None

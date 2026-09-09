@@ -20,6 +20,7 @@ from aarkib.config import (
 )
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Library, Series, Tag
+from aarkib.services.book_service import VIDEO_EXTENSIONS, library_path_conditions
 from aarkib.services.parsers.base import extract_metadata_from_file
 from aarkib.services.thumbnail import generate_cover_webp
 
@@ -213,7 +214,9 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
         try:
             existing_paths.add(str(Path(lib.path).expanduser().resolve()))
         except Exception:
-            pass
+            logger.debug(
+                "Failed to resolve library path %s: %s", lib.path, exc_info=True
+            )
 
     # Named environment map for friendly names (e.g. AARKIB_LIBRARY_DIR_MANGA)
     named_map: dict[str, str] = {}
@@ -229,7 +232,11 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
                             norm = str(Path(p_str).expanduser().resolve())
                             named_map[norm] = display_name
                         except Exception:
-                            pass
+                            logger.debug(
+                                "Failed to resolve named dir %s: %s",
+                                p_str,
+                                exc_info=True,
+                            )
 
     has_new = False
     for p in target_dirs:
@@ -328,7 +335,7 @@ def get_library_dirs(app: Flask | None = None) -> list[Path]:
             if libs:
                 return [Path(lib.path) for lib in libs]
     except Exception:
-        pass
+        logger.debug("Library directory resolution skipped: %s", exc_info=True)
 
     return get_library_dirs_from_config(app)
 
@@ -354,11 +361,7 @@ def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
                 definitions: list[dict[str, Any]] = []
                 for lib in libs:
                     p = Path(lib.path).expanduser()
-                    try:
-                        p_res = str(p.resolve()).rstrip("/\\") + "/"
-                    except Exception:
-                        p_res = str(p).rstrip("/\\") + "/"
-                    p_raw = str(p).rstrip("/\\") + "/"
+                    p_res, p_raw = library_path_conditions(lib)
 
                     lib_cond = or_(
                         Book.original_file_path.startswith(p_res),
@@ -414,6 +417,111 @@ def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
     return definitions
 
 
+def _extract_and_generate_cover(
+    metadata,
+    plugin,
+    file_path: Path,
+    file_hash: str,
+    covers_dir: Path,
+) -> str | None:
+    """Extracts cover bytes (from metadata or plugin) and writes a WebP thumbnail."""
+    cover_bytes = metadata.cover_bytes
+    if not cover_bytes and plugin:
+        cover_bytes = plugin.extract_cover(file_path)
+
+    if cover_bytes:
+        cover_filename = f"{file_hash[:16]}.webp"
+        cover_output_path = covers_dir / cover_filename
+        if generate_cover_webp(cover_bytes, cover_output_path):
+            return cover_filename
+    return None
+
+
+def _resolve_media_type(
+    metadata, resolved_path: str, library_media_type: str | None
+) -> str:
+    """Determines whether an item is a comic, video, or book.
+
+    Precedence: explicit library media_type > matching configured library > metadata.
+    """
+    if library_media_type and library_media_type != "all":
+        return library_media_type
+
+    matching_type: str | None = None
+    try:
+        all_libs = db.session.scalars(select(Library)).all()
+        for lib_record in all_libs:
+            lib_p_res, lib_p_raw = library_path_conditions(lib_record)
+            if resolved_path.startswith(lib_p_res) or resolved_path.startswith(
+                lib_p_raw
+            ):
+                if lib_record.media_type and lib_record.media_type != "all":
+                    matching_type = lib_record.media_type
+                    break
+    except Exception:
+        logger.debug(
+            "Failed to resolve library media type for %s: %s",
+            resolved_path,
+            exc_info=True,
+        )
+
+    if matching_type:
+        return matching_type
+
+    return getattr(metadata, "media_type", None) or (
+        "comic"
+        if metadata.file_format in ("cbz", "cbr", "zip")
+        else "video"
+        if metadata.file_format in VIDEO_EXTENSIONS
+        else "book"
+    )
+
+
+def _assign_authors_tags_series(book: Book, metadata) -> None:
+    """Resolves and assigns the authors, series, and tags on a Book record."""
+    author_objs = []
+    authors_list = getattr(metadata, "authors", None) or getattr(
+        metadata, "creators", []
+    )
+    for author_name in authors_list:
+        cleaned_name = author_name.strip()
+        if not cleaned_name:
+            continue
+        author = db.session.scalar(select(Author).where(Author.name == cleaned_name))
+
+        if not author:
+            author = Author(name=cleaned_name)
+            db.session.add(author)
+        author_objs.append(author)
+    book.authors = author_objs
+
+    if metadata.series:
+        cleaned_series = metadata.series.strip()
+        series_obj = db.session.scalar(
+            select(Series).where(Series.name == cleaned_series)
+        )
+        if not series_obj:
+            series_obj = Series(name=cleaned_series)
+            db.session.add(series_obj)
+        book.series = series_obj
+        book.series_index = metadata.series_index
+    else:
+        book.series = None
+        book.series_index = None
+
+    tag_objs = []
+    for tag_name in metadata.tags:
+        cleaned_tag = tag_name.strip().title()
+        if not cleaned_tag:
+            continue
+        tag_obj = db.session.scalar(select(Tag).where(Tag.name == cleaned_tag))
+        if not tag_obj:
+            tag_obj = Tag(name=cleaned_tag)
+            db.session.add(tag_obj)
+        tag_objs.append(tag_obj)
+    book.tags = tag_objs
+
+
 def index_single_book(
     file_path: Path,
     covers_dir: Path,
@@ -453,16 +561,9 @@ def index_single_book(
             return None
 
         # Cover processing
-        cover_rel_path = None
-        cover_bytes = metadata.cover_bytes
-        if not cover_bytes and plugin:
-            cover_bytes = plugin.extract_cover(file_path)
-
-        if cover_bytes:
-            cover_filename = f"{file_hash[:16]}.webp"
-            cover_output_path = covers_dir / cover_filename
-            if generate_cover_webp(cover_bytes, cover_output_path):
-                cover_rel_path = cover_filename
+        cover_rel_path = _extract_and_generate_cover(
+            metadata, plugin, file_path, file_hash, covers_dir
+        )
 
         book = existing_book or Book(original_file_path=resolved_path)
         db.session.add(book)
@@ -480,37 +581,9 @@ def index_single_book(
         book.page_count = getattr(metadata, "page_count", None)
 
         # Determine media type:
-        if library_media_type and library_media_type != "all":
-            assigned_media_type = library_media_type
-        else:
-            matching_type = None
-            try:
-                all_libs = db.session.scalars(select(Library)).all()
-                for lib_record in all_libs:
-                    p_res = str(Path(lib_record.path).resolve()).rstrip("/\\") + "/"
-                    p_raw = str(lib_record.path).rstrip("/\\") + "/"
-                    if resolved_path.startswith(p_res) or resolved_path.startswith(
-                        p_raw
-                    ):
-                        if lib_record.media_type and lib_record.media_type != "all":
-                            matching_type = lib_record.media_type
-                            break
-            except Exception:
-                pass
-
-            if matching_type:
-                assigned_media_type = matching_type
-            else:
-                assigned_media_type = getattr(metadata, "media_type", None) or (
-                    "comic"
-                    if metadata.file_format in ("cbz", "cbr", "zip")
-                    else "video"
-                    if metadata.file_format
-                    in ("mp4", "mkv", "webm", "avi", "mov", "m4v")
-                    else "book"
-                )
-
-        book.media_type = assigned_media_type
+        book.media_type = _resolve_media_type(
+            metadata, resolved_path, library_media_type
+        )
         if cover_rel_path:
             book.cover_image_path = cover_rel_path
 
@@ -528,52 +601,7 @@ def index_single_book(
         if hasattr(book, "episode"):
             book.episode = getattr(metadata, "episode", None)
 
-        # Handle Authors / Creators
-        author_objs = []
-        authors_list = getattr(metadata, "authors", None) or getattr(
-            metadata, "creators", []
-        )
-        for author_name in authors_list:
-            cleaned_name = author_name.strip()
-            if not cleaned_name:
-                continue
-            author = db.session.scalar(
-                select(Author).where(Author.name == cleaned_name)
-            )
-
-            if not author:
-                author = Author(name=cleaned_name)
-                db.session.add(author)
-            author_objs.append(author)
-        book.authors = author_objs
-
-        # Handle Series
-        if metadata.series:
-            cleaned_series = metadata.series.strip()
-            series_obj = db.session.scalar(
-                select(Series).where(Series.name == cleaned_series)
-            )
-            if not series_obj:
-                series_obj = Series(name=cleaned_series)
-                db.session.add(series_obj)
-            book.series = series_obj
-            book.series_index = metadata.series_index
-        else:
-            book.series = None
-            book.series_index = None
-
-        # Handle Tags
-        tag_objs = []
-        for tag_name in metadata.tags:
-            cleaned_tag = tag_name.strip().title()
-            if not cleaned_tag:
-                continue
-            tag_obj = db.session.scalar(select(Tag).where(Tag.name == cleaned_tag))
-            if not tag_obj:
-                tag_obj = Tag(name=cleaned_tag)
-                db.session.add(tag_obj)
-            tag_objs.append(tag_obj)
-        book.tags = tag_objs
+        _assign_authors_tags_series(book, metadata)
 
         db.session.commit()
         logger.info(
@@ -650,8 +678,7 @@ def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, i
         if library_id is not None:
             deleted = 0
             for lib in libraries:
-                p_res = str(Path(lib.path).resolve()).rstrip("/\\") + "/"
-                p_raw = str(lib.path).rstrip("/\\") + "/"
+                p_res, p_raw = library_path_conditions(lib)
                 lib_cond = or_(
                     Book.original_file_path.startswith(p_res),
                     Book.original_file_path.startswith(p_raw),

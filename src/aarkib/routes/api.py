@@ -29,12 +29,34 @@ from aarkib.services.book_service import (
     count_books_in_library,
     generate_slug,
     library_path_conditions,
+    path_match_filter,
     resolve_library,
 )
 from aarkib.services.parsers.cbz import IMAGE_EXTENSIONS, natural_sort_key
 from aarkib.services.scanner import scan_library
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+MAX_PER_PAGE = 100
+
+
+def api_error(message: str, status: int = 400):
+    """Return a standardized JSON error envelope."""
+    return jsonify({"error": message}), status
+
+
+def _is_within_covers(file_path: Path) -> bool:
+    """Return True if a path resolves inside the configured covers directory.
+
+    Guards the cover endpoint against path traversal via a tampered
+    ``cover_image_path`` value combined with the covers directory base.
+    """
+    covers_dir = Path(current_app.config["COVERS_DIR"]).resolve()
+    try:
+        file_path.resolve().relative_to(covers_dir)
+        return True
+    except ValueError:
+        return False
 
 
 def api_admin_required(view):
@@ -100,8 +122,9 @@ def list_books():
     sort_by = request.args.get("sort", "added_at")
     order = request.args.get("order", "desc")
     page = request.args.get("page", 1, type=int)
-    per_page = request.args.get(
-        "per_page", current_app.config.get("PAGE_SIZE", 24), type=int
+    per_page = min(
+        request.args.get("per_page", current_app.config.get("PAGE_SIZE", 24), type=int),
+        MAX_PER_PAGE,
     )
 
     query = select(Book).options(
@@ -133,7 +156,7 @@ def list_books():
     if library_filter:
         from aarkib.services.scanner import get_library_definitions
 
-        lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+        lib_defs = get_library_definitions(current_app)
         matched_lib = None
         for lib_def in lib_defs:
             if (
@@ -146,14 +169,7 @@ def list_books():
                 break
 
         if matched_lib:
-            p_res = str(matched_lib["path"].resolve()).rstrip("/\\") + "/"
-            p_raw = str(matched_lib["path"]).rstrip("/\\") + "/"
-            query = query.filter(
-                or_(
-                    Book.original_file_path.startswith(p_res),
-                    Book.original_file_path.startswith(p_raw),
-                )
-            )
+            query = query.filter(path_match_filter(matched_lib["path"]))
         else:
             prefix = library_filter.rstrip("/\\") + "/"
             query = query.filter(Book.original_file_path.startswith(prefix))
@@ -239,7 +255,7 @@ def list_books():
 def list_libraries():
     from aarkib.services.scanner import get_library_definitions
 
-    lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+    lib_defs = get_library_definitions(current_app)
     results = []
     for lib_def in lib_defs:
         results.append(
@@ -306,7 +322,7 @@ def add_library():
 
     # Automatically scan the newly added library folder
     scan_res = scan_library(
-        current_app._get_current_object(),
+        current_app,
         library_id=new_lib.id,  # type: ignore
     )
 
@@ -415,7 +431,7 @@ def delete_library(identifier: str):
 @api_admin_required
 def scan_single_library(identifier: str):
     result = scan_library(
-        current_app._get_current_object(),
+        current_app,
         library_id=identifier,  # type: ignore
     )
     return jsonify({"status": "success", "result": result})
@@ -433,7 +449,7 @@ def get_book(book_id: int):
         .where(Book.id == book_id)
     )
     if not book:
-        abort(404, description="Book not found")
+        return api_error("Book not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
     user_cond = (
@@ -499,7 +515,7 @@ def get_book_cover(book_id: int):
     if book.cover_image_path:
         covers_dir = Path(current_app.config["COVERS_DIR"])
         cover_file = covers_dir / book.cover_image_path
-        if cover_file.exists():
+        if cover_file.exists() and _is_within_covers(cover_file):
             return send_file(cover_file, mimetype="image/webp")
 
     # Generate fallback SVG cover
@@ -557,11 +573,11 @@ def get_book_cover(book_id: int):
 def get_book_file(book_id: int, filename: str | None = None):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404)
+        return api_error("Book not found", 404)
 
     file_path = Path(book.original_file_path)
     if not file_path.exists():
-        abort(404, description="File missing from storage")
+        return api_error("File missing from storage", 404)
 
     guessed, _ = mimetypes.guess_type(str(file_path))
     if guessed:
@@ -590,12 +606,12 @@ def get_book_file(book_id: int, filename: str | None = None):
 def download_book_file(book_id: int, preset: str | None = None):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404)
+        return api_error("Book not found", 404)
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
     file_path = Path(book.original_file_path)
     if not file_path.exists():
-        abort(404, description="File missing from storage")
+        return api_error("File missing from storage", 404)
 
     if preset_arg and book.file_format == "epub":
         optimized_dir = Path(
@@ -648,7 +664,7 @@ def precompute_book_optimization(book_id: int):
     """Pre-generate optimized EPUB cache for a book."""
     book = db.session.get(Book, book_id)
     if not book or book.file_format != "epub":
-        abort(404, description="Book is not an EPUB")
+        return api_error("Book is not an EPUB", 404)
 
     data = request.get_json(silent=True) or {}
     preset_arg = str(data.get("preset", "generic"))
@@ -688,18 +704,18 @@ def precompute_book_optimization(book_id: int):
         )
     except Exception as e:
         current_app.logger.error("Optimization failed: %s", e)
-        abort(500, description=f"Optimization failed: {e}")
+        return api_error(f"Optimization failed: {e}", 500)
 
 
 @api_bp.route("/books/<int:book_id>/pages", methods=["GET"])
 def get_cbz_pages(book_id: int):
     book = db.session.get(Book, book_id)
     if not book or book.file_format not in ("cbz", "zip", "cbr"):
-        abort(404, description="Book is not a CBZ comic")
+        return api_error("Book is not a CBZ comic", 404)
 
     file_path = Path(book.original_file_path)
     if not file_path.exists():
-        abort(404, description="File not found")
+        return api_error("File not found", 404)
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -712,8 +728,8 @@ def get_cbz_pages(book_id: int):
             ]
             image_names.sort(key=natural_sort_key)
     except Exception as e:
-        current_app.logger.error(f"Error reading comic archive {file_path}: {e}")
-        abort(500, description=f"Unable to read comic archive: {e}")
+        current_app.logger.error("Error reading comic archive %s: %s", file_path, e)
+        return api_error(f"Unable to read comic archive: {e}", 500)
 
     pages = [
         {
@@ -773,7 +789,7 @@ def get_cbz_page_image(book_id: int, page_num: int):
             )
     except Exception as e:
         current_app.logger.error(
-            f"Error serving page {page_num} for book {book_id}: {e}"
+            "Error serving page %s for book %s: %s", page_num, book_id, e
         )
         abort(500, description=f"Unable to read comic page: {e}")
 
@@ -782,7 +798,7 @@ def get_cbz_page_image(book_id: int, page_num: int):
 def book_progress(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404)
+        return api_error("Book not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
     user_cond = (
@@ -848,7 +864,7 @@ def book_progress(book_id: int):
 def bookmarks(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404)
+        return api_error("Book not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
 
@@ -859,7 +875,7 @@ def bookmarks(book_id: int):
         snippet = data.get("snippet")
 
         if not location:
-            abort(400, description="Location is required")
+            return api_error("Location is required", 400)
 
         bm = Bookmark(
             user_id=user_id,
@@ -901,16 +917,19 @@ def bookmarks(book_id: int):
 def delete_bookmark(bookmark_id: int):
     bm = db.session.get(Bookmark, bookmark_id)
     if not bm:
-        abort(404)
+        return api_error("Bookmark not found", 404)
+    if bm.user_id and bm.user_id != current_user.id:
+        return api_error("Forbidden", 403)
     db.session.delete(bm)
     db.session.commit()
     return jsonify({"status": "deleted"})
 
 
 @api_bp.route("/library/scan", methods=["POST"])
+@api_bp.route("/libraries/scan", methods=["POST"])
 @api_admin_required
 def trigger_scan():
-    result = scan_library(current_app._get_current_object())  # type: ignore
+    result = scan_library(current_app)  # type: ignore
     return jsonify({"status": "success", "result": result})
 
 
@@ -919,7 +938,7 @@ def trigger_scan():
 def enrich_single_book(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404, description="Book not found")
+        return api_error("Book not found", 404)
 
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
@@ -935,6 +954,7 @@ def enrich_single_book(book_id: int):
 
 
 @api_bp.route("/library/enrich", methods=["POST"])
+@api_bp.route("/libraries/enrich", methods=["POST"])
 @api_admin_required
 def enrich_library():
     data = request.get_json(silent=True) or {}
@@ -946,7 +966,7 @@ def enrich_library():
     from aarkib.services.enricher import enrich_all_books
 
     result = enrich_all_books(
-        current_app._get_current_object(),  # type: ignore
+        current_app,
         overwrite=overwrite,
         provider=provider,
     )
@@ -954,11 +974,12 @@ def enrich_library():
 
 
 @api_bp.route("/books/<int:book_id>/edit", methods=["POST"])
+@api_bp.route("/books/<int:book_id>", methods=["PATCH"])
 @api_admin_required
 def edit_book_metadata(book_id: int):
     book = db.session.get(Book, book_id)
     if not book:
-        abort(404, description="Book not found")
+        return api_error("Book not found", 404)
 
     from aarkib.services.book_service import edit_book_metadata as apply_edits
 

@@ -10,11 +10,12 @@ from flask import (
     send_from_directory,
 )
 from flask_login import current_user
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Series, Tag, User, UserProgress
 from aarkib.routes.auth import optional_or_required_auth
+from aarkib.services.book_service import path_match_filter
 
 ui_bp = Blueprint("ui", __name__)
 
@@ -66,15 +67,10 @@ def index():
     # 3. Dynamic shelves based on configured libraries
     from aarkib.services.scanner import get_library_definitions
 
-    lib_defs = get_library_definitions(current_app._get_current_object())  # type: ignore
+    lib_defs = get_library_definitions(current_app)
     library_shelves = []
     for lib in lib_defs:
-        p_res = str(lib["path"].resolve()).rstrip("/\\") + "/"
-        p_raw = str(lib["path"]).rstrip("/\\") + "/"
-        lib_filter = or_(
-            Book.original_file_path.startswith(p_res),
-            Book.original_file_path.startswith(p_raw),
-        )
+        lib_filter = path_match_filter(lib["path"])
         lib_count = (
             db.session.scalar(select(func.count(Book.id)).where(lib_filter)) or 0
         )
@@ -191,7 +187,7 @@ def settings():
     )
     from aarkib.services.scanner import get_library_definitions
 
-    libraries = get_library_definitions(current_app._get_current_object())  # type: ignore
+    libraries = get_library_definitions(current_app)
     library_dirs = [str(lib["path"]) for lib in libraries]
     covers_path = str(current_app.config.get("COVERS_DIR", "data/covers"))
     book_count = db.session.scalar(select(func.count(Book.id))) or 0

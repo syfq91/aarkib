@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import zipfile
 from pathlib import Path
@@ -8,6 +9,8 @@ import defusedxml.ElementTree as ET
 
 from aarkib.services.parsers.base import ParsedBookMetadata
 from aarkib.services.parsers.epub import extract_series_from_title
+
+logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {
     ".jpg",
@@ -111,7 +114,11 @@ def parse_cbz(file_path: Path) -> ParsedBookMetadata | None:
                         )
                         publication_date = f"{year}-{month}-{day}"
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Failed to parse ComicInfo.xml for %s: %s",
+                        file_path,
+                        exc_info=True,
+                    )
 
             if not series:
                 s_name, s_idx, _ = extract_series_from_title(title)
@@ -127,7 +134,9 @@ def parse_cbz(file_path: Path) -> ParsedBookMetadata | None:
                 try:
                     cover_bytes = zf.read(image_names[0])
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Failed to read cover from %s: %s", file_path, exc_info=True
+                    )
 
             return ParsedBookMetadata(
                 title=title,

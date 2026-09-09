@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,6 +12,8 @@ from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, Book, Series, Tag, User, UserProgress
+
+logger = logging.getLogger(__name__)
 
 opds_bp = Blueprint("opds", __name__, url_prefix="/opds")
 
@@ -141,6 +144,121 @@ def list_presets():
     return jsonify(DEVICE_PRESETS)
 
 
+def _parse_progression_payload(payload) -> tuple[dict | None, Response | None]:
+    """Validates an OPDS Progression update payload.
+
+    Returns (values_dict, error_response). On failure values_dict is None and
+    error_response carries a problem+json document.
+    """
+    if not isinstance(payload, dict):
+        problem = {
+            "type": "https://registry.opds.io/error#progression-invalid-payload",
+            "title": "Progression could not be updated due to an invalid payload.",
+        }
+        return None, Response(
+            json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE
+        )
+
+    if "progression" not in payload or "device" not in payload:
+        problem = {
+            "type": "https://registry.opds.io/error#progression-invalid-payload",
+            "title": "Missing required fields: 'progression' and 'device' are mandatory.",
+        }
+        return None, Response(
+            json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE
+        )
+
+    try:
+        prog_raw = float(payload["progression"])
+        if prog_raw <= 1.0 and prog_raw >= 0.0:
+            percentage = prog_raw * 100.0
+        else:
+            percentage = max(0.0, min(100.0, prog_raw))
+    except ValueError, TypeError:
+        problem = {
+            "type": "https://registry.opds.io/error#progression-invalid-payload",
+            "title": "Invalid 'progression' value.",
+        }
+        return None, Response(
+            json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE
+        )
+
+    device_info = payload.get("device", {})
+    if (
+        not isinstance(device_info, dict)
+        or not device_info.get("id")
+        or not device_info.get("name")
+    ):
+        problem = {
+            "type": "https://registry.opds.io/error#progression-invalid-payload",
+            "title": "Invalid 'device' object. 'id' and 'name' are required.",
+        }
+        return None, Response(
+            json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE
+        )
+
+    refs = payload.get("references")
+    references_json = json.dumps(refs) if isinstance(refs, list) and refs else None
+    primary_location = refs[0] if isinstance(refs, list) and refs else str(percentage)
+
+    return (
+        {
+            "percentage": percentage,
+            "device_id": str(device_info.get("id")),
+            "device_name": str(device_info.get("name")),
+            "chapter_title": payload.get("title"),
+            "references_json": references_json,
+            "primary_location": primary_location,
+            "modified_dt": _parse_modified_timestamp(payload.get("modified")),
+        },
+        None,
+    )
+
+
+def _parse_modified_timestamp(modified_str) -> datetime:
+    """Parses an RFC3339-ish modified timestamp, defaulting to now."""
+    if not modified_str:
+        return datetime.now(UTC)
+    try:
+        if modified_str.endswith("Z"):
+            modified_str = modified_str[:-1] + "+00:00"
+        parsed_dt = datetime.fromisoformat(modified_str)
+        if parsed_dt.tzinfo is None:
+            parsed_dt = parsed_dt.replace(tzinfo=UTC)
+        return parsed_dt
+    except Exception:
+        logger.debug("Invalid 'modified' timestamp %r: %s", modified_str, exc_info=True)
+        return datetime.now(UTC)
+
+
+def _build_progression_response(progress, user) -> Response:
+    """Serializes a UserProgress record as an OPDS Progression document."""
+    doc = format_progression_document(progress, user)
+    return Response(
+        json.dumps(doc, indent=2), status=200, mimetype=OPDS_PROGRESSION_TYPE
+    )
+
+
+def _resolve_progression_conflict(progress, modified_dt, user) -> Response | None:
+    """Returns a 409 problem response if an incoming update is older than the stored one."""
+    if progress and progress.last_read_at:
+        curr_dt = progress.last_read_at
+        if curr_dt.tzinfo is None:
+            curr_dt = curr_dt.replace(tzinfo=UTC)
+        if modified_dt < curr_dt:
+            problem = {
+                "type": "https://registry.opds.io/error#progression-date",
+                "title": "A newer progression timestamp has already been registered.",
+                "current": format_progression_document(progress, user),
+            }
+            return Response(
+                json.dumps(problem, indent=2),
+                status=409,
+                mimetype=PROBLEM_JSON_TYPE,
+            )
+    return None
+
+
 @opds_bp.route("/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 @opds_bp.route("/v2/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 def opds_book_progression(book_id: int):
@@ -178,72 +296,21 @@ def opds_book_progression(book_id: int):
         ):
             return Response("{}", status=200, mimetype=OPDS_PROGRESSION_TYPE)
 
-        doc = format_progression_document(progress, user)
-        return Response(
-            json.dumps(doc, indent=2), status=200, mimetype=OPDS_PROGRESSION_TYPE
-        )
+        return _build_progression_response(progress, user)
 
     # --- PUT / POST: Update Progression ---
     payload = request.get_json(silent=True)
-    if not payload or not isinstance(payload, dict):
+    if not isinstance(payload, dict):
         problem = {
             "type": "https://registry.opds.io/error#progression-invalid-payload",
             "title": "Progression could not be updated due to an invalid payload.",
         }
         return Response(json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE)
 
-    if "progression" not in payload or "device" not in payload:
-        problem = {
-            "type": "https://registry.opds.io/error#progression-invalid-payload",
-            "title": "Missing required fields: 'progression' and 'device' are mandatory.",
-        }
-        return Response(json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE)
-
-    try:
-        prog_raw = float(payload["progression"])
-        if prog_raw <= 1.0 and prog_raw >= 0.0:
-            percentage = prog_raw * 100.0
-        else:
-            percentage = max(0.0, min(100.0, prog_raw))
-    except ValueError, TypeError:
-        problem = {
-            "type": "https://registry.opds.io/error#progression-invalid-payload",
-            "title": "Invalid 'progression' value.",
-        }
-        return Response(json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE)
-
-    device_info = payload.get("device", {})
-    if (
-        not isinstance(device_info, dict)
-        or not device_info.get("id")
-        or not device_info.get("name")
-    ):
-        problem = {
-            "type": "https://registry.opds.io/error#progression-invalid-payload",
-            "title": "Invalid 'device' object. 'id' and 'name' are required.",
-        }
-        return Response(json.dumps(problem), status=400, mimetype=PROBLEM_JSON_TYPE)
-
-    device_id = str(device_info.get("id"))
-    device_name = str(device_info.get("name"))
-    chapter_title = payload.get("title")
-
-    refs = payload.get("references")
-    references_json = json.dumps(refs) if isinstance(refs, list) and refs else None
-    primary_location = refs[0] if isinstance(refs, list) and refs else str(percentage)
-
-    modified_str = payload.get("modified")
-    modified_dt = datetime.now(UTC)
-    if modified_str:
-        try:
-            if modified_str.endswith("Z"):
-                modified_str = modified_str[:-1] + "+00:00"
-            parsed_dt = datetime.fromisoformat(modified_str)
-            if parsed_dt.tzinfo is None:
-                parsed_dt = parsed_dt.replace(tzinfo=UTC)
-            modified_dt = parsed_dt
-        except Exception:
-            pass
+    vals, error_response = _parse_progression_payload(payload)
+    if error_response is not None:
+        return error_response
+    assert vals is not None
 
     progress = db.session.scalar(
         select(UserProgress).where(
@@ -252,46 +319,34 @@ def opds_book_progression(book_id: int):
         )
     )
 
-    if progress and progress.last_read_at:
-        curr_dt = progress.last_read_at
-        if curr_dt.tzinfo is None:
-            curr_dt = curr_dt.replace(tzinfo=UTC)
-        if modified_dt < curr_dt:
-            problem = {
-                "type": "https://registry.opds.io/error#progression-date",
-                "title": "A newer progression timestamp has already been registered.",
-                "current": format_progression_document(progress, user),
-            }
-            return Response(
-                json.dumps(problem, indent=2),
-                status=409,
-                mimetype=PROBLEM_JSON_TYPE,
-            )
+    conflict = _resolve_progression_conflict(progress, vals["modified_dt"], user)
+    if conflict is not None:
+        return conflict
 
     is_new = progress is None
     if not progress:
         progress = UserProgress(
             book_id=book_id,
             user_id=user_id,
-            progress_location=primary_location,
-            percentage=percentage,
-            is_completed=(percentage >= 100.0),
-            last_read_at=modified_dt,
-            device_id=device_id,
-            device_name=device_name,
-            chapter_title=chapter_title,
-            references_json=references_json,
+            progress_location=vals["primary_location"],
+            percentage=vals["percentage"],
+            is_completed=(vals["percentage"] >= 100.0),
+            last_read_at=vals["modified_dt"],
+            device_id=vals["device_id"],
+            device_name=vals["device_name"],
+            chapter_title=vals["chapter_title"],
+            references_json=vals["references_json"],
         )
         db.session.add(progress)
     else:
-        progress.progress_location = primary_location
-        progress.percentage = percentage
-        progress.is_completed = percentage >= 100.0
-        progress.last_read_at = modified_dt
-        progress.device_id = device_id
-        progress.device_name = device_name
-        progress.chapter_title = chapter_title
-        progress.references_json = references_json
+        progress.progress_location = vals["primary_location"]
+        progress.percentage = vals["percentage"]
+        progress.is_completed = vals["percentage"] >= 100.0
+        progress.last_read_at = vals["modified_dt"]
+        progress.device_id = vals["device_id"]
+        progress.device_name = vals["device_name"]
+        progress.chapter_title = vals["chapter_title"]
+        progress.references_json = vals["references_json"]
 
     db.session.commit()
     updated_doc = format_progression_document(progress, user)
