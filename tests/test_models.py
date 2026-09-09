@@ -225,3 +225,113 @@ def test_parser_registry_and_base_metadata(tmp_path):
     assert extracted.title == "Song"
     assert extracted.media_type == "audio"
     assert extracted.creators == ["Test Musician"]
+
+
+def test_media_item_first_class_model(app):
+    from aarkib.models import (
+        Author,
+        Book,
+        Bookmark,
+        Collection,
+        Creator,
+        Item,
+        MediaItem,
+        MediaType,
+        Series,
+        Tag,
+        UserProgress,
+    )
+    from aarkib.models.book import Book as BookShim
+    from aarkib.services.media_service import edit_media_metadata
+
+    # 1. Verify identity and alias equivalence
+    assert MediaItem is Book
+    assert MediaItem is Item
+    assert BookShim is MediaItem
+    assert Creator is Author
+    assert Collection is Series
+
+    # 2. Audio track item instantiation and audio mixin attributes
+    audio = MediaItem(
+        title="Midnight Symphony",
+        original_file_path="/tmp/audio/symphony.flac",
+        file_format="flac",
+        file_hash="flac_hash_001",
+        album="Classical Nights",
+        track_number=4,
+        disc_number=1,
+        duration=365.0,
+        bitrate=920,
+    )
+    assert audio.media_type == MediaType.AUDIO.value
+    assert audio.is_audio is True
+    assert audio.is_video is False
+    assert audio.is_book is False
+    assert audio.is_comic is False
+    assert audio.formatted_duration == "6m 05s"
+    assert repr(audio) == "<MediaItem None: Midnight Symphony>"
+
+    # 3. Creator, Series, Tag synonyms
+    creator = Creator(name="Beethoven")
+    collection = Collection(name="The Masterpieces")
+    genre = Tag(name="Classical")
+
+    audio.creators.append(creator)
+    audio.collection = collection
+    audio.tags.append(genre)
+
+    db.session.add_all([creator, collection, genre, audio])
+    db.session.commit()
+
+    # Verify bidirectional relationship synonyms
+    assert audio in creator.media_items
+    assert audio in creator.books
+    assert audio in collection.media_items
+    assert audio in collection.books
+    assert audio in genre.media_items
+    assert audio in genre.books
+
+    # Verify progress and bookmark synonyms
+    progress = UserProgress(
+        media_item=audio,
+        progress_location="180",
+        percentage=50.0,
+    )
+    bookmark = Bookmark(
+        media_item=audio,
+        location="180",
+        title="Interlude",
+    )
+    db.session.add_all([progress, bookmark])
+    db.session.commit()
+
+    assert progress.item is audio
+    assert progress.book is audio
+    assert bookmark.item is audio
+    assert bookmark.book is audio
+    assert progress in audio.progress_records
+    assert bookmark in audio.bookmarks
+
+    # 4. Test edit_media_metadata with audio & video fields
+    edit_media_metadata(
+        audio,
+        {
+            "title": "Midnight Symphony (Remastered)",
+            "album": "Classical Nights Deluxe",
+            "track_number": "5",
+            "disc_number": "2",
+            "season": "1",
+            "episode": "2",
+        },
+    )
+    db.session.commit()
+
+    saved = db.session.get(MediaItem, audio.id)
+    assert saved is not None
+    assert saved.title == "Midnight Symphony (Remastered)"
+    assert saved.album == "Classical Nights Deluxe"
+    assert saved.track_number == 5
+    assert saved.disc_number == 2
+    assert saved.season == 1
+    assert saved.episode == 2
+    assert saved.episode_code == "S01E02"

@@ -1,12 +1,13 @@
 from aarkib.models.author import Author, book_authors
-from aarkib.models.book import Book
 from aarkib.models.library import Library
 from aarkib.models.media import (
     AudioTrackMixin,
     MediaItemMixin,
     MediaType,
+    PlayableItemMixin,
     VideoItemMixin,
 )
+from aarkib.models.media_item import Book, Item, MediaItem
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.series import Series
 from aarkib.models.tag import Tag, book_tags
@@ -18,6 +19,8 @@ Collection = Series
 
 __all__ = [
     "User",
+    "MediaItem",
+    "Item",
     "Book",
     "Library",
     "Author",
@@ -29,6 +32,7 @@ __all__ = [
     "Bookmark",
     "MediaType",
     "MediaItemMixin",
+    "PlayableItemMixin",
     "AudioTrackMixin",
     "VideoItemMixin",
     "book_authors",

@@ -13,12 +13,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aarkib.extensions import db
 
 if TYPE_CHECKING:
-    from aarkib.models.book import Book
+    from aarkib.models.media_item import MediaItem
     from aarkib.models.user import User
 
 
@@ -54,7 +54,13 @@ class UserProgress(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="progress_records")
-    book: Mapped[Book] = relationship("Book", back_populates="progress_records")
+    book: Mapped[MediaItem] = relationship(
+        "MediaItem", back_populates="progress_records"
+    )
+
+    # Generalized domain synonyms
+    media_item = synonym("book")
+    item = synonym("book")
 
     @property
     def media_id(self) -> int:
@@ -97,7 +103,11 @@ class Bookmark(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="bookmarks")
-    book: Mapped[Book] = relationship("Book", back_populates="bookmarks")
+    book: Mapped[MediaItem] = relationship("MediaItem", back_populates="bookmarks")
+
+    # Generalized domain synonyms
+    media_item = synonym("book")
+    item = synonym("book")
 
     @property
     def media_id(self) -> int:

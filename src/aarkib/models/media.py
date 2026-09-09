@@ -77,7 +77,17 @@ class MediaItemMixin:
     @property
     def is_audio(self) -> bool:
         """Check if this item is an audio track or audiobook."""
-        return self.media_type == MediaType.AUDIO.value
+        if self.media_type:
+            return self.media_type == MediaType.AUDIO.value
+        return (self.file_format or "").lower() in (
+            "mp3",
+            "m4a",
+            "flac",
+            "ogg",
+            "opus",
+            "wav",
+            "aac",
+        )
 
     @property
     def is_video(self) -> bool:
@@ -95,20 +105,24 @@ class MediaItemMixin:
         return f"{self.file_size} B"
 
 
-class AudioTrackMixin:
-    """Blueprint mixin for audio track metadata attributes (for upcoming audio support)."""
+class PlayableItemMixin:
+    """Shared playback attributes for audio and video media."""
 
     duration: Mapped[float | None] = mapped_column(nullable=True)  # in seconds
     bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in kbps
+
+
+class AudioTrackMixin(PlayableItemMixin):
+    """Blueprint mixin for audio track metadata attributes."""
+
     album: Mapped[str | None] = mapped_column(String(255), nullable=True)
     track_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     disc_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
-class VideoItemMixin:
-    """Blueprint mixin for video media metadata attributes (for upcoming video support)."""
+class VideoItemMixin(PlayableItemMixin):
+    """Blueprint mixin for video media metadata attributes."""
 
-    duration: Mapped[float | None] = mapped_column(nullable=True)  # in seconds
     resolution_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     resolution_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     codec: Mapped[str | None] = mapped_column(String(50), nullable=True)

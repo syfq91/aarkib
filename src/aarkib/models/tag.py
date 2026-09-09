@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Table
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aarkib.extensions import db
 
 if TYPE_CHECKING:
-    from aarkib.models.book import Book
+    from aarkib.models.media_item import MediaItem
 
 book_tags = Table(
     "book_tags",
@@ -31,9 +31,13 @@ class Tag(db.Model):
     )
 
     # Relationships
-    books: Mapped[list[Book]] = relationship(
-        "Book", secondary=book_tags, back_populates="tags"
+    books: Mapped[list[MediaItem]] = relationship(
+        "MediaItem", secondary=book_tags, back_populates="tags"
     )
+
+    # Generalized domain synonyms
+    media_items = synonym("books")
+    items = synonym("books")
 
     def __repr__(self) -> str:
         return f"<Tag {self.name}>"

@@ -78,10 +78,11 @@ aarkib/
 │   ├── config.py             # Config dataclass, defaults, and AARKIB_MEDIA_DIR* multi-folder discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
-│   │   ├── __init__.py       # Model exports and aliases (Creator=Author, Collection=Series)
+│   │   ├── __init__.py       # Model exports and aliases (MediaItem, Item=MediaItem, Book=MediaItem, Creator=Author, Collection=Series)
+│   │   ├── media_item.py     # Canonical MediaItem model (unifying books, comics, video, audio) with AudioTrackMixin and VideoItemMixin
+│   │   ├── book.py           # Backward-compatibility module re-exporting MediaItem as Book and Item
 │   │   ├── library.py        # Library model (persisted media folders with slug, path, media_type, counts)
-│   │   ├── media.py          # MediaItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum (book, comic, audio, video)
-│   │   ├── book.py           # Book, Author, Series, Tag, and association tables
+│   │   ├── media.py          # MediaItemMixin, PlayableItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum
 │   │   ├── author.py         # Author / Creator model and book_authors table
 │   │   ├── series.py         # Series / Collection model
 │   │   ├── tag.py            # Tag model and book_tags table
@@ -105,7 +106,8 @@ aarkib/
 │   │   ├── optimizer.py      # E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── enricher.py       # Google Books & Open Library metadata enrichment client
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
-│   │   ├── book_service.py   # Shared book/library service: edit_book_metadata, resolve_or_create_authors/series/tags, generate_slug, resolve_library, path_match_filter, library_path_conditions, VIDEO_EXTENSIONS
+│   │   ├── media_service.py  # Canonical multi-media service: edit_media_metadata, resolve creators/collections/tags, slug generation, path filtering, count_media
+│   │   ├── book_service.py   # Backward-compatibility shim forwarding to media_service.py
 │   │   └── parsers/
 │   │       ├── base.py       # BaseParsedMetadata, ParsedBookMetadata dataclasses, and parser registry
 │   │       ├── epub.py       # EPUB 2/3 XML & OPF metadata, cover extractor, collection/series parser
