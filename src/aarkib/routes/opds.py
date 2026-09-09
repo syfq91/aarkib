@@ -48,7 +48,10 @@ def get_opds_user() -> User | None:
 
 
 def opds_auth_required(f: Any) -> Any:
+    """Enforce HTTP Basic auth on OPDS feeds when AUTH_REQUIRED is enabled."""
+
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        """Authenticate the request or return a 401 Basic-auth challenge."""
         if current_app.config.get("AUTH_REQUIRED", False):
             user = get_opds_user()
             if not user:
@@ -132,6 +135,7 @@ def format_progression_document(
 
 @opds_bp.route("/authentication.json", methods=["GET"])
 def opds_authentication_doc():
+    """Serve the OPDS Authentication Document (application/opds-authentication+json)."""
     doc = make_opds_auth_document()
     return Response(json.dumps(doc, indent=2), status=200, mimetype=OPDS_AUTH_TYPE)
 
@@ -498,6 +502,7 @@ def opds2_recent(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/", methods=["GET"])
 @opds_auth_required
 def root_catalog(preset: str | None = None):
+    """Serve the OPDS 1.2 navigation/root catalog feed."""
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
@@ -517,6 +522,7 @@ def root_catalog(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/recent", methods=["GET"])
 @opds_auth_required
 def recent_feed(preset: str | None = None):
+    """Serve an OPDS 1.2 acquisition feed of recently added items."""
     page = request.args.get("page", 1, type=int)
     per_page = 30
     query = (
@@ -551,6 +557,7 @@ def recent_feed(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/authors", methods=["GET"])
 @opds_auth_required
 def authors_index(preset: str | None = None):
+    """Serve an OPDS 1.2 navigation feed of all authors."""
     authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
@@ -572,6 +579,7 @@ def authors_index(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/authors/<int:author_id>", methods=["GET"])
 @opds_auth_required
 def author_books(author_id: int, preset: str | None = None):
+    """Serve an OPDS 1.2 acquisition feed of a single author's items."""
     author = db.session.get(Author, author_id)
     if not author:
         return Response("Author not found", 404)
@@ -609,6 +617,7 @@ def author_books(author_id: int, preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/series", methods=["GET"])
 @opds_auth_required
 def series_index(preset: str | None = None):
+    """Serve an OPDS 1.2 navigation feed of all series/collections."""
     series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
@@ -630,6 +639,7 @@ def series_index(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/series/<int:series_id>", methods=["GET"])
 @opds_auth_required
 def series_books(series_id: int, preset: str | None = None):
+    """Serve an OPDS 1.2 acquisition feed of a single series' items."""
     series_obj = db.session.get(Series, series_id)
     if not series_obj:
         return Response("Series not found", 404)
@@ -667,6 +677,7 @@ def series_books(series_id: int, preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/tags", methods=["GET"])
 @opds_auth_required
 def tags_index(preset: str | None = None):
+    """Serve an OPDS 1.2 navigation feed of all tags/categories."""
     tags = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
@@ -688,6 +699,7 @@ def tags_index(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/tags/<int:tag_id>", methods=["GET"])
 @opds_auth_required
 def tag_books(tag_id: int, preset: str | None = None):
+    """Serve an OPDS 1.2 acquisition feed of a single tag's items."""
     tag_obj = db.session.get(Tag, tag_id)
     if not tag_obj:
         return Response("Tag not found", 404)
@@ -724,6 +736,7 @@ def tag_books(tag_id: int, preset: str | None = None):
 @opds_bp.route("/search/opensearch.xml", methods=["GET"])
 @opds_bp.route(f"/{PRESET_RULE}/search/opensearch.xml", methods=["GET"])
 def opensearch_description(preset: str | None = None):
+    """Serve the OpenSearch description document for OPDS search."""
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
         render_template(
@@ -741,6 +754,7 @@ def opensearch_description(preset: str | None = None):
 @opds_bp.route(f"/{PRESET_RULE}/search", methods=["GET"])
 @opds_auth_required
 def search_feed(preset: str | None = None):
+    """Serve an OPDS 1.2 acquisition feed of search results (q) across the catalog."""
     q = request.args.get("q", "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = 30

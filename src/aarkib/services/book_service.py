@@ -18,6 +18,12 @@ from aarkib.models import Author, Book, Library, Series, Tag
 VIDEO_EXTENSIONS = frozenset({"mp4", "mkv", "webm", "avi", "mov", "m4v"})
 MEDIA_TYPE_CHOICES = frozenset({"all", "book", "comic", "video"})
 
+MAX_TITLE_LENGTH = 500
+MAX_DESCRIPTION_LENGTH = 50000
+MAX_PUBLISHER_LENGTH = 255
+MAX_LANGUAGE_LENGTH = 30
+MAX_ISBN_LENGTH = 50
+
 
 def resolve_or_create_authors(names: list[str]) -> list[Author]:
     """Look up (or create) Author records for the given names and return them.
@@ -71,7 +77,7 @@ def edit_book_metadata(book: Book, data: dict) -> Book:
     """
     title = data.get("title")
     if title:
-        book.title = str(title).strip()
+        book.title = str(title).strip()[:MAX_TITLE_LENGTH]
 
     # Authors
     authors_input = data.get("authors")
@@ -114,15 +120,27 @@ def edit_book_metadata(book: Book, data: dict) -> Book:
 
     # Optional descriptive fields
     if "description" in data:
-        book.description = data.get("description") or None
+        description = data.get("description") or None
+        if description:
+            description = str(description)[:MAX_DESCRIPTION_LENGTH]
+        book.description = description
     if "publisher" in data:
-        book.publisher = data.get("publisher") or None
+        publisher = data.get("publisher") or None
+        if publisher:
+            publisher = str(publisher).strip()[:MAX_PUBLISHER_LENGTH]
+        book.publisher = publisher
     if "publication_date" in data:
         book.publication_date = data.get("publication_date") or None
     if "isbn" in data:
-        book.isbn = data.get("isbn") or None
+        isbn = data.get("isbn") or None
+        if isbn:
+            isbn = str(isbn).strip()[:MAX_ISBN_LENGTH]
+        book.isbn = isbn
     if "language" in data:
-        book.language = data.get("language") or "en"
+        language = data.get("language")
+        if language:
+            language = str(language).strip()[:MAX_LANGUAGE_LENGTH]
+        book.language = language or "en"
 
     return book
 

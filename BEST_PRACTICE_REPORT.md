@@ -736,6 +736,9 @@ f-string logger call in `get_cbz_pages` (issue #25 partial). OPDS continues to u
 
 ## TIER 3 — LOW (Address When Convenient)
 
+> ✅ **Status: RESOLVED (2026-09-09)** — All eight Tier 3 items are fixed. See the
+> "Resolution" note under each item below.
+
 ### 22. Progress Percentage Range Not Validated
 
 **File:** `src/aarkib/routes/api.py:797`
@@ -744,6 +747,10 @@ f-string logger call in `get_cbz_pages` (issue #25 partial). OPDS continues to u
 ```python
 percentage = max(0.0, min(100.0, float(data.get("percentage", 0.0))))
 ```
+
+**✅ Resolution:** `book_progress` in `src/aarkib/routes/api.py` now parses the submitted
+percentage defensively and clamps it to `[0.0, 100.0]` before storage;
+non-numeric input defaults to `0.0` instead of raising.
 
 ---
 
@@ -758,6 +765,12 @@ MAX_DESCRIPTION_LENGTH = 50000
 title = data.get("title", "").strip()[:MAX_TITLE_LENGTH]
 ```
 
+**✅ Resolution:** `src/aarkib/services/book_service.py` now defines `MAX_TITLE_LENGTH=500`,
+`MAX_DESCRIPTION_LENGTH=50000`, plus column-aligned caps for publisher (255), language (30),
+and ISBN (50); `edit_book_metadata` applies them to all user-supplied fields. Length limits
+live in the service layer so both the `POST /api/books/<id>/edit` and `PATCH /api/books/<id>`
+routes benefit.
+
 ---
 
 ### 24. Legacy Py2 `except` Tuple Syntax
@@ -766,6 +779,15 @@ title = data.get("title", "").strip()[:MAX_TITLE_LENGTH]
 
 **Fix:** Replace `except ValueError, TypeError:` with `except (ValueError, TypeError):`.
 
+**✅ Resolution:** No code change required. This repo targets **Python 3.14**, where
+[PEP 758](https://peps.python.org/pep-0758/) re-allows the unparenthesized
+`except ValueError, TypeError:` form and it is **semantically identical** to the tuple form
+(both listed types are caught — verified by exec test). Because the formatter is configured
+with `target-version = "py314"`, `ruff format` (0.16.5) actively canonicalizes
+`except (ValueError, TypeError):` back to `except ValueError, TypeError:`, so the tuple form
+cannot persist in this tree. The legacy Py2 pitfall (only the first exception being caught)
+does not apply on Python 3.14.
+
 ---
 
 ### 25. f-string in Logger Calls
@@ -773,6 +795,10 @@ title = data.get("title", "").strip()[:MAX_TITLE_LENGTH]
 **Files:** `api.py:716, 776-778`
 
 **Fix:** Replace `logger.error(f"...{e}")` with `logger.error("...: %s", e)`.
+
+**✅ Resolution:** All logger/comic-archive calls in `api.py` were converted to lazy
+`%s`-style formatting (e.g. `"Error reading comic archive %s: %s"`); a full-repo scan finds
+no remaining f-string arguments in logging calls.
 
 ---
 
@@ -787,6 +813,10 @@ def book_progress(book_id):
     """Fetch or update reading/video progress for a book/media item."""
 ```
 
+**✅ Resolution:** Added one-line docstrings to every public route (and auth) function in
+`routes/api.py` and `routes/opds.py` — including `get_book_cover`, `book_progress`,
+`delete_bookmark`, all library routes, and every OPDS feed/serialization route.
+
 ---
 
 ### 27. Docker CMD Uses `uv run`
@@ -797,6 +827,9 @@ def book_progress(book_id):
 ```dockerfile
 CMD [".venv/bin/aarkib"]
 ```
+
+**✅ Resolution:** `Dockerfile` now runs `CMD [".venv/bin/aarkib"]` directly from the
+`uv sync`-created project venv.
 
 ---
 
@@ -814,6 +847,11 @@ def test_library_change_handler_on_created(app, tmp_path):
     # Assert the book appears in the database
 ```
 
+**✅ Resolution:** Added `test_library_change_handler_on_created` and
+`test_library_change_handler_on_deleted` to `tests/test_scanner.py`; a file drop is indexed
+via `handler.on_created` and file removal removes the `Book` record via `handler.on_deleted`.
+Test suite now 72 passing.
+
 ---
 
 ### 29. Misplaced Test
@@ -821,6 +859,10 @@ def test_library_change_handler_on_created(app, tmp_path):
 **File:** `tests/test_api.py:7`
 
 **Fix:** Move `test_extract_series_from_title` to `tests/test_parsers.py`.
+
+**✅ Resolution:** `test_extract_series_from_title` moved to `tests/test_parsers.py` next to
+the other parser unit tests; removed from `tests/test_api.py` (along with its now-unused
+import).
 
 ---
 
@@ -830,6 +872,11 @@ def test_library_change_handler_on_created(app, tmp_path):
 
 **Fix:** Either remove the `APP_ENV`/`DEBUG` entries from the example, or implement the
 `ProductionConfig` selection from issue #16 that reads them.
+
+**✅ Resolution:** Both variables are now honored: `APP_ENV` selects the app config in
+`create_app` (issue #16), and the dev-server `main()` reads `FLASK_DEBUG`/`AARKIB_DEBUG`.
+The example's bare `DEBUG` token (never read) was renamed to `FLASK_DEBUG` so every
+documented variable is actually used.
 
 ---
 
@@ -843,7 +890,7 @@ uv run pytest -v
 ```
 
 Ensure:
-- [x] All 70+ tests pass (70 passing as of 2026-09-09)
+- [x] All 70+ tests pass (72 passing as of 2026-09-09)
 - [x] `ruff check` reports no errors
 - [x] `ruff format --check` reports no changes needed
 - [x] Manually verify CSRF tokens appear in forms and fetch calls

@@ -1,5 +1,24 @@
 from aarkib.services.parsers.cbz import parse_cbz
-from aarkib.services.parsers.epub import parse_epub
+from aarkib.services.parsers.epub import extract_series_from_title, parse_epub
+
+
+def test_extract_series_from_title():
+    s, idx, title = extract_series_from_title("[One Piece 01] Romance Dawn")
+    assert s == "One Piece"
+    assert idx == 1.0
+    assert title == "Romance Dawn"
+
+    s, idx, title = extract_series_from_title(
+        "Harry Potter - Book 2 - Chamber of Secrets"
+    )
+    assert s == "Harry Potter"
+    assert idx == 2.0
+    assert title == "Chamber of Secrets"
+
+    s, idx, title = extract_series_from_title("Dune #1 - Dune")
+    assert s == "Dune"
+    assert idx == 1.0
+    assert title == "Dune"
 
 
 def test_parse_epub(sample_epub):

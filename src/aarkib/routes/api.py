@@ -71,6 +71,7 @@ def api_admin_required(view):
     @wraps(view)
     @login_required
     def wrapped(*args, **kwargs):
+        """Reject non-admin requests with a JSON 403 before calling the view."""
         if not current_user.is_admin:
             return jsonify({"error": "Administrator privileges required"}), 403
         return view(*args, **kwargs)
@@ -80,6 +81,7 @@ def api_admin_required(view):
 
 @api_bp.before_request
 def enforce_api_auth():
+    """Authenticate the API request (HTTP Basic or session) and enforce auth settings."""
     # Endpoints exempt from authentication
     if request.endpoint in ("api.get_book_cover", "api.health"):
         return None
@@ -106,6 +108,7 @@ def health():
 
 @api_bp.route("/books", methods=["GET"])
 def list_books():
+    """List catalog items with filtering (q, media_type, library), pagination, and progress."""
     q = request.args.get("q", "").strip()
     author_id = request.args.get("author_id", type=int)
     series_id = request.args.get("series_id", type=int)
@@ -253,6 +256,7 @@ def list_books():
 
 @api_bp.route("/libraries", methods=["GET"])
 def list_libraries():
+    """List all configured media folders (libraries) with media types and item counts."""
     from aarkib.services.scanner import get_library_definitions
 
     lib_defs = get_library_definitions(current_app)
@@ -274,6 +278,7 @@ def list_libraries():
 @api_bp.route("/libraries", methods=["POST"])
 @api_admin_required
 def add_library():
+    """Add and auto-scan a new media folder (library) with an optional custom media type."""
     data = request.get_json(silent=True) or {}
     raw_path = str(data.get("path", "")).strip()
     if not raw_path:
@@ -340,6 +345,7 @@ def add_library():
 
 @api_bp.route("/libraries/<identifier>", methods=["GET"])
 def get_library_info(identifier: str):
+    """Return details for a single library by ID or slug."""
     try:
         lib = resolve_library(identifier)
     except KeyError:
@@ -351,6 +357,7 @@ def get_library_info(identifier: str):
 @api_bp.route("/libraries/<identifier>", methods=["PUT"])
 @api_admin_required
 def update_library(identifier: str):
+    """Update a library's name/media_type and reclassify indexed books accordingly."""
     try:
         lib = resolve_library(identifier)
     except KeyError:
@@ -399,6 +406,7 @@ def update_library(identifier: str):
 @api_bp.route("/libraries/<identifier>", methods=["DELETE"])
 @api_admin_required
 def delete_library(identifier: str):
+    """Delete a library and all catalog items indexed under its folder."""
     try:
         lib = resolve_library(identifier)
     except KeyError:
@@ -430,6 +438,7 @@ def delete_library(identifier: str):
 @api_bp.route("/libraries/<identifier>/scan", methods=["POST"])
 @api_admin_required
 def scan_single_library(identifier: str):
+    """Trigger a targeted rescan of a specific media folder (library)."""
     result = scan_library(
         current_app,
         library_id=identifier,  # type: ignore
@@ -439,6 +448,7 @@ def scan_single_library(identifier: str):
 
 @api_bp.route("/books/<int:book_id>", methods=["GET"])
 def get_book(book_id: int):
+    """Return full item details, including user progress, for a single book."""
     book = db.session.scalar(
         select(Book)
         .options(
@@ -508,6 +518,7 @@ def get_book(book_id: int):
 
 @api_bp.route("/books/<int:book_id>/cover", methods=["GET"])
 def get_book_cover(book_id: int):
+    """Serve the cached WebP cover/poster image for a book."""
     book = db.session.get(Book, book_id)
     if not book:
         abort(404)
@@ -571,6 +582,7 @@ def get_book_cover(book_id: int):
 @api_bp.route("/books/<int:book_id>/file/<path:filename>", methods=["GET"])
 @api_bp.route("/books/<int:book_id>/book.epub", methods=["GET"])
 def get_book_file(book_id: int, filename: str | None = None):
+    """Stream the original media file with HTTP 206 byte-range support."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -604,6 +616,7 @@ def get_book_file(book_id: int, filename: str | None = None):
     methods=["GET"],
 )
 def download_book_file(book_id: int, preset: str | None = None):
+    """Download a book file, optionally served from a precomputed e-ink optimized EPUB."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -709,6 +722,7 @@ def precompute_book_optimization(book_id: int):
 
 @api_bp.route("/books/<int:book_id>/pages", methods=["GET"])
 def get_cbz_pages(book_id: int):
+    """List page metadata (path, width, height) for a CBZ comic."""
     book = db.session.get(Book, book_id)
     if not book or book.file_format not in ("cbz", "zip", "cbr"):
         return api_error("Book is not a CBZ comic", 404)
@@ -744,6 +758,7 @@ def get_cbz_pages(book_id: int):
 
 @api_bp.route("/books/<int:book_id>/page/<int:page_num>", methods=["GET"])
 def get_cbz_page_image(book_id: int, page_num: int):
+    """Serve a single page image from a CBZ comic archive."""
     book = db.session.get(Book, book_id)
     if not book or book.file_format not in ("cbz", "zip", "cbr"):
         abort(404)
@@ -796,6 +811,7 @@ def get_cbz_page_image(book_id: int, page_num: int):
 
 @api_bp.route("/books/<int:book_id>/progress", methods=["GET", "POST"])
 def book_progress(book_id: int):
+    """Fetch or update reading/video progress for a book or media item."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -810,7 +826,11 @@ def book_progress(book_id: int):
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         location = str(data.get("location", "0"))
-        percentage = float(data.get("percentage", 0.0))
+        try:
+            percentage = float(data.get("percentage", 0.0))
+        except ValueError, TypeError:
+            percentage = 0.0
+        percentage = max(0.0, min(100.0, percentage))
         is_completed = bool(data.get("is_completed", False) or percentage >= 99.0)
 
         record = db.session.scalar(
@@ -862,6 +882,7 @@ def book_progress(book_id: int):
 
 @api_bp.route("/books/<int:book_id>/bookmarks", methods=["GET", "POST"])
 def bookmarks(book_id: int):
+    """List or create bookmarks for a book."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -915,6 +936,7 @@ def bookmarks(book_id: int):
 
 @api_bp.route("/bookmarks/<int:bookmark_id>", methods=["DELETE"])
 def delete_bookmark(bookmark_id: int):
+    """Delete a bookmark, restricted to its owner (or any anonymous bookmark)."""
     bm = db.session.get(Bookmark, bookmark_id)
     if not bm:
         return api_error("Bookmark not found", 404)
@@ -929,6 +951,7 @@ def delete_bookmark(bookmark_id: int):
 @api_bp.route("/libraries/scan", methods=["POST"])
 @api_admin_required
 def trigger_scan():
+    """Trigger a full scan across all configured media folders."""
     result = scan_library(current_app)  # type: ignore
     return jsonify({"status": "success", "result": result})
 
@@ -936,6 +959,7 @@ def trigger_scan():
 @api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
 @api_admin_required
 def enrich_single_book(book_id: int):
+    """Fetch online metadata (Google Books / Open Library) for a single book."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
@@ -957,6 +981,7 @@ def enrich_single_book(book_id: int):
 @api_bp.route("/libraries/enrich", methods=["POST"])
 @api_admin_required
 def enrich_library():
+    """Fetch online metadata for all indexed books across every library."""
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
     provider = str(
@@ -977,6 +1002,7 @@ def enrich_library():
 @api_bp.route("/books/<int:book_id>", methods=["PATCH"])
 @api_admin_required
 def edit_book_metadata(book_id: int):
+    """Manually edit a book's title, authors, series, tags, and descriptive fields."""
     book = db.session.get(Book, book_id)
     if not book:
         return api_error("Book not found", 404)
