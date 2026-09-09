@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from aarkib.extensions import db
-from aarkib.models import Book, Tag
+from aarkib.models import Book, MediaItem, Tag
 from aarkib.services.thumbnail import generate_cover_webp
 
 if TYPE_CHECKING:
@@ -271,7 +271,7 @@ def fetch_external_metadata(
 
 
 def enrich_book(
-    book: Book,
+    book: MediaItem,
     covers_dir: Path,
     overwrite: bool = False,
     provider: str = "all",

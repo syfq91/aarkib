@@ -10,23 +10,28 @@ from aarkib.extensions import db
 if TYPE_CHECKING:
     from aarkib.models.media_item import MediaItem
 
-book_authors = Table(
-    "book_authors",
+media_creators = Table(
+    "media_creators",
     db.Model.metadata,
     Column(
-        "book_id", Integer, ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+        "media_item_id",
+        Integer,
+        ForeignKey("media_items.id", ondelete="CASCADE"),
+        primary_key=True,
     ),
     Column(
-        "author_id",
+        "creator_id",
         Integer,
-        ForeignKey("authors.id", ondelete="CASCADE"),
+        ForeignKey("creators.id", ondelete="CASCADE"),
         primary_key=True,
     ),
 )
 
 
-class Author(db.Model):
-    __tablename__ = "authors"
+class Creator(db.Model):
+    """Catalog model representing authors, artists, musicians, directors, or performers."""
+
+    __tablename__ = "creators"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(
@@ -37,13 +42,17 @@ class Author(db.Model):
     )
 
     # Relationships
-    books: Mapped[list[MediaItem]] = relationship(
-        "MediaItem", secondary=book_authors, back_populates="authors"
+    media_items: Mapped[list[MediaItem]] = relationship(
+        "MediaItem", secondary=media_creators, back_populates="creators"
     )
 
-    # Generalized domain synonyms
-    media_items = synonym("books")
-    items = synonym("books")
+    # Synonyms for multi-media & legacy references
+    items = synonym("media_items")
+    books = synonym("media_items")
 
     def __repr__(self) -> str:
-        return f"<Author {self.name}>"
+        return f"<Creator {self.name}>"
+
+
+Author = Creator
+book_authors = media_creators

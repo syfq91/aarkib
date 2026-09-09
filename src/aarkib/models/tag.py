@@ -10,14 +10,20 @@ from aarkib.extensions import db
 if TYPE_CHECKING:
     from aarkib.models.media_item import MediaItem
 
-book_tags = Table(
-    "book_tags",
+media_tags = Table(
+    "media_tags",
     db.Model.metadata,
     Column(
-        "book_id", Integer, ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+        "media_item_id",
+        Integer,
+        ForeignKey("media_items.id", ondelete="CASCADE"),
+        primary_key=True,
     ),
     Column(
-        "tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+        "tag_id",
+        Integer,
+        ForeignKey("tags.id", ondelete="CASCADE"),
+        primary_key=True,
     ),
 )
 
@@ -31,13 +37,16 @@ class Tag(db.Model):
     )
 
     # Relationships
-    books: Mapped[list[MediaItem]] = relationship(
-        "MediaItem", secondary=book_tags, back_populates="tags"
+    media_items: Mapped[list[MediaItem]] = relationship(
+        "MediaItem", secondary=media_tags, back_populates="tags"
     )
 
-    # Generalized domain synonyms
-    media_items = synonym("books")
-    items = synonym("books")
+    # Synonyms
+    items = synonym("media_items")
+    books = synonym("media_items")
 
     def __repr__(self) -> str:
         return f"<Tag {self.name}>"
+
+
+book_tags = media_tags

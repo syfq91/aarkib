@@ -23,7 +23,7 @@ from aarkib.models import (
     User,
     UserProgress,
 )
-from aarkib.services.book_service import (
+from aarkib.services.media_service import (
     MEDIA_TYPE_CHOICES,
     VIDEO_EXTENSIONS,
     count_books_in_library,
@@ -1025,7 +1025,7 @@ def edit_book_metadata(book_id: int):
     if not book:
         return api_error("Book not found", 404)
 
-    from aarkib.services.book_service import edit_book_metadata as apply_edits
+    from aarkib.services.media_service import edit_media_metadata as apply_edits
 
     data = request.get_json(silent=True) or request.form
     apply_edits(book, data)

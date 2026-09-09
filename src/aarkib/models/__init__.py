@@ -1,4 +1,5 @@
-from aarkib.models.author import Author, book_authors
+from aarkib.models.collection import Collection, Series
+from aarkib.models.creator import Author, Creator, book_authors, media_creators
 from aarkib.models.library import Library
 from aarkib.models.media import (
     AudioTrackMixin,
@@ -9,13 +10,8 @@ from aarkib.models.media import (
 )
 from aarkib.models.media_item import Book, Item, MediaItem
 from aarkib.models.progress import Bookmark, UserProgress
-from aarkib.models.series import Series
-from aarkib.models.tag import Tag, book_tags
+from aarkib.models.tag import Tag, book_tags, media_tags
 from aarkib.models.user import User
-
-# Generalized domain aliases
-Creator = Author
-Collection = Series
 
 __all__ = [
     "User",
@@ -23,10 +19,10 @@ __all__ = [
     "Item",
     "Book",
     "Library",
-    "Author",
     "Creator",
-    "Series",
+    "Author",
     "Collection",
+    "Series",
     "Tag",
     "UserProgress",
     "Bookmark",
@@ -35,6 +31,8 @@ __all__ = [
     "PlayableItemMixin",
     "AudioTrackMixin",
     "VideoItemMixin",
+    "media_creators",
     "book_authors",
+    "media_tags",
     "book_tags",
 ]

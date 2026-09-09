@@ -13,9 +13,16 @@ from flask_login import current_user
 from sqlalchemy import func, select
 
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Series, Tag, User, UserProgress
+from aarkib.models import (
+    Author,
+    Book,
+    Series,
+    Tag,
+    User,
+    UserProgress,
+)
 from aarkib.routes.auth import optional_or_required_auth
-from aarkib.services.book_service import path_match_filter
+from aarkib.services.media_service import path_match_filter
 
 ui_bp = Blueprint("ui", __name__)
 

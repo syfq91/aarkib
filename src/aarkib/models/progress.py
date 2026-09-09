@@ -25,24 +25,27 @@ if TYPE_CHECKING:
 class UserProgress(db.Model):
     __tablename__ = "user_progress"
     __table_args__ = (
-        UniqueConstraint("user_id", "book_id", name="uq_user_book_progress"),
+        UniqueConstraint("user_id", "media_item_id", name="uq_user_item_progress"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    book_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True
+    media_item_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("media_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
-    # Position: EPUB CFI string or CBZ page number string or URI reference
+    # Position: EPUB CFI string, CBZ page number string, or media playback timestamp (seconds)
     progress_location: Mapped[str] = mapped_column(
         String(500), nullable=False, default="0"
     )
     percentage: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    last_read_at: Mapped[datetime] = mapped_column(
+    last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
     )
 
@@ -54,34 +57,40 @@ class UserProgress(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="progress_records")
-    book: Mapped[MediaItem] = relationship(
+    media_item: Mapped[MediaItem] = relationship(
         "MediaItem", back_populates="progress_records"
     )
 
-    # Generalized domain synonyms
-    media_item = synonym("book")
-    item = synonym("book")
+    # Synonyms for multi-media and compatibility
+    book = synonym("media_item")
+    item = synonym("media_item")
+    book_id = synonym("media_item_id")
+    item_id = synonym("media_item_id")
+    last_read_at = synonym("last_accessed_at")
+
+    def __init__(self, **kwargs) -> None:
+        if "book_id" in kwargs and "media_item_id" not in kwargs:
+            kwargs["media_item_id"] = kwargs.pop("book_id")
+        if "item_id" in kwargs and "media_item_id" not in kwargs:
+            kwargs["media_item_id"] = kwargs.pop("item_id")
+        if "book" in kwargs and "media_item" not in kwargs:
+            kwargs["media_item"] = kwargs.pop("book")
+        if "item" in kwargs and "media_item" not in kwargs:
+            kwargs["media_item"] = kwargs.pop("item")
+        if "last_read_at" in kwargs and "last_accessed_at" not in kwargs:
+            kwargs["last_accessed_at"] = kwargs.pop("last_read_at")
+        super().__init__(**kwargs)
 
     @property
     def media_id(self) -> int:
-        """Alias for book_id to support generalized media progress tracking."""
-        return self.book_id
+        return self.media_item_id
 
     @media_id.setter
     def media_id(self, value: int) -> None:
-        self.book_id = value
-
-    @property
-    def last_accessed_at(self) -> datetime:
-        """Alias for last_read_at to support generalized media playback/reading."""
-        return self.last_read_at
-
-    @last_accessed_at.setter
-    def last_accessed_at(self, value: datetime) -> None:
-        self.last_read_at = value
+        self.media_item_id = value
 
     def __repr__(self) -> str:
-        return f"<UserProgress user={self.user_id} book={self.book_id} progress={self.percentage:.1f}%>"
+        return f"<UserProgress user={self.user_id} item={self.media_item_id} progress={self.percentage:.1f}%>"
 
 
 class Bookmark(db.Model):
@@ -91,8 +100,11 @@ class Bookmark(db.Model):
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    book_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True
+    media_item_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("media_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     location: Mapped[str] = mapped_column(String(500), nullable=False)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -103,20 +115,34 @@ class Bookmark(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="bookmarks")
-    book: Mapped[MediaItem] = relationship("MediaItem", back_populates="bookmarks")
+    media_item: Mapped[MediaItem] = relationship(
+        "MediaItem", back_populates="bookmarks"
+    )
 
-    # Generalized domain synonyms
-    media_item = synonym("book")
-    item = synonym("book")
+    # Synonyms
+    book = synonym("media_item")
+    item = synonym("media_item")
+    book_id = synonym("media_item_id")
+    item_id = synonym("media_item_id")
+
+    def __init__(self, **kwargs) -> None:
+        if "book_id" in kwargs and "media_item_id" not in kwargs:
+            kwargs["media_item_id"] = kwargs.pop("book_id")
+        if "item_id" in kwargs and "media_item_id" not in kwargs:
+            kwargs["media_item_id"] = kwargs.pop("item_id")
+        if "book" in kwargs and "media_item" not in kwargs:
+            kwargs["media_item"] = kwargs.pop("book")
+        if "item" in kwargs and "media_item" not in kwargs:
+            kwargs["media_item"] = kwargs.pop("item")
+        super().__init__(**kwargs)
 
     @property
     def media_id(self) -> int:
-        """Alias for book_id to support generalized media bookmarks."""
-        return self.book_id
+        return self.media_item_id
 
     @media_id.setter
     def media_id(self, value: int) -> None:
-        self.book_id = value
+        self.media_item_id = value
 
     def __repr__(self) -> str:
-        return f"<Bookmark book={self.book_id} loc={self.location}>"
+        return f"<Bookmark item={self.media_item_id} loc={self.location}>"

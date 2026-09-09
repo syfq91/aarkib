@@ -80,11 +80,11 @@ def test_migrate_database_adds_missing_columns(app):
                 "CREATE TABLE user_progress ("
                 "id INTEGER PRIMARY KEY, "
                 "user_id INTEGER, "
-                "book_id INTEGER NOT NULL, "
+                "media_item_id INTEGER NOT NULL, "
                 "progress_location VARCHAR(500) NOT NULL, "
                 "percentage FLOAT NOT NULL, "
                 "is_completed BOOLEAN NOT NULL, "
-                "last_read_at DATETIME NOT NULL)"
+                "last_accessed_at DATETIME NOT NULL)"
             )
         )
 
@@ -241,13 +241,11 @@ def test_media_item_first_class_model(app):
         Tag,
         UserProgress,
     )
-    from aarkib.models.book import Book as BookShim
     from aarkib.services.media_service import edit_media_metadata
 
     # 1. Verify identity and alias equivalence
     assert MediaItem is Book
     assert MediaItem is Item
-    assert BookShim is MediaItem
     assert Creator is Author
     assert Collection is Series
 

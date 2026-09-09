@@ -1,21 +1,32 @@
 from __future__ import annotations
 
-from flask import Blueprint, abort, render_template
+from flask import Blueprint, abort, redirect, render_template
 from flask_login import current_user
 from sqlalchemy import select
 
 from aarkib.extensions import db
-from aarkib.models import Book, UserProgress
+from aarkib.models import MediaItem, UserProgress
 from aarkib.routes.auth import optional_or_required_auth
-from aarkib.services.book_service import VIDEO_EXTENSIONS
+from aarkib.services.media_service import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 
 reader_bp = Blueprint("reader", __name__, url_prefix="/reader")
+
+
+@reader_bp.route("/item/<int:item_id>")
+@reader_bp.route("/media/<int:item_id>")
+@optional_or_required_auth
+def open_media_item(item_id: int):
+    """Auto-dispatches to the appropriate reader or player view for the given media item."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Media item not found")
+    return redirect(item.player_url)
 
 
 @reader_bp.route("/epub/<int:book_id>")
 @optional_or_required_auth
 def read_epub(book_id: int):
-    book = db.session.get(Book, book_id)
+    book = db.session.get(MediaItem, book_id)
     if not book:
         abort(404, description="Book not found")
     if book.file_format != "epub":
@@ -25,7 +36,7 @@ def read_epub(book_id: int):
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.book_id == book.id,
+            UserProgress.media_item_id == book.id,
         )
     )
 
@@ -39,7 +50,7 @@ def read_epub(book_id: int):
 @reader_bp.route("/cbz/<int:book_id>")
 @optional_or_required_auth
 def read_cbz(book_id: int):
-    book = db.session.get(Book, book_id)
+    book = db.session.get(MediaItem, book_id)
     if not book:
         abort(404, description="Book not found")
     if book.file_format not in ("cbz", "zip", "cbr"):
@@ -49,7 +60,7 @@ def read_cbz(book_id: int):
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.book_id == book.id,
+            UserProgress.media_item_id == book.id,
         )
     )
 
@@ -70,7 +81,7 @@ def read_cbz(book_id: int):
 @reader_bp.route("/video/<int:book_id>")
 @optional_or_required_auth
 def watch_video(book_id: int):
-    book = db.session.get(Book, book_id)
+    book = db.session.get(MediaItem, book_id)
     if not book:
         abort(404, description="Video not found")
     if not book.is_video and book.file_format not in VIDEO_EXTENSIONS:
@@ -80,7 +91,7 @@ def watch_video(book_id: int):
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.book_id == book.id,
+            UserProgress.media_item_id == book.id,
         )
     )
 
@@ -91,14 +102,14 @@ def watch_video(book_id: int):
         except ValueError, TypeError:
             initial_time = 0.0
 
-    # Next / previous episode navigation if part of a series / show
+    # Next / previous episode navigation if part of a collection / show
     next_video = None
     prev_video = None
-    if book.series_id:
+    if book.collection_id:
         episodes = db.session.scalars(
-            select(Book)
-            .where(Book.series_id == book.series_id)
-            .order_by(Book.series_index.asc(), Book.id.asc())
+            select(MediaItem)
+            .where(MediaItem.collection_id == book.collection_id)
+            .order_by(MediaItem.series_index.asc(), MediaItem.id.asc())
         ).all()
         for idx, ep in enumerate(episodes):
             if ep.id == book.id:
@@ -115,4 +126,55 @@ def watch_video(book_id: int):
         progress=progress,
         next_video=next_video,
         prev_video=prev_video,
+    )
+
+
+@reader_bp.route("/audio/<int:item_id>")
+@optional_or_required_auth
+def play_audio(item_id: int):
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Audio item not found")
+    if not item.is_audio and item.file_format not in AUDIO_EXTENSIONS:
+        abort(400, description="Item is not an audio track")
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            UserProgress.user_id == user_id,
+            UserProgress.media_item_id == item.id,
+        )
+    )
+
+    initial_time = 0.0
+    if progress and progress.progress_location:
+        try:
+            initial_time = max(0.0, float(progress.progress_location))
+        except ValueError, TypeError:
+            initial_time = 0.0
+
+    # Next / previous track navigation if part of an album / collection
+    next_track = None
+    prev_track = None
+    if item.collection_id:
+        tracks = db.session.scalars(
+            select(MediaItem)
+            .where(MediaItem.collection_id == item.collection_id)
+            .order_by(MediaItem.series_index.asc(), MediaItem.id.asc())
+        ).all()
+        for idx, trk in enumerate(tracks):
+            if trk.id == item.id:
+                if idx + 1 < len(tracks):
+                    next_track = tracks[idx + 1]
+                if idx > 0:
+                    prev_track = tracks[idx - 1]
+                break
+
+    return render_template(
+        "player_audio.html",
+        item=item,
+        initial_time=initial_time,
+        progress=progress,
+        next_track=next_track,
+        prev_track=prev_track,
     )

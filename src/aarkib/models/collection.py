@@ -11,8 +11,10 @@ if TYPE_CHECKING:
     from aarkib.models.media_item import MediaItem
 
 
-class Series(db.Model):
-    __tablename__ = "series"
+class Collection(db.Model):
+    """Catalog model representing series, franchises, comic runs, or music albums."""
+
+    __tablename__ = "collections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(
@@ -21,13 +23,16 @@ class Series(db.Model):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    books: Mapped[list[MediaItem]] = relationship(
-        "MediaItem", back_populates="series", order_by="MediaItem.series_index"
+    media_items: Mapped[list[MediaItem]] = relationship(
+        "MediaItem", back_populates="collection", order_by="MediaItem.series_index"
     )
 
-    # Generalized domain synonyms
-    media_items = synonym("books")
-    items = synonym("books")
+    # Synonyms for multi-media & legacy references
+    items = synonym("media_items")
+    books = synonym("media_items")
 
     def __repr__(self) -> str:
-        return f"<Series {self.name}>"
+        return f"<Collection {self.name}>"
+
+
+Series = Collection

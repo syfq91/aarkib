@@ -19,8 +19,18 @@ from aarkib.config import (
     split_path_string,
 )
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Library, Series, Tag
-from aarkib.services.book_service import VIDEO_EXTENSIONS, library_path_conditions
+from aarkib.models import (
+    Author,
+    Book,
+    Library,
+    Series,
+    Tag,
+)
+from aarkib.services.media_service import (
+    AUDIO_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    library_path_conditions,
+)
 from aarkib.services.parsers.base import extract_metadata_from_file
 from aarkib.services.thumbnail import generate_cover_webp
 
@@ -44,6 +54,13 @@ DEFAULT_EXTENSIONS = {
     ".avi",
     ".mov",
     ".m4v",
+    ".mp3",
+    ".m4a",
+    ".flac",
+    ".ogg",
+    ".opus",
+    ".wav",
+    ".aac",
 }
 
 
@@ -473,6 +490,8 @@ def _resolve_media_type(
         if metadata.file_format in ("cbz", "cbr", "zip")
         else "video"
         if metadata.file_format in VIDEO_EXTENSIONS
+        else "audio"
+        if metadata.file_format in AUDIO_EXTENSIONS
         else "book"
     )
 
@@ -587,9 +606,11 @@ def index_single_book(
         if cover_rel_path:
             book.cover_image_path = cover_rel_path
 
-        # Video metadata attributes
+        # Technical playback, video & audio metadata attributes
         if hasattr(book, "duration"):
             book.duration = getattr(metadata, "duration", None)
+        if hasattr(book, "bitrate"):
+            book.bitrate = getattr(metadata, "bitrate", None)
         if hasattr(book, "resolution_width"):
             book.resolution_width = getattr(metadata, "resolution_width", None)
         if hasattr(book, "resolution_height"):
@@ -600,6 +621,12 @@ def index_single_book(
             book.season = getattr(metadata, "season", None)
         if hasattr(book, "episode"):
             book.episode = getattr(metadata, "episode", None)
+        if hasattr(book, "album"):
+            book.album = getattr(metadata, "album", None)
+        if hasattr(book, "track_number"):
+            book.track_number = getattr(metadata, "track_number", None)
+        if hasattr(book, "disc_number"):
+            book.disc_number = getattr(metadata, "disc_number", None)
 
         _assign_authors_tags_series(book, metadata)
 

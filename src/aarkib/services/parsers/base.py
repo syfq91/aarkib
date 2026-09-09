@@ -60,6 +60,31 @@ class ParsedVideoMetadata(BaseParsedMetadata):
             self.creators = list(self.authors)
 
 
+@dataclass
+class ParsedAudioMetadata(BaseParsedMetadata):
+    """Audio track, music, or audiobook parsed metadata."""
+
+    album: str | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    duration: float | None = None
+    bitrate: int | None = None
+    series: str | None = None
+    series_index: float | None = None
+    authors: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.media_type = "audio"
+        if not self.series and self.album:
+            self.series = self.album
+        if self.series_index is None and self.track_number is not None:
+            self.series_index = float(self.track_number)
+        if not self.authors and self.creators:
+            self.authors = list(self.creators)
+        elif self.authors and not self.creators:
+            self.creators = list(self.authors)
+
+
 ParserFunc = Callable[[Path], BaseParsedMetadata | None]
 PARSER_REGISTRY: dict[str, ParserFunc] = {}
 
@@ -91,5 +116,9 @@ def extract_metadata_from_file(file_path: Path) -> BaseParsedMetadata | None:
         from aarkib.services.parsers.video import parse_video
 
         return parse_video(file_path)
+    elif ext in (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac"):
+        from aarkib.services.parsers.audio import parse_audio
+
+        return parse_audio(file_path)
 
     return None

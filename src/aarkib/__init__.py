@@ -275,14 +275,14 @@ def register_commands(app: Flask) -> None:
     )
     def enrich_command(book_id, overwrite, provider):
         """Enrich catalog metadata using online sources (Google Books / Open Library)."""
-        from aarkib.models import Book
+        from aarkib.models import MediaItem
         from aarkib.services.enricher import enrich_all_books, enrich_book
 
         covers_dir = Path(app.config["COVERS_DIR"])
         if book_id:
-            book = db.session.get(Book, book_id)
+            book = db.session.get(MediaItem, book_id)
             if not book:
-                click.echo(f"Book ID {book_id} not found.")
+                click.echo(f"Media item ID {book_id} not found.")
                 return
             click.echo(f"Enriching '{book.title}'...")
             res = enrich_book(book, covers_dir, overwrite=overwrite, provider=provider)

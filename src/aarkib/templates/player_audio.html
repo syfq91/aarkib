@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ item.title }}{% if item.creators_display %} - {{ item.creators_display }}{% endif %} - Aarkib Audio Player</title>
+  
+  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .audio-player-page {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2rem 1.5rem 3rem 1.5rem;
+      box-sizing: border-box;
+      background: radial-gradient(circle at center top, #1e293b 0%, #0b0f19 80%);
+    }
+
+    .audio-header {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .back-btn {
+      color: #f8fafc;
+      text-decoration: none;
+      font-size: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      transition: background 0.2s;
+    }
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .header-info {
+      text-align: center;
+      flex: 1;
+      padding: 0 1rem;
+    }
+    .header-category {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #94a3b8;
+    }
+    .header-album {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cover-container {
+      width: 280px;
+      height: 280px;
+      max-width: 70vw;
+      max-height: 70vw;
+      border-radius: 1.25rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1e293b;
+      margin: auto 0;
+    }
+
+    .cover-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .cover-placeholder {
+      font-size: 5rem;
+      color: #64748b;
+    }
+
+    .audio-details {
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .audio-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0 0 0.35rem 0;
+      line-height: 1.3;
+    }
+
+    .audio-artist {
+      font-size: 1.05rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+
+    .audio-controls-container {
+      width: 100%;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .scrubber-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .scrubber-bar {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      position: relative;
+      outline: none;
+    }
+
+    .scrubber-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: #6366f1;
+      width: 0%;
+      pointer-events: none;
+    }
+
+    .time-display {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .main-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+    }
+
+    .ctrl-btn {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      border-radius: 50%;
+      transition: color 0.15s, transform 0.1s, background 0.15s;
+    }
+    .ctrl-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .ctrl-btn:active {
+      transform: scale(0.92);
+    }
+
+    .play-pause-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #ffffff;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+    .play-pause-btn:hover {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+
+    .extra-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0.5rem;
+    }
+
+    .speed-btn {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      padding: 0.35rem 0.65rem;
+      border-radius: 1rem;
+      cursor: pointer;
+    }
+    .speed-btn:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .volume-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .volume-slider {
+      width: 90px;
+      height: 4px;
+      accent-color: #6366f1;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="audio-player-page">
+    <!-- Header -->
+    <div class="audio-header">
+      <a href="/library" class="back-btn" title="Back to Library">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      </a>
+      <div class="header-info">
+        <div class="header-category">Audio Track</div>
+        <div class="header-album">{{ item.album or item.collection.name if item.collection else "Aarkib Audio" }}</div>
+      </div>
+      <a href="/media/{{ item.id }}" class="back-btn" title="Media Details">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </a>
+    </div>
+
+    <!-- Artwork -->
+    <div class="cover-container">
+      {% if item.cover_image_path %}
+      <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
+      <div id="coverFallback" class="cover-placeholder" style="display: none;">🎵</div>
+      {% else %}
+      <div class="cover-placeholder">🎵</div>
+      {% endif %}
+    </div>
+
+    <!-- Metadata -->
+    <div class="audio-details">
+      <h1 class="audio-title">{{ item.title }}</h1>
+      <p class="audio-artist">{{ item.creators_display }}</p>
+    </div>
+
+    <!-- Controls -->
+    <div class="audio-controls-container">
+      <!-- Scrubber -->
+      <div class="scrubber-wrapper">
+        <div class="scrubber-bar" id="scrubberBar">
+          <div class="scrubber-fill" id="scrubberFill"></div>
+        </div>
+        <div class="time-display">
+          <span id="currentTime">0:00</span>
+          <span id="totalDuration">{{ item.formatted_duration or "0:00" }}</span>
+        </div>
+      </div>
+
+      <!-- Playback Buttons -->
+      <div class="main-controls">
+        {% if prev_track %}
+        <a href="/reader/audio/{{ prev_track.id }}" class="ctrl-btn" title="Previous: {{ prev_track.title }}">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+        </a>
+        {% endif %}
+
+        <button class="ctrl-btn" id="rewindBtn" title="Rewind 10s">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="8" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
+        </button>
+
+        <button class="ctrl-btn play-pause-btn" id="playPauseBtn" title="Play">
+          <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <svg id="pauseIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+        </button>
+
+        <button class="ctrl-btn" id="forwardBtn" title="Forward 10s">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="9" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
+        </button>
+
+        {% if next_track %}
+        <a href="/reader/audio/{{ next_track.id }}" class="ctrl-btn" title="Next: {{ next_track.title }}">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+        </a>
+        {% endif %}
+      </div>
+
+      <!-- Extra Controls (Speed, Volume) -->
+      <div class="extra-controls">
+        <button class="speed-btn" id="speedBtn" title="Playback Speed">1.0x</button>
+
+        <div class="volume-wrap">
+          <button class="ctrl-btn" id="muteBtn" style="padding: 0.25rem;">
+            <svg id="volHigh" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            <svg id="volMute" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          </button>
+          <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider" id="volumeSlider">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="audioElement" src="/api/media/{{ item.id }}/stream" preload="metadata"></audio>
+
+  <script>
+    const audio = document.getElementById("audioElement");
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const playIcon = document.getElementById("playIcon");
+    const pauseIcon = document.getElementById("pauseIcon");
+    const scrubberBar = document.getElementById("scrubberBar");
+    const scrubberFill = document.getElementById("scrubberFill");
+    const currentTimeEl = document.getElementById("currentTime");
+    const totalDurationEl = document.getElementById("totalDuration");
+    const rewindBtn = document.getElementById("rewindBtn");
+    const forwardBtn = document.getElementById("forwardBtn");
+    const speedBtn = document.getElementById("speedBtn");
+    const volumeSlider = document.getElementById("volumeSlider");
+    const muteBtn = document.getElementById("muteBtn");
+    const volHigh = document.getElementById("volHigh");
+    const volMute = document.getElementById("volMute");
+
+    const itemId = {{ item.id }};
+    const initialTime = {{ initial_time }};
+    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+    let currentSpeedIdx = 1;
+
+    function formatTime(secs) {
+      if (isNaN(secs) || secs < 0) return "0:00";
+      const total = Math.floor(secs);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    // Set initial position
+    audio.addEventListener("loadedmetadata", () => {
+      if (initialTime > 0 && initialTime < audio.duration) {
+        audio.currentTime = initialTime;
+      }
+      totalDurationEl.textContent = formatTime(audio.duration);
+    });
+
+    // Play/Pause toggle
+    function togglePlay() {
+      if (audio.paused) {
+        audio.play().then(() => {
+          playIcon.style.display = "none";
+          pauseIcon.style.display = "block";
+        }).catch(err => console.error("Playback failed:", err));
+      } else {
+        audio.pause();
+        playIcon.style.display = "block";
+        pauseIcon.style.display = "none";
+        saveProgress();
+      }
+    }
+    playPauseBtn.addEventListener("click", togglePlay);
+
+    // Update time & progress fill
+    audio.addEventListener("timeupdate", () => {
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      if (audio.duration) {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        scrubberFill.style.width = pct + "%";
+      }
+    });
+
+    // Scrubber click
+    scrubberBar.addEventListener("click", (e) => {
+      if (!audio.duration) return;
+      const rect = scrubberBar.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      audio.currentTime = pct * audio.duration;
+    });
+
+    // 10s Skip
+    rewindBtn.addEventListener("click", () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });
+    forwardBtn.addEventListener("click", () => { audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10); });
+
+    // Speed toggle
+    speedBtn.addEventListener("click", () => {
+      currentSpeedIdx = (currentSpeedIdx + 1) % speeds.length;
+      const s = speeds[currentSpeedIdx];
+      audio.playbackRate = s;
+      speedBtn.textContent = s + "x";
+    });
+
+    // Volume & Mute
+    volumeSlider.addEventListener("input", (e) => {
+      audio.volume = parseFloat(e.target.value);
+      audio.muted = (audio.volume === 0);
+      updateVolIcon();
+    });
+    muteBtn.addEventListener("click", () => {
+      audio.muted = !audio.muted;
+      updateVolIcon();
+    });
+    function updateVolIcon() {
+      if (audio.muted || audio.volume === 0) {
+        volHigh.style.display = "none";
+        volMute.style.display = "block";
+      } else {
+        volHigh.style.display = "block";
+        volMute.style.display = "none";
+      }
+    }
+
+    // Progress saving
+    function saveProgress() {
+      if (!audio.duration || audio.currentTime < 1) return;
+      const pct = (audio.currentTime / audio.duration) * 100;
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_item_id: itemId,
+          book_id: itemId,
+          progress_location: String(audio.currentTime),
+          percentage: pct,
+          is_completed: pct >= 95
+        })
+      }).catch(err => console.debug("Progress sync skipped:", err));
+    }
+
+    setInterval(() => {
+      if (!audio.paused) saveProgress();
+    }, 10000);
+    window.addEventListener("beforeunload", saveProgress);
+
+    // Auto-advance to next track if available
+    {% if next_track %}
+    audio.addEventListener("ended", () => {
+      saveProgress();
+      window.location.href = "/reader/audio/{{ next_track.id }}";
+    });
+    {% endif %}
+  </script>
+</body>
+</html>

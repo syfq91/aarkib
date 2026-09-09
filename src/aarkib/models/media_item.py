@@ -6,57 +6,63 @@ from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aarkib.extensions import db
-from aarkib.models.author import book_authors
+from aarkib.models.creator import media_creators
 from aarkib.models.media import (
     AudioTrackMixin,
     MediaItemMixin,
     MediaType,
     VideoItemMixin,
 )
-from aarkib.models.tag import book_tags
+from aarkib.models.tag import media_tags
 
 if TYPE_CHECKING:
-    from aarkib.models.author import Author
+    from aarkib.models.collection import Collection
+    from aarkib.models.creator import Creator
     from aarkib.models.progress import Bookmark, UserProgress
-    from aarkib.models.series import Series
     from aarkib.models.tag import Tag
 
 
 class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
     """Unified catalog model representing books, comics, videos, and audio in Aarkib."""
 
-    __tablename__ = "books"
+    __tablename__ = "media_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # Book-specific metadata
+    # Book & text metadata
     isbn: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    # Series / collection metadata
-    series_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
+    # Collection / series metadata
+    collection_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("collections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     series_index: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Relationships
-    series: Mapped[Series | None] = relationship("Series", back_populates="books")
-    authors: Mapped[list[Author]] = relationship(
-        "Author", secondary=book_authors, back_populates="books"
+    collection: Mapped[Collection | None] = relationship(
+        "Collection", back_populates="media_items"
+    )
+    creators: Mapped[list[Creator]] = relationship(
+        "Creator", secondary=media_creators, back_populates="media_items"
     )
     tags: Mapped[list[Tag]] = relationship(
-        "Tag", secondary=book_tags, back_populates="books"
+        "Tag", secondary=media_tags, back_populates="media_items"
     )
     progress_records: Mapped[list[UserProgress]] = relationship(
-        "UserProgress", back_populates="book", cascade="all, delete-orphan"
+        "UserProgress", back_populates="media_item", cascade="all, delete-orphan"
     )
     bookmarks: Mapped[list[Bookmark]] = relationship(
-        "Bookmark", back_populates="book", cascade="all, delete-orphan"
+        "Bookmark", back_populates="media_item", cascade="all, delete-orphan"
     )
 
     # Generalized domain synonyms
-    creators = synonym("authors")
-    collection = synonym("series")
+    series = synonym("collection")
+    series_id = synonym("collection_id")
+    authors = synonym("creators")
 
     def __init__(self, **kwargs: Any) -> None:
         if "media_type" not in kwargs or not kwargs["media_type"]:
@@ -69,11 +75,18 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
                 kwargs["media_type"] = MediaType.AUDIO.value
             else:
                 kwargs["media_type"] = MediaType.BOOK.value
+        # Remap legacy kwargs if provided
+        if "series" in kwargs and "collection" not in kwargs:
+            kwargs["collection"] = kwargs.pop("series")
+        if "series_id" in kwargs and "collection_id" not in kwargs:
+            kwargs["collection_id"] = kwargs.pop("series_id")
+        if "authors" in kwargs and "creators" not in kwargs:
+            kwargs["creators"] = kwargs.pop("authors")
         super().__init__(**kwargs)
 
     @property
     def formatted_duration(self) -> str:
-        """Returns video or audio duration formatted as '1h 45m' or '45m 12s'."""
+        """Returns playback duration formatted as '1h 45m' or '45m 12s'."""
         if not self.duration:
             return ""
         total_seconds = int(self.duration)
@@ -88,7 +101,7 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
 
     @property
     def resolution_label(self) -> str:
-        """Returns standard resolution label (4K, 1080p, 720p, etc.)."""
+        """Returns standard video resolution label (4K, 1080p, 720p, etc.)."""
         if not self.resolution_height:
             return ""
         h = self.resolution_height
@@ -112,19 +125,20 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
         return ""
 
     @property
-    def authors_display(self) -> str:
-        if not self.authors:
-            return (
-                "Unknown Creator"
-                if (self.is_video or self.is_audio)
-                else "Unknown Author"
-            )
-        return ", ".join(a.name for a in self.authors)
+    def creators_display(self) -> str:
+        """Returns comma-separated creator names with media-aware fallbacks."""
+        if not self.creators:
+            if self.is_video:
+                return "Unknown Director"
+            elif self.is_audio:
+                return "Unknown Artist"
+            return "Unknown Author"
+        return ", ".join(c.name for c in self.creators)
 
     @property
-    def creators_display(self) -> str:
-        """Alias for authors_display to support generalized media creators."""
-        return self.authors_display
+    def authors_display(self) -> str:
+        """Alias for creators_display."""
+        return self.creators_display
 
     @property
     def tags_display(self) -> list[str]:
@@ -143,6 +157,16 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
 
         if (self.file_format or "").lower() in ("cbz", "zip", "cbr"):
             return f"/reader/cbz/{self.id}"
+        elif (self.file_format or "").lower() in (
+            "mp3",
+            "m4a",
+            "flac",
+            "ogg",
+            "opus",
+            "wav",
+            "aac",
+        ):
+            return f"/player/audio/{self.id}"
         return f"/reader/epub/{self.id}"
 
     @property
@@ -154,10 +178,9 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
         return f"<MediaItem {self.id}: {self.title}>"
 
 
-# Canonical and backward-compatibility aliases
 Book = MediaItem
 Item = MediaItem
 
-# Register "Book" and "Item" in SQLAlchemy's Declarative class registry so string relations resolve
+db.Model.registry._class_registry["MediaItem"] = MediaItem
 db.Model.registry._class_registry["Book"] = MediaItem
 db.Model.registry._class_registry["Item"] = MediaItem

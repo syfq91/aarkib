@@ -78,27 +78,27 @@ aarkib/
 │   ├── config.py             # Config dataclass, defaults, and AARKIB_MEDIA_DIR* multi-folder discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
-│   │   ├── __init__.py       # Model exports and aliases (MediaItem, Item=MediaItem, Book=MediaItem, Creator=Author, Collection=Series)
-│   │   ├── media_item.py     # Canonical MediaItem model (unifying books, comics, video, audio) with AudioTrackMixin and VideoItemMixin
-│   │   ├── book.py           # Backward-compatibility module re-exporting MediaItem as Book and Item
-│   │   ├── library.py        # Library model (persisted media folders with slug, path, media_type, counts)
+│   │   ├── __init__.py       # Model exports and aliases (MediaItem, Creator, Collection, Tag, User, Library, UserProgress)
+│   │   ├── media_item.py     # Canonical MediaItem model (media_items table) unifying books, comics, video, and audio
+│   │   ├── creator.py        # Creator model (creators table) and media_creators association table
+│   │   ├── collection.py     # Collection model (collections table) for series, shows, albums
+│   │   ├── tag.py            # Tag model (tags table) and media_tags association table
+│   │   ├── library.py        # Library model (libraries table)
 │   │   ├── media.py          # MediaItemMixin, PlayableItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum
-│   │   ├── author.py         # Author / Creator model and book_authors table
-│   │   ├── series.py         # Series / Collection model
-│   │   ├── tag.py            # Tag model and book_tags table
-│   │   ├── user.py           # User model (password hashing, admin role, relationships)
-│   │   └── progress.py       # UserProgress (OPDS Progression 1.0 metadata) and Bookmark models
+│   │   ├── user.py           # User model (users table)
+│   │   └── progress.py       # UserProgress (user_progress table) and Bookmark (bookmarks table)
 │   ├── plugins/
 │   │   ├── __init__.py       # Plugin registry initialization and exports
 │   │   ├── base.py           # MediaPlugin abstract base class and PluginRegistry
 │   │   ├── book.py           # BookMediaPlugin (EPUB, CBZ, CBR, ZIP metadata, covers, player URLs)
-│   │   └── video.py          # VideoMediaPlugin (MP4, MKV, WEBM, AVI, MOV, M4V metadata, covers, player URLs)
+│   │   ├── video.py          # VideoMediaPlugin (MP4, MKV, WEBM, AVI, MOV, M4V metadata, covers, player URLs)
+│   │   └── audio.py          # AudioMediaPlugin (MP3, M4A, FLAC, OGG, OPUS, WAV, AAC metadata, covers, player URLs)
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
 │   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
-│   │   ├── api.py            # REST endpoints: books, libraries CRUD, stream, progress, metadata, scan, /health
-│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, and Video (HTML5 player)
+│   │   ├── api.py            # REST endpoints: media items CRUD, stream, progress, metadata, scan, /health
+│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, Video (HTML5 player), and Audio (HTML5 player)
 │   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   ├── services/
 │   │   ├── __init__.py
@@ -107,12 +107,12 @@ aarkib/
 │   │   ├── enricher.py       # Google Books & Open Library metadata enrichment client
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
 │   │   ├── media_service.py  # Canonical multi-media service: edit_media_metadata, resolve creators/collections/tags, slug generation, path filtering, count_media
-│   │   ├── book_service.py   # Backward-compatibility shim forwarding to media_service.py
 │   │   └── parsers/
-│   │       ├── base.py       # BaseParsedMetadata, ParsedBookMetadata dataclasses, and parser registry
+│   │       ├── base.py       # BaseParsedMetadata, ParsedBookMetadata, ParsedVideoMetadata, ParsedAudioMetadata dataclasses
 │   │       ├── epub.py       # EPUB 2/3 XML & OPF metadata, cover extractor, collection/series parser
 │   │       ├── cbz.py        # CBZ archive extractor, natural image sorting, ComicInfo.xml parser
-│   │       └── video.py      # Video container metadata (duration, dimensions) and chapter extraction
+│   │       ├── video.py      # Video container metadata (duration, dimensions) and technical inspection
+│   │       └── audio.py      # Pure-Python ID3v2 (MP3), FLAC, and WAV audio metadata and cover extractor
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css       # Core design system, top navbar, user dropdown, mobile bottom nav, themes
@@ -128,22 +128,25 @@ aarkib/
 │   │   └── sw.js             # Service Worker with network-first static caching (v1)
 │   └── templates/
 │       ├── base.html         # Base template with top navbar, avatar menu, mobile nav, flash alerts
-│       ├── library.html      # Main bookshelf with search, filters (format, sort), scan trigger
-│       ├── book_detail.html  # Book detail page, progress bar, download, online enrich, "Edit Book & Series" modal
-│       ├── authors.html      # Authors grid & volume count
-│       ├── series.html       # Series grid & volume count
+│       ├── library.html      # Main bookshelf with search, filters (type, format, sort), scan trigger
+│       ├── book_detail.html  # Media detail page, progress bar, download, online enrich, "Edit Media" modal
+│       ├── authors.html      # Creators / Authors grid & volume count
+│       ├── series.html       # Collections / Series grid & volume count
 │       ├── tags.html         # Categories & genre tags
 │       ├── settings.html     # Consolidated OPDS info, storage stats, metadata tools, admin user management
 │       ├── reader_epub.html  # Dedicated EPUB web reader interface
 │       ├── reader_cbz.html   # Dedicated CBZ comic web reader interface
+│       ├── reader_video.html # Dedicated HTML5 video player interface
+│       ├── player_audio.html # Dedicated HTML5 audio player interface with album art and scrubber
 │       ├── login.html        # Authentication login view
 │       ├── register.html     # User registration view
-│       ├── profile.html      # User profile, reading statistics, password change
+│       ├── profile.html      # User profile, reading/listening statistics, password change
 │       ├── users.html        # Admin user management view
 │       └── opds/             # Jinja XML templates for OPDS 1.2 catalog feeds
 ├── tests/
 │   ├── conftest.py           # Pytest fixtures (sample EPUB & CBZ generator, test client, app)
-│   ├── test_api.py           # REST API & book edit tests
+│   ├── test_api.py           # REST endpoints testing (CRUD, streams, filters, types, metadata edits)
+│   ├── test_audio.py         # Audio parsing, audio plugin, and web audio player testing
 │   ├── test_auth.py          # Authentication, roles, registration, user isolation tests
 │   ├── test_enricher.py      # Google Books & Open Library parsing tests
 │   ├── test_main.py          # App creation and CLI command tests

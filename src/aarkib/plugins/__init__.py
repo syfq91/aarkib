@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from aarkib.plugins.audio import AudioMediaPlugin
 from aarkib.plugins.base import MediaPlugin, PluginRegistry, plugin_registry
 from aarkib.plugins.book import BookMediaPlugin
 from aarkib.plugins.video import VideoMediaPlugin
@@ -20,6 +21,10 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
     if not plugin_registry.get_plugin("video"):
         plugin_registry.register(VideoMediaPlugin())
 
+    # Register AudioMediaPlugin if not already registered
+    if not plugin_registry.get_plugin("audio"):
+        plugin_registry.register(AudioMediaPlugin())
+
     # Wire blueprints into Flask app if provided
     if app is not None:
         for plugin in plugin_registry.get_all_plugins():
@@ -36,5 +41,6 @@ __all__ = [
     "plugin_registry",
     "BookMediaPlugin",
     "VideoMediaPlugin",
+    "AudioMediaPlugin",
     "init_plugins",
 ]
