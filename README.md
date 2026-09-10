@@ -13,8 +13,10 @@
 
 - 📖 **E-Books & Comics**: Native support for `.epub`, `.cbz`, `.cbr`, and `.zip` formats with automatic metadata & cover extraction.
 - 🎬 **Movies & TV Shows**: Streaming for `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v` with HTTP 206 byte-range seeking, smart TV show (`S01E02`) / movie naming detection, pure-Python MP4 container metadata (duration, width, height), and poster extraction.
-- 🎵 **Audiobooks & Music (WIP / In Progress)**: Foundational architecture (`AudioTrackMixin`, `MediaType.AUDIO`) in progress for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`) with duration, bitrate, album, and listening progress synchronization.
-- 🔌 **Extensible Media Plugin System**: Pluggable architecture (`MediaPlugin` & `PluginRegistry`) allowing modular media parsers, artwork extractors, and in-browser player routes for different media types.
+- 🎵 **Audiobooks & Music**: Built-in support for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`, `.wav`) with pure-Python ID3/FLAC metadata parsing, dedicated in-browser HTML5 audio player, runtime duration, album artwork, and listening progress synchronization.
+- ⚡ **Non-Blocking Background Job Architecture**: Asynchronous worker for library scans and batch enrichments without blocking web workers.
+- 🎬 **Adaptive Remuxing & Transcoding**: Direct MKV container remuxing (`-c copy`) and HLS transcoding with Linux VAAPI hardware acceleration.
+- 🔌 **Extensible Media Plugin & Provider System**: Pluggable architecture (`MediaPlugin` & `MetadataProvider`) allowing modular media parsers, artwork extractors, and online metadata scrapers (Google Books, Open Library, TMDB, MusicBrainz).
 - 📡 **OPDS 1.2 & OPDS 2.0 Feeds**: Full OPDS catalog feeds compatible with e-readers like KOReader, Thorium Reader, Cantook, Panels, and Moon+ Reader.
 - 🔄 **OPDS Progression 1.0**: Built-in support for the latest [OPDS Progression 1.0](https://github.com/opds-community/drafts/blob/main/opds-progression-1.0.md) standard to sync reading positions across devices with conflict resolution.
 - 🌐 **In-Browser Web Readers & Players**:
@@ -143,9 +145,11 @@ Aarkib has expanded from books and comics into a full-featured personal media se
   - Automated TV show detection (`S01E02` / `1x02`) and movie naming parsing.
   - Pure-Python MP4 container metadata parser (extracts runtime duration, width, height without requiring ffmpeg).
   - Responsive in-browser HTML5 video player with playback position resume, keyboard shortcuts (Space, Arrow keys, Fullscreen, Mute), playback speed selection (0.75x–2.0x), and next-episode autoplay countdown.
-- **Audiobooks & Music (In Progress)**:
-  - Pre-defined schema columns via `AudioTrackMixin` for runtime duration, bitrate, album, track number, and disc number.
-  - Architectural foundation ready for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`).
+- **Audiobooks & Music (Implemented & Expanding)**:
+  - Supports `.mp3`, `.m4b`, `.flac`, `.aac`, and `.wav`.
+  - Dedicated in-browser HTML5 audio player (`/reader/audio/<id>`) with album artwork, playback speed controls ($0.75\times$–$2.0\times$), track scrubber, and automatic position resume.
+  - Pure-Python ID3v2, FLAC, and WAV audio tag and embedded cover art extraction.
+  - Planned: M4B chapter mark navigation, narrator metadata, user playlists, and favorites.
 - **Unified Media Progression**:
   - Continuous position markers and completion status across both books (CFI / page indices) and AV media (millisecond timestamps).
 

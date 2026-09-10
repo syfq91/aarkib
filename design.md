@@ -39,13 +39,14 @@ graph TD
     end
 
     subgraph Service & Plugin Layer
+        JobManager[Background Job Manager: ThreadPoolExecutor]
         PluginRegistry[Plugin Registry: plugin_registry]
         BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP]
-        AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC - WIP]
+        AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC, AAC, WAV]
         VideoPlugin[VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V]
         Scanner[Scanner & Watchdog Service]
         Optimizer[E-Ink Device Optimizer]
-        Enricher[Metadata Enricher: Google Books & Open Library]
+        Enricher[Metadata Enricher: Google Books, Open Library, TMDB, MusicBrainz]
     end
 
     subgraph Persistence & Storage Layer
@@ -347,9 +348,10 @@ erDiagram
 
 ### Multi-Media Schema Mixins & Models (`models/`)
 - **`Library` (`models/library.py`)**: Persistent media library directory configuration (`slug`, `name`, `path`, `media_type`).
-- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps).
+- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus planned relational `library_id` FK.
 - **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
-- **`AudioTrackMixin` (`models/media.py`, WIP)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`.
+- **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and planned `narrator` + `chapters_json`.
+- **Curation Models (Planned)**: `UserFavorite` for starring media items and `Playlist` / `PlaylistItem` for custom audio/video collections.
 
 ### Database Pragmas & Concurrency
 - Configured with SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).

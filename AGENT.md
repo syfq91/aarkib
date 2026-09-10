@@ -25,13 +25,14 @@ graph TD
         end
         
         subgraph Plugins & Services
+            JobManager[Background Job Manager]
             PluginRegistry[Media Plugin Registry]
             BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP]
-            AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC - WIP]
+            AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC, AAC, WAV]
             VideoPlugin[VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V]
             Scanner[Library Scanner & File Crawler]
             Optimizer[E-Ink Device EPUB Optimizer]
-            Enricher[Google Books & Open Library Enricher]
+            Enricher[Metadata Providers: Google Books, Open Library, TMDB, MusicBrainz]
         end
         
         subgraph Storage
@@ -176,7 +177,8 @@ aarkib/
 2. **Multi-Media Plugin Architecture & Video/Audio Support**:
    * All media items share [`MediaItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L19) containing core attributes (`title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`).
    * **Video Media (Implemented)**: Handled by [`VideoMediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/video.py) with MP4 metadata parsing, HTTP 206 byte-range seeking, smart `S01E02` TV detection, and in-browser HTML5 video player with resume positions.
-   * **Audio Media (WIP)**: Defined via [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98) with `duration`, `bitrate`, `album`, `track_number`, `disc_number`. Planned extensions include ID3 tag parsing and in-browser audio player.
+   * **Audio Media (Implemented & Expanding)**: Defined via [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98) with `duration`, `bitrate`, `album`, `track_number`, `disc_number`, and dedicated in-browser audio player (`/reader/audio/<id>`). Planned: M4B chapter mark extraction and narrator metadata.
+   * **Background Job Execution**: Library scanning and bulk enrichment are moving to non-blocking background workers via `JobManager` (`concurrent.futures.ThreadPoolExecutor`).
    * Custom media handlers inherit from [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) and register with [`plugin_registry`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L55).
 
 3. **Reading & Playback Progression & Syncing**:

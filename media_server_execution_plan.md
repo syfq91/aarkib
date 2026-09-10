@@ -1,6 +1,6 @@
 # 🏛️ Aarkib Media Server — Architectural Blueprint & Multi-Media Guideline
 
-**Aarkib** is a lightweight, modern, self-hosted media server built with **Python 3.14+**, **Flask**, **SQLAlchemy**, and **SQLite (WAL mode)**. Originally designed as a high-performance book and comic server featuring OPDS feeds and e-ink optimization, Aarkib is expanding via its modular plugin architecture into a unified personal media hub supporting **Books**, **Comics**, **Video**, **Audio / Audiobooks**, and **Podcasts**.
+**Aarkib** is a lightweight, modern, self-hosted media server built with **Python 3.14+**, **Flask**, **SQLAlchemy**, and **SQLite (WAL mode)**. Originally designed as a high-performance book and comic server featuring OPDS feeds and e-ink optimization, Aarkib is expanding via its modular plugin architecture into a unified personal media hub supporting **Books**, **Comics**, **Video (Movies & TV Shows)**, **Audiobooks**, **Music**, and **Podcasts**.
 
 ---
 
@@ -8,35 +8,38 @@
 
 ```mermaid
 graph TD
-    Client["Client Devices (Browser / PWA / KOReader / Media Players)"] -->|HTTP / Range Requests / OPDS| AppGateway["Aarkib Flask Gateway"]
+    Client["Client Devices (Browser / PWA / KOReader / Third-Party Apps)"] -->|HTTP / Range Requests / OPDS / WebSockets| AppGateway["Aarkib Flask Gateway"]
 
     subgraph Presentation ["Presentation & UI Layer"]
-        UIRoutes["UI Blueprint (/books, /authors, /series, /settings)"]
-        APIRoutes["REST API Blueprint (/api/books, /api/progress, /api/stream)"]
+        UIRoutes["UI Blueprint (/books, /authors, /series, /settings, /playlists)"]
+        APIRoutes["REST API Blueprint (/api/media, /api/libraries, /api/jobs, /api/stream)"]
         OPDSRoutes["OPDS 1.2 / 2.0 / Progression 1.0 (/opds)"]
         ReaderRoutes["Readers & Players (/reader/epub, /reader/cbz, /reader/video, /reader/audio)"]
         AuthFilter["Auth Guard, Session & Basic Auth Interceptor"]
     end
 
     subgraph ServiceEngine ["Services & Plugins"]
+        JobManager["Background Job Manager (concurrent.futures.ThreadPoolExecutor)"]
         PluginRegistry["Media Plugin Registry (aarkib.plugins.plugin_registry)"]
         BookPlugin["BookMediaPlugin (EPUB, CBZ, CBR, ZIP)"]
         VideoPlugin["VideoMediaPlugin (MP4, MKV, WEBM, AVI, MOV)"]
-        AudioPlugin["AudioMediaPlugin (MP3, M4B, FLAC, OGG, M4A - Planned)"]
-        PodcastPlugin["PodcastMediaPlugin (RSS Feeds, Audio - Planned)"]
+        AudioPlugin["AudioMediaPlugin (Music & Audiobooks: MP3, M4B, FLAC, AAC)"]
+        PodcastPlugin["PodcastMediaPlugin (RSS Feeds & Episode Enclosures)"]
         
         ScannerWorker["Scanner & Watchdog Service (services/scanner.py)"]
-        TranscodeEngine["FFmpeg Process Manager & HLS Engine (Planned)"]
+        TranscodeEngine["FFmpeg Remuxing & Transcoding Engine (services/transcoder.py)"]
         OptimizerEngine["E-Ink Device EPUB Optimizer (services/optimizer.py)"]
-        EnricherEngine["Metadata Enricher (Google Books / OpenLib)"]
+        MetadataEngine["Pluggable Metadata Service (services/metadata/)"]
+        SearchEngine["Unified FTS5 Search Service (services/search.py)"]
     end
 
     subgraph StorageEngine ["Persistence & File Storage"]
         DB[(SQLite WAL: aarkib.db)]
+        FTSIndex[(SQLite FTS5 Full-Text Index)]
         MediaMounts["Media Directories (./data/books, ./data/media, AARKIB_MEDIA_DIR*)"]
-        CoverCache["Cover Cache (./data/covers - WebP)"]
+        CoverCache["Cover & Poster Cache (./data/covers - WebP)"]
         OptimizedCache["E-Ink Cache (./data/optimized)"]
-        TranscodeCache["HLS / Transcode Cache (./data/transcode)"]
+        TranscodeCache["HLS / Remux Cache (./data/transcode)"]
     end
 
     Client --> AuthFilter
@@ -47,8 +50,13 @@ graph TD
 
     UIRoutes --> DB
     APIRoutes --> DB
+    APIRoutes --> JobManager
     OPDSRoutes --> DB
     ReaderRoutes --> MediaMounts
+
+    JobManager --> ScannerWorker
+    JobManager --> MetadataEngine
+    JobManager --> DB
 
     ScannerWorker --> MediaMounts
     ScannerWorker --> PluginRegistry
@@ -58,6 +66,10 @@ graph TD
     PluginRegistry --> PodcastPlugin
     ScannerWorker --> DB
     ScannerWorker --> CoverCache
+    ScannerWorker --> FTSIndex
+
+    MetadataEngine --> DB
+    MetadataEngine --> CoverCache
 
     APIRoutes --> TranscodeEngine
     TranscodeEngine -->|Spawn ffmpeg| MediaMounts
@@ -70,31 +82,34 @@ graph TD
 ```
 
 ### Architectural Principles
-1. **Lightweight & Self-Contained**: Operates effortlessly on low-powered hardware (Raspberry Pi, NAS appliances, mini PCs) without heavy external brokers (no Celery, Redis, or PostgreSQL required).
-2. **Non-Destructive Storage**: Original files (`.epub`, `.cbz`, `.mp4`, `.flac`) are strictly treated as read-only. Extracted covers, thumbnails, e-ink variants, and HLS segments are stored in isolated cache directories.
-3. **Standards-First Interoperability**: Implements established open protocols:
+1. **Lightweight & Self-Contained**: Operates effortlessly on low-powered hardware (Raspberry Pi, NAS appliances, mini PCs) without heavy external brokers (no Celery, Redis, or PostgreSQL required). SQLite in Write-Ahead Logging (WAL) mode handles concurrent reads and background worker writes.
+2. **Non-Destructive Storage**: Original media files (`.epub`, `.cbz`, `.mp4`, `.flac`, `.m4b`) are strictly read-only. Extracted covers, posters, thumbnails, e-ink variants, and HLS segments are stored in isolated cache directories.
+3. **Non-Blocking Ingestion**: Heavy operations (library scanning, online metadata enrichment, thumbnail generation, video transcoding) execute asynchronously via a lightweight in-process `JobManager`, keeping HTTP responses instant and non-blocking.
+4. **Standards-First Interoperability**: Implements established open protocols:
    * **OPDS 1.2** (Atom XML) & **OPDS 2.0** (JSON-LD) for universal e-reader integration (KOReader, Moon+ Reader, Thorium).
    * **OPDS Progression 1.0** for reading progress synchronization with strict conflict resolution.
    * **HTTP 206 Partial Content** for native video/audio range streaming and seeking.
-4. **Plugin-Driven Multi-Media**: Decoupled metadata extraction, cover parsing, and player routing via an extensible [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) interface.
+5. **Universal Consumption Model**: A single unified progress schema tracks reading, watching, and listening states with resume positions, percentage completion, and timestamps across all media formats.
+6. **Plugin-Driven Multi-Media**: Decoupled metadata extraction, cover parsing, and player routing via an extensible [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) interface and swappable [`MetadataProvider`](file:///home/syafiq/code/aarkib/src/aarkib/services/enricher.py) backends.
 
 ---
 
 ## 2. Multi-Media Domain Specifications
 
-| Domain | Supported Formats | Metadata Parsers | Playback / Reader Strategy | Implementation Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **Books** | `epub` (v2 & v3) | `zipfile` + `defusedxml` (OPF, Dublin Core, Calibre, Belongs-to-collection) | In-browser ePub.js (in-memory ArrayBuffer), OPDS catalog download, e-ink optimized variant generation | **Implemented** |
-| **Comics / Manga** | `cbz`, `cbr`, `zip` | `zipfile` / archive extractors, `ComicInfo.xml` | In-browser canvas continuous/single-page web reader | **Implemented** |
-| **Video** (Movies, TV Shows) | `mp4`, `mkv`, `webm`, `avi`, `mov`, `m4v` | Pure-Python MP4 box parser (`mvhd`/`tkhd`), `ffprobe` fallback, smart TV/Movie regex | Direct HTTP 206 Range streaming (`send_file(..., conditional=True)`), HTML5 video player with episode navigation; on-the-fly HLS transcoding planned | **MVP Implemented** (Transcoding Next) |
-| **Audio & Audiobooks** | `mp3`, `m4b`, `flac`, `ogg`, `opus`, `m4a` | `mutagen` (ID3v2, Vorbis Comments, MP4/M4B tags, QuickTime chapters) | Persistent bottom audio player, queueing, chapter mark navigation, variable playback speed ($0.75\times$ to $2.0\times$) | **Planned / Next** |
-| **Podcasts** | RSS feeds, local cached `mp3`/`m4a` | `feedparser` RSS poller, episode enclosure extractors | Remote stream proxy or local cache playback, episode bookmarking, auto-poll background worker | **Planned** |
+| Domain | Supported Formats | Metadata Parsers & Providers | Playback / Reader Strategy | Key Specialized Attributes | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Books** | `epub` (v2 & v3), `pdf` | `zipfile` + `defusedxml` (OPF, Dublin Core, Calibre), Google Books, Open Library | In-browser ePub.js (in-memory ArrayBuffer), OPDS catalog download, on-demand e-ink optimization | ISBN, page count, publisher, publication date | **Implemented** |
+| **Comics / Manga** | `cbz`, `cbr`, `zip` | `zipfile` / archive extractors, `ComicInfo.xml` | In-browser canvas continuous/single-page web reader with RTL support | Series, issue number, volume number, page count | **Implemented** (Issue/Vol fields planned) |
+| **Video** (Movies & TV Shows) | `mp4`, `mkv`, `webm`, `avi`, `mov`, `m4v` | Pure-Python MP4 box parser (`mvhd`/`tkhd`), `ffprobe` fallback, smart TV (`S01E02`) & movie regex, TMDB provider | Direct HTTP 206 Range streaming, HTML5 video player with episode skip; on-the-fly FFmpeg remuxing & HLS transcoding fallback | Duration, resolution (width×height), video codec, season, episode | **MVP Implemented** (Remux & TMDB Next) |
+| **Audiobooks** | `m4b`, `mp3`, `m4a`, `flac` | QuickTime atom chapter parser, ID3v2 `CHAP` frames, filename heuristics, Open Library / Google Books | Dedicated audio player, chapter selection dropdown, variable playback speed ($0.75\times$ to $2.0\times$), persistent resume | Narrator, author, chapters list, duration, bitrate | **Planned / Next** |
+| **Music** | `mp3`, `flac`, `m4a`, `ogg`, `opus`, `wav`, `aac` | Pure-Python ID3v2, FLAC, WAV parsers, MusicBrainz & Cover Art Archive | In-browser audio player, persistent bottom player bar, custom user playlists, track queues | Artist, album, track number, disc number, duration, bitrate | **Foundation Ready** (Playlists Next) |
+| **Podcasts** | RSS feeds, local cached `mp3`/`m4a` | `feedparser` RSS poller, episode enclosure extractors | Remote stream proxy or local cache playback, episode bookmarking, auto-poll background worker | Show/channel title, episode number, feed URL, published date | **Planned** |
 
 ---
 
-## 3. Modular Media Plugin Framework
+## 3. Modular Media Plugin & Provider Framework
 
-All media types in Aarkib adhere to the [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) contract registered in the central [`PluginRegistry`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L55).
+All media types in Aarkib adhere to the [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) contract registered in the central [`PluginRegistry`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L55). Online metadata enrichment follows a decoupled `MetadataProvider` interface.
 
 ```mermaid
 classDiagram
@@ -127,19 +142,45 @@ classDiagram
         +parse_metadata(file_path: Path)
         +extract_cover(file_path: Path)
         +get_player_url(item_id: int, file_format: str)
-        +extract_chapters(file_path: Path)
+        +extract_chapters(file_path: Path) list
+    }
+
+    class MetadataProvider {
+        <<Abstract>>
+        +str name
+        +search(query: str, media_type: str) list
+        +get_by_id(external_id: str) dict
+    }
+
+    class GoogleBooksProvider {
+        +search(query: str)
+        +get_by_id(external_id: str)
+    }
+
+    class TMDBProvider {
+        +search(query: str)
+        +get_by_id(external_id: str)
+    }
+
+    class MusicBrainzProvider {
+        +search(query: str)
+        +get_by_id(external_id: str)
     }
 
     MediaPlugin <|-- BookMediaPlugin
     MediaPlugin <|-- VideoMediaPlugin
     MediaPlugin <|-- AudioMediaPlugin
+
+    MetadataProvider <|-- GoogleBooksProvider
+    MetadataProvider <|-- TMDBProvider
+    MetadataProvider <|-- MusicBrainzProvider
 ```
 
 ### 3.1 Extension Points & Responsibilities
 
 1. **`parse_metadata(file_path: Path)`**:
    * Reads structural metadata (title, creators/artists/authors, series/album, season/episode, publication/release date, tags, duration, resolution).
-   * Must execute in a worker thread (`ThreadPoolExecutor`) during bulk scans to prevent blocking the web server.
+   * Executed via `JobManager` in worker threads (`ThreadPoolExecutor`) during bulk scans to prevent blocking web requests.
 2. **`extract_cover(file_path: Path)`**:
    * Extracts embedded cover art (EPUB cover image, MP4/MKV cover attachment, ID3 APIC frame, FLAC METADATA_BLOCK_PICTURE) or extracts snapshot frames via FFmpeg (`extract_video_cover`).
    * Images are normalized and saved as optimized `.webp` files in `./data/covers/`.
@@ -166,76 +207,105 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.close()
 ```
 
-### 4.2 Entity Relational Model
+### 4.2 Relational Schema & Entity Relationships
 
 ```mermaid
 erDiagram
-    LIBRARIES ||--o{ BOOKS : contains
-    USERS ||--o{ USER_PROGRESS : tracks
-    USERS ||--o{ BOOKMARKS : saves
-    BOOKS ||--o{ USER_PROGRESS : logs
-    BOOKS ||--o{ BOOKMARKS : logs
-    SERIES ||--o{ BOOKS : organizes
-    AUTHORS ||--o{ BOOK_AUTHORS : connects
-    BOOKS ||--o{ BOOK_AUTHORS : connects
-    TAGS ||--o{ BOOK_TAGS : connects
-    BOOKS ||--o{ BOOK_TAGS : connects
+    LIBRARIES ||--o{ MEDIA_ITEMS : "contains (library_id FK)"
+    USERS ||--o{ USER_PROGRESS : "tracks reading/viewing"
+    USERS ||--o{ BOOKMARKS : "saves"
+    USERS ||--o{ USER_FAVORITES : "stars"
+    USERS ||--o{ PLAYLISTS : "curates"
+    PLAYLISTS ||--o{ PLAYLIST_ITEMS : "contains"
+    MEDIA_ITEMS ||--o{ PLAYLIST_ITEMS : "referenced_in"
+    MEDIA_ITEMS ||--o{ USER_PROGRESS : "logs"
+    MEDIA_ITEMS ||--o{ BOOKMARKS : "logs"
+    MEDIA_ITEMS ||--o{ USER_FAVORITES : "starred_in"
+    COLLECTIONS ||--o{ MEDIA_ITEMS : "organizes (series/shows/albums)"
+    CREATORS ||--o{ MEDIA_CREATORS : "credits"
+    MEDIA_ITEMS ||--o{ MEDIA_CREATORS : "credited_in"
+    TAGS ||--o{ MEDIA_TAGS : "categorizes"
+    MEDIA_ITEMS ||--o{ MEDIA_TAGS : "categorized_in"
 ```
 
 ### 4.3 Unified Media Model Strategy
 
-Aarkib uses declarative mixins to allow [`Book`](file:///home/syafiq/code/aarkib/src/aarkib/models/book.py) (acting as the unified catalog media item) to represent all media types without schema bloat:
+Aarkib uses declarative mixins on [`MediaItem`](file:///home/syafiq/code/aarkib/src/aarkib/models/media_item.py) to represent all media types without schema bloat:
 
 * [`MediaItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L19): Base attributes shared across all formats:
-  * `title`, `sort_title`, `media_type` (`book`, `comic`, `video`, `audio`)
+  * `title`, `sort_title`, `media_type` (`book`, `comic`, `video`, `audiobook`, `music`, `podcast`)
+  * `library_id` (Indexed FK to `libraries.id`, replacing string-prefix filesystem matching)
   * `original_file_path` (Indexed, unique), `file_format`, `file_size`, `file_hash` (SHA-256)
   * `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, `created_at`, `updated_at`
 * [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L108): Video-specific attributes:
   * `duration` (seconds), `resolution_width`, `resolution_height`, `codec`, `season`, `episode`
-* [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98): Audio-specific attributes:
-  * `duration`, `bitrate`, `album`, `track_number`, `disc_number`
+* [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98): Audio & Audiobook attributes:
+  * `duration`, `bitrate`, `album`, `track_number`, `disc_number`, `narrator`, `chapters_json`
+* **Comic Attributes**:
+  * `issue_number`, `volume_number`
 
-### 4.4 Indexing & Query Optimization
+### 4.4 User Favorites & Custom Playlists
+* **`UserFavorite`**: Composite table `(user_id, media_item_id, created_at)` allowing users to star/favorite items.
+* **`Playlist`**: `(id, user_id, title, description, media_type, is_public, created_at, updated_at)`
+* **`PlaylistItem`**: `(id, playlist_id, media_item_id, position, added_at)`
+
+### 4.5 Indexing & SQLite FTS5 Full-Text Search
 All heavy query dimensions are explicitly indexed:
 * `original_file_path`, `file_hash`, `file_format`, `media_type`
-* Foreign keys: `series_id`, `library_id`
-* Progress lookup: Unique index on `(user_id, book_id)` in [`UserProgress`](file:///home/syafiq/code/aarkib/src/aarkib/models/progress.py).
+* Foreign keys: `collection_id`, `library_id`
+* Progress lookup: Unique index on `(user_id, media_item_id)` in [`UserProgress`](file:///home/syafiq/code/aarkib/src/aarkib/models/progress.py).
+* **SQLite FTS5**: Virtual table `media_items_fts(title, creators, collection, description, tags)` maintained via SQLite triggers for sub-millisecond search across all media libraries.
 
 ---
 
-## 5. Media Ingestion & File Scanner
-
-The scanner subsystem (`services/scanner.py`) discovers, indexes, and monitors media folders:
-
-```mermaid
-sequenceDiagram
-    participant FS as Filesystem / Inotify
-    participant Watcher as Watchdog Observer
-    participant Settler as Event Debouncer / Lock Checker
-    participant Scanner as Library Scanner
-    participant Plugin as MediaPlugin
-    participant DB as SQLite Storage
-
-    FS->>Watcher: File Created / Modified
-    Watcher->>Settler: Debounce Event (wait 2.0s settling time)
-    Settler->>Settler: Check file size stability & read lock
-    Settler->>Scanner: Queue file for indexing
-    Scanner->>Scanner: Calculate SHA-256 file hash & compare mtime
-    Scanner->>Plugin: parse_metadata(file_path)
-    Scanner->>Plugin: extract_cover(file_path)
-    Plugin-->>Scanner: Extracted Metadata & Cover Bytes
-    Scanner->>DB: Upsert Book / MediaItem record
-    Scanner->>DB: Link Author, Series, and Tags
-```
+## 5. Media Ingestion & Asynchronous Job Manager
 
 ### 5.1 Scanner Reliability Safeguards
+The scanner subsystem (`services/scanner.py`) discovers, indexes, and monitors media folders:
 1. **Settling Time & Lock Checks**: Inotify triggers events immediately when a file begins copying or downloading. The scanner applies a settling window (verifying file size is stable and file handle can be opened for reading) before probing.
 2. **Fast Incremental Scans**: Checks filesystem `mtime` and file size against stored DB records before computing SHA-256 hashes, avoiding redundant disk I/O on large libraries.
 3. **Multi-Folder Discovery**: Supports dynamic library directories via database [`Library`](file:///home/syafiq/code/aarkib/src/aarkib/models/library.py) records and environment variables (`AARKIB_MEDIA_DIR`, `AARKIB_MEDIA_DIR_MOVIES`, `AARKIB_MEDIA_DIR_BOOKS`).
 
+### 5.2 Non-Blocking Background Job Architecture
+
+Long-running tasks (library scans, batch metadata enrichments, thumbnail generation) must never execute synchronously inside HTTP request threads:
+
+```mermaid
+sequenceDiagram
+    participant WebClient as Browser / Admin WebUI
+    participant API as Flask API Gateway (/api/libraries/scan)
+    participant JM as Background JobManager (ThreadPoolExecutor)
+    participant Scanner as Scanner Subsystem
+    participant DB as SQLite WAL Database
+
+    WebClient->>API: POST /api/libraries/scan
+    API->>JM: submit_job("scan_library", library_id=None)
+    JM-->>API: job_id="job_8f29bc1" (Status: Queued)
+    API-->>WebClient: 202 Accepted {"job_id": "job_8f29bc1", "status": "running"}
+
+    par Asynchronous Execution
+        JM->>Scanner: scan_library(app, library_id)
+        Scanner->>DB: Process files, calculate hashes, upsert records
+        Scanner->>JM: update_progress(current=45, total=120)
+    and Polling / Progress Updates
+        WebClient->>API: GET /api/jobs/job_8f29bc1
+        API->>JM: get_job_status("job_8f29bc1")
+        API-->>WebClient: 200 OK {"status": "running", "progress": 37.5}
+    end
+
+    Scanner->>JM: mark_completed(summary={"added": 12, "updated": 2})
+    WebClient->>API: GET /api/jobs/job_8f29bc1
+    API-->>WebClient: 200 OK {"status": "completed", "result": {...}}
+```
+
+### 5.3 Job Manager API Endpoints
+* `POST /api/libraries/scan` / `POST /api/libraries/<id>/scan`: Spawns async scan task, returns `202 Accepted` with `job_id`.
+* `POST /api/libraries/enrich`: Spawns async batch metadata enrichment, returns `202 Accepted`.
+* `GET /api/jobs/<job_id>`: Returns job state (`queued`, `running`, `completed`, `failed`), progress percentage, elapsed time, and result payload.
+
 ---
 
-## 6. Streaming & FFmpeg Transcoding Architecture
+## 6. Streaming, Remuxing & Transcoding Architecture
 
 ### 6.1 Playback Strategy Matrix
 
@@ -244,29 +314,34 @@ flowchart TD
     Req[Incoming Stream Request] --> DirectCheck{Format directly playable in client?}
     
     DirectCheck -->|Yes: MP4/H.264, WebM, MP3, AAC, FLAC| DirectPlay[Direct Play: HTTP 206 Partial Content Range Streaming]
-    DirectCheck -->|No: MKV container with H.264/AAC| Remux[Direct Stream: FFmpeg container remuxing -c copy]
+    DirectCheck -->|No: MKV container with H.264/AAC| Remux[Direct Stream: FFmpeg on-the-fly container remuxing -c copy -f mp4]
     DirectCheck -->|No: Unsupported Codec e.g. HEVC/10-bit or High Bitrate| Transcode[Real-time Transcode: HLS / fMP4 Pipeline]
 
     DirectPlay --> FlaskSendFile[send_file with conditional=True]
-    Remux --> FFmpegProcess[FFmpeg Process Pipe]
+    Remux --> FFmpegProcess[FFmpeg Process Pipe - Zero CPU re-encoding]
     Transcode --> FFmpegHW[FFmpeg Process with VAAPI HW Accel]
     
-    FFmpegProcess --> HLSPlaylist[HLS Segment Generator .m3u8]
-    FFmpegHW --> HLSPlaylist
+    FFmpegHW --> HLSPlaylist[HLS Segment Generator .m3u8]
 ```
 
 ### 6.2 Direct Play (HTTP 206 Partial Content)
 For compatible media, Aarkib leverages Flask's native conditional file streaming:
 ```python
-@api_bp.route("/books/<int:book_id>/file", methods=["GET"])
-def get_book_file(book_id: int):
+@api_bp.route("/media/<int:item_id>/file", methods=["GET"])
+def get_media_file(item_id: int):
     # send_file(..., conditional=True) parses HTTP Range headers
     # returning 206 Partial Content for instant seeking
     return send_file(file_path, mimetype=mimetype, conditional=True)
 ```
 
-### 6.3 FFmpeg Real-Time HLS Transcoding Pipeline (Specification)
+### 6.3 On-The-Fly Container Remuxing (MKV $\to$ MP4)
+For MKV files whose video stream (H.264) and audio stream (AAC) are already browser-compatible, avoid re-encoding:
+```bash
+ffmpeg -i "{input_path}" -c copy -movflags frag_keyframe+empty_moov+default_base_moof -f mp4 pipe:1
+```
+Streams directly from FFmpeg stdout to the HTTP client with near-zero CPU consumption.
 
+### 6.4 FFmpeg Real-Time HLS Transcoding Pipeline (Specification)
 When transcoding is required (e.g. legacy AVI, MPEG-2, incompatible MKV audio streams, or bandwidth constraints):
 
 #### Pipeline Command Specification
@@ -292,53 +367,96 @@ ffmpeg \
 * Encoder: `h264_vaapi` or `hevc_vaapi`.
 * CPU Software Fallback: `-c:v libx264 -preset veryfast -crf 23 -threads auto`.
 
+#### Subtitle Extraction to WebVTT
+Extract embedded SRT/ASS subtitles to WebVTT (`/api/stream/<id>/subtitles.vtt`) for native browser `<track>` rendering.
+
 #### Transcode Session Supervisor (`services/transcoder.py`)
-To prevent runaway background processes:
 1. **Session Registry**: Tracks active client sessions by `session_id`, holding process handle `subprocess.Popen`, timestamp of last segment request, and temporary segment directory.
 2. **Heartbeat & Idle Timeout**: A background reaper thread terminates FFmpeg processes whose clients have stopped requesting segments for $>60$ seconds.
 3. **Disk Pruning**: Segment cache folders under `data/transcode/` are deleted upon session termination or server restart.
 
 ---
 
-## 7. Web Frontend & Reader/Player Architecture
+## 7. Pluggable Metadata Enrichment Subsystem
 
-Aarkib employs lightweight, server-rendered Jinja2 templates combined with dedicated modern browser readers and players:
+To enrich media beyond books without hardcoding provider logic:
 
-1. **EPUB Web Reader (`/reader/epub/<id>`)**:
-   * Uses **ePub.js** powered by in-memory `ArrayBuffer` fetching (avoiding unpacked file requests).
-   * Tracks reading progress percentage and synchronized CFIs.
-2. **CBZ / Comic Canvas Reader (`/reader/cbz/<id>`)**:
-   * Continuous vertical scroll and single-page display modes.
-   * Client-side image preloading with keyboard navigation (`Left/Right` arrow keys).
-3. **HTML5 Video Player (`/reader/video/<id>`)**:
-   * Native HTML5 `<video>` player with custom controls.
-   * Automatic playback resume from [`UserProgress.progress_location`](file:///home/syafiq/code/aarkib/src/aarkib/models/progress.py).
-   * Episode navigation (Next/Previous buttons automatically discovered via series/season metadata).
-4. **Persistent Audio & Audiobook Player (Planned - `/reader/audio/<id>` & global drawer)**:
-   * Fixed bottom player bar across library views.
-   * Chapter selection dropdown for `.m4b` and multi-track audiobooks.
-   * Playback speed multiplier ($0.75\times, 1.0\times, 1.25\times, 1.5\times, 2.0\times$).
+### 7.1 Provider Interface (`services/metadata/base.py`)
+```python
+class MetadataProvider(ABC):
+    name: str
+
+    @abstractmethod
+    def search(self, query: str, media_type: str) -> list[MetadataSearchResult]:
+        """Search online database for candidate matches."""
+        pass
+
+    @abstractmethod
+    def fetch_details(self, external_id: str) -> MediaMetadataDetails:
+        """Fetch full metadata, description, genres, and high-res artwork URLs."""
+        pass
+```
+
+### 7.2 Provider Implementations
+1. **Books & E-Books**: Google Books API & Open Library API (already implemented).
+2. **Movies & TV Shows**: **TMDB (The Movie Database)** API.
+   * Auto-match movies by title and year.
+   * Auto-match TV episodes by show title, season, and episode number.
+   * Downloads official high-res poster (`.webp`), backdrop, synopsis, director, cast, release year.
+3. **Music & Audiobooks**: **MusicBrainz API** & Cover Art Archive.
+   * Matches artist and album tags to canonical releases.
+   * Fetches high-resolution album artwork and genre classifications.
 
 ---
 
-## 8. Realistic Step-by-Step Execution Roadmap
+## 8. Web Frontend & Unified Consumption UX
+
+Aarkib employs lightweight, server-rendered Jinja2 templates combined with dedicated modern browser readers and players:
+
+1. **Unified "Continue" Shelf**:
+   * Displays all in-progress media across formats in a single row:
+     * 🎬 **Video**: "42m left • S01E02"
+     * 🎧 **Audiobook**: "Ch. 5 • 1h 14m left (1.25×)"
+     * 📚 **Book / EPUB**: "Page 142 of 380 (37%)"
+     * 🎨 **Comic / CBZ**: "Page 24 of 68"
+2. **EPUB Web Reader (`/reader/epub/<id>`)**:
+   * Uses **ePub.js** powered by in-memory `ArrayBuffer` fetching.
+   * Tracks reading progress percentage and synchronized CFIs.
+3. **CBZ / Comic Canvas Reader (`/reader/cbz/<id>`)**:
+   * Continuous vertical scroll and single-page display modes with RTL navigation.
+4. **HTML5 Video Player (`/reader/video/<id>`)**:
+   * Native HTML5 `<video>` player with custom controls, playback resume, and episode navigation.
+5. **Dedicated Audiobook & Music Player (`/reader/audio/<id>`)**:
+   * Chapter selection dropdown for `.m4b` and multi-track audiobooks.
+   * Playback speed multiplier ($0.75\times, 1.0\times, 1.25\times, 1.5\times, 2.0\times$).
+   * User playlist management and track queueing.
+
+---
+
+## 9. Realistic Step-by-Step Execution Roadmap
 
 ```mermaid
 gantt
-    title Aarkib Multi-Media Roadmap
+    title Aarkib Media Server Execution Roadmap
     dateFormat  YYYY-MM
     section Phase 1 (Completed)
-    Core Book & Comic Server      :done, p1, 2026-07, 2026-08
+    Core Books, Comics & OPDS Sync       :done, p1, 2026-07, 2026-08
     section Phase 2 (Completed)
-    Multi-Media Models & Video MVP:done, p2, 2026-08, 2026-09
+    Multi-Media Models & Video/Audio MVP :done, p2, 2026-08, 2026-09
     section Phase 3 (Next)
-    FFmpeg Transcode & HLS Engine :active, p3, 2026-09, 2026-10
+    Background Job Manager & library_id  :active, p3, 2026-09, 2026-10
     section Phase 4
-    Audio & Audiobook System       :p4, 2026-10, 2026-11
+    FFmpeg Remuxing, HLS & VAAPI Accel   :p4, 2026-10, 2026-11
     section Phase 5
-    Podcasts & Remote Scrapers     :p5, 2026-11, 2026-12
+    Audiobooks (M4B Chapters) & Playlists:p5, 2026-11, 2026-12
     section Phase 6
-    Multi-Arch Hardware Packaging  :p6, 2026-12, 2027-01
+    TMDB & MusicBrainz Metadata Providers:p6, 2026-12, 2027-01
+    section Phase 7
+    SQLite FTS5 Unified Grouped Search   :p7, 2027-01, 2027-02
+    section Phase 8
+    Podcasts & Remote Scrapers           :p8, 2027-02, 2027-03
+    section Phase 9
+    Production Packaging & Third-Party API:p9, 2027-03, 2027-04
 ```
 
 ### Phase 1: Core Foundation & Book/Comic Engine `[COMPLETED]`
@@ -348,46 +466,65 @@ gantt
 - [x] Hardware-tailored e-ink EPUB optimization pipeline (`services/optimizer.py`).
 - [x] Multi-directory crawler and Watchdog background file watcher.
 
-### Phase 2: Multi-Media Models & Video MVP `[COMPLETED]`
+### Phase 2: Multi-Media Models & Video/Audio MVP `[COMPLETED]`
 - [x] Implement [`MediaItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L19), [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L108), and [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98).
 - [x] Implement [`VideoMediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/video.py) handling `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v`.
-- [x] Pure-Python MP4 box parser (`read_mp4_metadata`) with `ffprobe` fallback.
-- [x] Movie and TV show episode title / season heuristics parser (`parse_video_filename`).
+- [x] Pure-Python MP4 box parser (`read_mp4_metadata`) and ID3/FLAC audio parsers.
+- [x] Smart TV show episode title / season regex parser (`parse_video_filename`).
 - [x] HTTP 206 Partial Content byte-range video streaming endpoint.
 - [x] In-browser HTML5 video player with episode navigation and progress resume (`/reader/video/<id>`).
+- [x] Dedicated HTML5 audio player interface with album art and scrubber (`/reader/audio/<id>`).
 
-### Phase 3: FFmpeg Transcoding & Hardware Acceleration `[PLANNED / NEXT]`
-- [ ] Build `services/transcoder.py`: Transcode session manager tracking active FFmpeg processes and client heartbeats.
+### Phase 3: Background Job Manager & Relational Refinements `[PLANNED / NEXT]`
+- [ ] Build `services/job_manager.py`: In-process background job supervisor using `concurrent.futures.ThreadPoolExecutor`.
+- [ ] Convert `POST /api/libraries/scan` and `POST /api/libraries/<id>/scan` to return `202 Accepted` with `job_id`.
+- [ ] Create `GET /api/jobs/<job_id>` status and progress endpoint.
+- [ ] Add non-blocking progress spinner / toast notifications in `library.html` and `settings.html`.
+- [ ] Add indexed `library_id` FK on `MediaItem` to replace string path-prefix matching.
+
+### Phase 4: FFmpeg Direct Remuxing, HLS & Hardware Acceleration `[PLANNED]`
+- [ ] Build `services/transcoder.py`: Transcode session supervisor tracking active FFmpeg processes and client heartbeats.
+- [ ] Implement on-the-fly MKV $\to$ MP4 container remuxing (`-c copy`) for zero-CPU video streaming.
 - [ ] Implement HLS packaging endpoint (`/api/stream/<id>/master.m3u8` and `/api/stream/<id>/segment_<n>.m4s`).
-- [ ] Add Linux hardware acceleration auto-detection (`/dev/dri/renderD128` for Intel QSV and AMD VAAPI).
-- [ ] Implement embedded subtitle extraction to WebVTT (`/api/stream/<id>/subtitles.vtt`).
-- [ ] Integrate HLS.js fallback into `reader_video.html` when browser cannot direct-play container or codec.
+- [ ] Auto-detect Linux VAAPI hardware acceleration (`/dev/dri/renderD128` for Intel QuickSync / AMD VAAPI).
+- [ ] Extract embedded subtitle tracks to WebVTT (`/api/stream/<id>/subtitles.vtt`).
+- [ ] Integrate HLS.js fallback into `reader_video.html` for incompatible video/audio streams.
 
-### Phase 4: Audio & Audiobook Support `[PLANNED]`
-- [ ] Implement `AudioMediaPlugin` using `mutagen` for MP3, M4B, FLAC, OGG, OPUS.
-- [ ] Extract embedded album/cover artwork and save to WebP cache.
-- [ ] Parse M4B QuickTime chapter marks and ID3 chapter frames into structured chapter lists.
-- [ ] Build persistent bottom web audio player bar across Aarkib WebUI.
-- [ ] Add audiobook playback memory (resume position, playback speed multiplier, sleep timer).
+### Phase 5: Dedicated Audiobooks (M4B Chapters) & User Playlists `[PLANNED]`
+- [ ] Add `audiobook` and `music` distinct types to `MediaType` enum and library filters.
+- [ ] Add `narrator` attribute to audio metadata mixin and detail views.
+- [ ] Parse `.m4b` QuickTime chapter markers and ID3 `CHAP` frames into structured chapter lists.
+- [ ] Build chapter selection dropdown and variable speed selector in `player_audio.html`.
+- [ ] Implement `UserFavorite` table and `Playlist` / `PlaylistItem` models with UI playlist manager.
 
-### Phase 5: Podcasts & Remote Metadata Scrapers `[PLANNED]`
+### Phase 6: External Metadata Providers (TMDB & MusicBrainz) `[PLANNED]`
+- [ ] Create pluggable `MetadataProvider` abstract base class and provider registry in `services/metadata/`.
+- [ ] Implement `TMDBProvider` for Movies & TV Shows (auto-fetch posters, backdrops, episode plot, cast).
+- [ ] Implement `MusicBrainzProvider` for music albums and track metadata.
+- [ ] Update UI detail view with interactive "Enrich Metadata" modal supporting TMDB and MusicBrainz.
+
+### Phase 7: SQLite FTS5 Unified Grouped Search `[PLANNED]`
+- [ ] Implement SQLite FTS5 virtual table `media_items_fts` with automatic sync triggers.
+- [ ] Update `/api/media?q=` to query FTS5 index with sub-millisecond latency.
+- [ ] Categorize search results in WebUI by media type (Movies, TV, Books, Audiobooks, Music, Comics).
+
+### Phase 8: Podcasts & Remote RSS Scrapers `[PLANNED]`
 - [ ] Create `PodcastMediaPlugin` and SQLite tables for podcast RSS feeds and channel metadata.
 - [ ] Background polling worker using `feedparser` to discover new podcast episodes.
 - [ ] Implement episode streaming and optional local download caching.
-- [ ] Build metadata enrichment scrapers for music (MusicBrainz) and movies/TV (TMDB / TVDb).
 
-### Phase 6: Multi-Arch Production Packaging `[PLANNED]`
-- [ ] Update `Dockerfile` to install `ffmpeg`, `libva-drm2`, and VAAPI driver packages for `linux/amd64` and `linux/arm64`.
+### Phase 9: Multi-Arch Production Packaging & Third-Party APIs `[PLANNED]`
+- [ ] Update `Dockerfile` to include `ffmpeg`, `libva-drm2`, and VAAPI drivers for `linux/amd64` and `linux/arm64`.
 - [ ] Configure `docker-compose.yml` with `/dev/dri` hardware acceleration passthrough.
-- [ ] Write integration test suite verifying transcoding, range streaming, and multi-media scanning.
+- [ ] Evaluate lightweight Subsonic / Audiobookshelf API shim for mobile app interoperability (Symfonium, Plappa).
 
 ---
 
-## 9. Deployment Configurations
+## 10. Deployment Configurations
 
 ### A. Bare-Metal via `uv` (Linux x86_64 / arm64)
 ```bash
-# 1. Install system multimedia tools and VAAPI drivers
+# 1. Install multimedia tools and VAAPI hardware drivers
 sudo apt install ffmpeg vainfo libva2 libva-drm2
 
 # 2. Sync project dependencies
@@ -421,8 +558,11 @@ services:
     volumes:
       - ./data:/app/data
       - /path/to/media/books:/app/data/books:ro
+      - /path/to/media/comics:/app/data/comics:ro
       - /path/to/media/videos:/app/data/videos:ro
-      - /path/to/media/audio:/app/data/audio:ro
+      - /path/to/media/audiobooks:/app/data/audiobooks:ro
+      - /path/to/media/music:/app/data/music:ro
     devices:
       - /dev/dri:/dev/dri # Hardware acceleration passthrough for Intel & AMD VAAPI
 ```
+
