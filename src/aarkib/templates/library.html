@@ -22,7 +22,9 @@
       <option value="book">📚 Books</option>
       <option value="comic">🎨 Comics & Manga</option>
       <option value="video">🎬 Movies & TV Shows</option>
-      <option value="audio">🎵 Audio & Music</option>
+      <option value="audiobook">🎧 Audiobooks</option>
+      <option value="music">🎵 Music Tracks</option>
+      <option value="audio">🔊 All Audio</option>
     </select>
 
     <select id="format-filter" class="select-input" style="width: auto;">
@@ -164,7 +166,7 @@
     <section class="shelf-section" id="shelf-lib-{{ shelf.id }}">
       <div class="shelf-header">
         <div class="shelf-title-wrap">
-          <h2 class="shelf-title">{% if shelf.media_type == 'video' %}🎬{% elif shelf.media_type == 'comic' %}🎨{% elif shelf.media_type == 'book' %}📚{% else %}📁{% endif %} {{ shelf.name }}</h2>
+          <h2 class="shelf-title">{% if shelf.media_type == 'video' %}🎬{% elif shelf.media_type == 'comic' %}🎨{% elif shelf.media_type == 'book' %}📚{% elif shelf.media_type == 'audiobook' %}🎧{% elif shelf.media_type == 'music' %}🎵{% elif shelf.media_type == 'audio' %}🔊{% else %}📁{% endif %} {{ shelf.name }}</h2>
           <span class="shelf-count-badge">{{ shelf.count }} {% if shelf.count == 1 %}item{% else %}items{% endif %}</span>
         </div>
         <div class="shelf-actions">

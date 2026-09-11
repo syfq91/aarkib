@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -487,15 +488,30 @@ def _resolve_media_type(
     if matching_type:
         return matching_type
 
-    return getattr(metadata, "media_type", None) or (
-        "comic"
-        if metadata.file_format in ("cbz", "cbr", "zip")
-        else "video"
-        if metadata.file_format in VIDEO_EXTENSIONS
-        else "audio"
-        if metadata.file_format in AUDIO_EXTENSIONS
-        else "book"
-    )
+    meta_type = getattr(metadata, "media_type", None)
+    if meta_type and meta_type in (
+        "comic",
+        "video",
+        "audiobook",
+        "music",
+        "podcast",
+    ):
+        return meta_type
+
+    fmt = (getattr(metadata, "file_format", "") or "").lower()
+    if fmt in ("cbz", "cbr", "zip"):
+        return "comic"
+    if fmt in VIDEO_EXTENSIONS:
+        return "video"
+    if (
+        fmt == "m4b"
+        or getattr(metadata, "chapters", None)
+        or "Audiobook" in getattr(metadata, "tags", [])
+    ):
+        return "audiobook"
+    if fmt in AUDIO_EXTENSIONS:
+        return meta_type or "music"
+    return "book"
 
 
 def _assign_authors_tags_series(book: Book, metadata) -> None:
@@ -637,10 +653,27 @@ def index_single_book(
             book.episode = getattr(metadata, "episode", None)
         if hasattr(book, "album"):
             book.album = getattr(metadata, "album", None)
+        if hasattr(book, "album_artist"):
+            book.album_artist = getattr(metadata, "album_artist", None)
         if hasattr(book, "track_number"):
             book.track_number = getattr(metadata, "track_number", None)
         if hasattr(book, "disc_number"):
             book.disc_number = getattr(metadata, "disc_number", None)
+        if hasattr(book, "release_year"):
+            book.release_year = getattr(metadata, "release_year", None)
+        if hasattr(book, "genre"):
+            book.genre = getattr(metadata, "genre", None)
+        if hasattr(book, "is_compilation"):
+            book.is_compilation = getattr(metadata, "is_compilation", False)
+        if hasattr(book, "author"):
+            book.author = getattr(metadata, "author", None)
+        if hasattr(book, "narrator"):
+            book.narrator = getattr(metadata, "narrator", None)
+        if hasattr(book, "chapters_json"):
+            chapters = getattr(metadata, "chapters", None)
+            book.chapters_json = json.dumps(chapters) if chapters else None
+        if hasattr(book, "abridged"):
+            book.abridged = getattr(metadata, "abridged", False)
 
         _assign_authors_tags_series(book, metadata)
 

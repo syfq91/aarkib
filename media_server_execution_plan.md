@@ -592,8 +592,8 @@ gantt
     Background Job Manager & library_id  :done, p3, 2026-09, 2026-10
     section Phase 4 (Next)
     FFmpeg Remuxing, HLS & VAAPI Accel   :active, p4, 2026-10, 2026-11
-    section Phase 5
-    Audiobooks (M4B Chapters) & Playlists:p5, 2026-11, 2026-12
+    section Phase 5 (Completed)
+    Audiobooks (M4B Chapters) & Playlists:done, p5, 2026-11, 2026-12
     section Phase 6
     TMDB & MusicBrainz Metadata Providers:p6, 2026-12, 2027-01
     section Phase 7
@@ -637,13 +637,13 @@ gantt
 - [ ] Implement format-aware subtitle conversion: sanitize and convert stylized ASS/SSA subtitles to WebVTT, deliver raw ASS for client WebAssembly rendering (`libass`), and support server-side burning for PGS/VobSub bitmap subtitles.
 - [ ] Integrate HLS.js fallback into `reader_video.html` for incompatible video/audio streams.
 
-### Phase 5: Dedicated Audiobooks (M4B Chapters) & User Playlists `[PLANNED]`
-- [ ] Formalize media taxonomy by splitting `audio` into distinct `audiobook` and `music` types in `MediaType` enum to prevent audiobooks from inheriting song/album semantics.
-- [ ] Model `AudiobookItemMixin` with `author`, `narrator`, `chapters_json`, `abridged` flag, series indexing, and microsecond resume position.
-- [ ] Model `AudioTrackMixin` for music with `artist`, `album_artist`, `album`, track/disc numbers, compilation flags, and queueing semantics.
-- [ ] Parse `.m4b` QuickTime chapter markers and ID3 `CHAP` frames into structured chapter lists.
-- [ ] Build dedicated audiobook web player with chapter selection dropdown, variable speed selector ($0.75\times$ to $2.0\times$), sleep timer, and persistent resume.
-- [ ] Implement `UserFavorite` table and `Playlist` / `PlaylistItem` models with UI playlist manager and bottom music bar.
+### Phase 5: Dedicated Audiobooks (M4B Chapters) & User Playlists `[COMPLETED]`
+- [x] Formalize media taxonomy by splitting `audio` into distinct `audiobook` and `music` types in `MediaType` enum to prevent audiobooks from inheriting song/album semantics.
+- [x] Model `AudiobookItemMixin` with `author`, `narrator`, `chapters_json`, `abridged` flag, series indexing, and microsecond resume position.
+- [x] Model `AudioTrackMixin` for music with `artist`, `album_artist`, `album`, track/disc numbers, compilation flags, and queueing semantics.
+- [x] Parse `.m4b` QuickTime chapter markers and ID3 `CHAP` frames into structured chapter lists.
+- [x] Build dedicated audiobook web player with chapter selection dropdown, variable speed selector ($0.75\times$ to $2.0\times$), sleep timer, and persistent resume.
+- [x] Implement `UserFavorite` table and `Playlist` / `PlaylistItem` models with UI playlist manager and bottom music bar.
 
 ### Phase 6: External Metadata Providers (TMDB & MusicBrainz) `[PLANNED]`
 - [ ] Create pluggable `MetadataProvider` abstract base class and provider registry in `services/metadata/`.

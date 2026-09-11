@@ -18,13 +18,18 @@ from aarkib.models import (
     Book,
     Bookmark,
     Library,
+    MediaItem,
+    Playlist,
+    PlaylistItem,
     Series,
     Tag,
     User,
+    UserFavorite,
     UserProgress,
 )
 from aarkib.services.job_manager import job_manager
 from aarkib.services.media_service import (
+    AUDIO_EXTENSIONS,
     MEDIA_TYPE_CHOICES,
     VIDEO_EXTENSIONS,
     count_books_in_library,
@@ -175,7 +180,12 @@ def list_books():
     if file_format:
         query = query.filter(Book.file_format == file_format)
     if media_type:
-        query = query.filter(Book.media_type == media_type)
+        if media_type == "audio":
+            query = query.filter(
+                Book.media_type.in_(["audio", "audiobook", "music", "podcast"])
+            )
+        else:
+            query = query.filter(Book.media_type == media_type)
     if library_filter:
         from aarkib.services.scanner import get_library_definitions
 
@@ -255,6 +265,16 @@ def list_books():
                 "codec": b.codec,
                 "season": b.season,
                 "episode": b.episode,
+                "narrator": getattr(b, "narrator", None),
+                "chapters": b.chapters if hasattr(b, "chapters") else [],
+                "abridged": getattr(b, "abridged", False),
+                "album": getattr(b, "album", None),
+                "album_artist": getattr(b, "album_artist", None),
+                "genre": getattr(b, "genre", None),
+                "release_year": getattr(b, "release_year", None),
+                "track_number": getattr(b, "track_number", None),
+                "disc_number": getattr(b, "disc_number", None),
+                "is_compilation": getattr(b, "is_compilation", False),
                 "progress": progress_map.get(
                     b.id, {"percentage": 0.0, "location": "0", "completed": False}
                 ),
@@ -409,6 +429,12 @@ def update_library(identifier: str):
                         b.media_type = "comic"
                     elif b.file_format in VIDEO_EXTENSIONS:
                         b.media_type = "video"
+                    elif b.file_format == "m4b" or (
+                        hasattr(b, "chapters") and b.chapters
+                    ):
+                        b.media_type = "audiobook"
+                    elif b.file_format in AUDIO_EXTENSIONS:
+                        b.media_type = "music"
                     else:
                         b.media_type = "book"
 
@@ -548,6 +574,17 @@ def get_book(book_id: int):
             "season": book.season,
             "episode": book.episode,
             "episode_code": book.episode_code,
+            "author": getattr(book, "author", None),
+            "narrator": getattr(book, "narrator", None),
+            "chapters": book.chapters if hasattr(book, "chapters") else [],
+            "abridged": getattr(book, "abridged", False),
+            "album": getattr(book, "album", None),
+            "album_artist": getattr(book, "album_artist", None),
+            "genre": getattr(book, "genre", None),
+            "release_year": getattr(book, "release_year", None),
+            "track_number": getattr(book, "track_number", None),
+            "disc_number": getattr(book, "disc_number", None),
+            "is_compilation": getattr(book, "is_compilation", False),
             "cover_url": f"/api/books/{book.id}/cover",
             "download_url": f"/api/books/{book.id}/download",
             "file_url": f"/api/books/{book.id}/file",
@@ -1129,3 +1166,256 @@ def edit_book_metadata(book_id: int):
             },
         }
     )
+
+
+# ----------------------------------------------------------------------
+# User Favorites API
+# ----------------------------------------------------------------------
+
+
+@api_bp.route("/media/<int:item_id>/favorite", methods=["POST"])
+def toggle_favorite(item_id: int):
+    """Toggle or update favorite status for a media item."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    if not user_id:
+        return api_error("Authentication required to manage favorites", 401)
+
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    data = request.get_json(silent=True) or {}
+    explicit_state = data.get("favorite")
+
+    fav = db.session.scalar(
+        select(UserFavorite).where(
+            UserFavorite.user_id == user_id,
+            UserFavorite.media_item_id == item_id,
+        )
+    )
+
+    if explicit_state is True:
+        if not fav:
+            fav = UserFavorite(user_id=user_id, media_item_id=item_id)
+            db.session.add(fav)
+            db.session.commit()
+        return jsonify(
+            {"status": "success", "favorited": True, "media_item_id": item_id}
+        )
+    elif explicit_state is False:
+        if fav:
+            db.session.delete(fav)
+            db.session.commit()
+        return jsonify(
+            {"status": "success", "favorited": False, "media_item_id": item_id}
+        )
+    else:
+        # Toggle
+        if fav:
+            db.session.delete(fav)
+            db.session.commit()
+            return jsonify(
+                {"status": "success", "favorited": False, "media_item_id": item_id}
+            )
+        else:
+            fav = UserFavorite(user_id=user_id, media_item_id=item_id)
+            db.session.add(fav)
+            db.session.commit()
+            return jsonify(
+                {"status": "success", "favorited": True, "media_item_id": item_id}
+            )
+
+
+@api_bp.route("/favorites", methods=["GET"])
+def get_favorites():
+    """Returns all favorited media items for the current user."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    if not user_id:
+        return api_error("Authentication required to list favorites", 401)
+
+    favs = db.session.scalars(
+        select(UserFavorite)
+        .where(UserFavorite.user_id == user_id)
+        .order_by(UserFavorite.created_at.desc())
+    ).all()
+
+    items = []
+    for f in favs:
+        if f.media_item:
+            items.append(
+                {
+                    "favorite_id": f.id,
+                    "media_item_id": f.media_item_id,
+                    "title": f.media_item.title,
+                    "media_type": f.media_item.media_type,
+                    "file_format": f.media_item.file_format,
+                    "creators": f.media_item.creators_display,
+                    "cover_url": f"/api/books/{f.media_item.id}/cover",
+                    "player_url": f.media_item.player_url,
+                    "created_at": f.created_at.isoformat() if f.created_at else None,
+                }
+            )
+
+    return jsonify({"favorites": items, "count": len(items)})
+
+
+# ----------------------------------------------------------------------
+# Playlists API
+# ----------------------------------------------------------------------
+
+
+@api_bp.route("/playlists", methods=["GET"])
+def get_playlists():
+    """List playlists belonging to the user or public playlists."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    cond = Playlist.is_public.is_(True)
+    if user_id:
+        cond = or_(cond, Playlist.user_id == user_id)
+
+    playlists = db.session.scalars(
+        select(Playlist).where(cond).order_by(Playlist.updated_at.desc())
+    ).all()
+    return jsonify({"playlists": [p.to_dict(include_items=False) for p in playlists]})
+
+
+@api_bp.route("/playlists", methods=["POST"])
+def create_playlist():
+    """Create a new playlist."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title", "")).strip()
+    if not title:
+        return api_error("Playlist title is required", 400)
+
+    playlist = Playlist(
+        user_id=user_id,
+        title=title,
+        description=data.get("description"),
+        media_type=data.get("media_type", "music"),
+        is_public=bool(data.get("is_public", False)),
+    )
+    db.session.add(playlist)
+    db.session.commit()
+    return (
+        jsonify(
+            {"status": "success", "playlist": playlist.to_dict(include_items=True)}
+        ),
+        201,
+    )
+
+
+@api_bp.route("/playlists/<int:playlist_id>", methods=["GET"])
+def get_playlist_detail(playlist_id: int):
+    """Get playlist details and its ordered items."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    playlist = db.session.get(Playlist, playlist_id)
+    if not playlist:
+        return api_error("Playlist not found", 404)
+    if not playlist.is_public and (not user_id or playlist.user_id != user_id):
+        return api_error("Access denied to private playlist", 403)
+
+    return jsonify({"playlist": playlist.to_dict(include_items=True)})
+
+
+@api_bp.route("/playlists/<int:playlist_id>/items", methods=["POST"])
+def add_playlist_item(playlist_id: int):
+    """Add a media item to a playlist."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    playlist = db.session.get(Playlist, playlist_id)
+    if not playlist:
+        return api_error("Playlist not found", 404)
+    if user_id and playlist.user_id and playlist.user_id != user_id:
+        return api_error("Only the playlist owner can add items", 403)
+
+    data = request.get_json(silent=True) or {}
+    item_id = data.get("media_item_id") or data.get("item_id")
+    if not item_id:
+        return api_error("media_item_id is required", 400)
+
+    media_item = db.session.get(MediaItem, item_id)
+    if not media_item:
+        return api_error("Media item not found", 404)
+
+    curr_count = len(playlist.items)
+    position = int(data.get("position", curr_count))
+
+    playlist_item = PlaylistItem(
+        playlist_id=playlist.id,
+        media_item_id=media_item.id,
+        position=position,
+    )
+    db.session.add(playlist_item)
+    playlist.updated_at = datetime.now(UTC)
+    db.session.commit()
+
+    return jsonify({"status": "success", "item": playlist_item.to_dict()}), 201
+
+
+@api_bp.route("/playlists/<int:playlist_id>/items/<int:item_id>", methods=["DELETE"])
+def remove_playlist_item(playlist_id: int, item_id: int):
+    """Remove a media item from a playlist."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    playlist = db.session.get(Playlist, playlist_id)
+    if not playlist:
+        return api_error("Playlist not found", 404)
+    if user_id and playlist.user_id and playlist.user_id != user_id:
+        return api_error("Only the playlist owner can remove items", 403)
+
+    target_entry = db.session.scalar(
+        select(PlaylistItem).where(
+            PlaylistItem.playlist_id == playlist_id,
+            or_(PlaylistItem.id == item_id, PlaylistItem.media_item_id == item_id),
+        )
+    )
+    if not target_entry:
+        return api_error("Playlist item entry not found", 404)
+
+    db.session.delete(target_entry)
+    playlist.updated_at = datetime.now(UTC)
+    db.session.commit()
+    return jsonify({"status": "success", "message": "Item removed from playlist"})
+
+
+@api_bp.route("/playlists/<int:playlist_id>/reorder", methods=["PUT", "POST"])
+def reorder_playlist_items(playlist_id: int):
+    """Reorder items in a playlist."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    playlist = db.session.get(Playlist, playlist_id)
+    if not playlist:
+        return api_error("Playlist not found", 404)
+    if user_id and playlist.user_id and playlist.user_id != user_id:
+        return api_error("Only the playlist owner can reorder items", 403)
+
+    data = request.get_json(silent=True) or {}
+    item_ids = data.get("item_ids", [])
+    if not isinstance(item_ids, list):
+        return api_error("item_ids list is required", 400)
+
+    for idx, mid in enumerate(item_ids):
+        db.session.execute(
+            update(PlaylistItem)
+            .where(
+                PlaylistItem.playlist_id == playlist_id,
+                or_(PlaylistItem.id == mid, PlaylistItem.media_item_id == mid),
+            )
+            .values(position=idx)
+        )
+
+    playlist.updated_at = datetime.now(UTC)
+    db.session.commit()
+    return jsonify({"status": "success", "message": "Playlist reordered"})
+
+
+@api_bp.route("/playlists/<int:playlist_id>", methods=["DELETE"])
+def delete_playlist(playlist_id: int):
+    """Delete a playlist."""
+    user_id = current_user.id if current_user.is_authenticated else None
+    playlist = db.session.get(Playlist, playlist_id)
+    if not playlist:
+        return api_error("Playlist not found", 404)
+    if user_id and playlist.user_id and playlist.user_id != user_id:
+        return api_error("Only the playlist owner can delete this playlist", 403)
+
+    db.session.delete(playlist)
+    db.session.commit()
+    return jsonify({"status": "success", "message": "Playlist deleted"})

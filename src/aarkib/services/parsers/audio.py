@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
+import shutil
 import struct
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from aarkib.services.parsers.base import ParsedAudioMetadata
+from aarkib.services.parsers.base import (
+    ParsedAudiobookMetadata,
+    ParsedAudioMetadata,
+    ParsedMusicMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +104,16 @@ def parse_id3v2(file_path: Path) -> dict[str, Any]:
                 artist = _decode_id3_text(text_data, enc)
                 if artist and "artist" not in meta:
                     meta["artist"] = artist
+                if frame_id == "TPE2" and artist and "album_artist" not in meta:
+                    meta["album_artist"] = artist
+            elif frame_id == "TPE3":
+                narrator = _decode_id3_text(text_data, enc)
+                if narrator:
+                    meta["narrator"] = narrator
+            elif frame_id == "TCOM":
+                author = _decode_id3_text(text_data, enc)
+                if author and "author" not in meta:
+                    meta["author"] = author
             elif frame_id == "TALB":
                 meta["album"] = _decode_id3_text(text_data, enc)
             elif frame_id == "TRCK":
@@ -120,6 +137,52 @@ def parse_id3v2(file_path: Path) -> dict[str, Any]:
                     )
                 except Exception:
                     pass
+            elif frame_id == "CHAP":
+                try:
+                    cstream = io.BytesIO(payload)
+                    elem_bytes = bytearray()
+                    while True:
+                        b = cstream.read(1)
+                        if not b or b == b"\x00":
+                            break
+                        elem_bytes.extend(b)
+                    elem_id = elem_bytes.decode("latin-1", errors="ignore").strip()
+
+                    ch_hdr = cstream.read(16)
+                    if len(ch_hdr) >= 16:
+                        s_time, e_time, _, _ = struct.unpack(">IIII", ch_hdr)
+                        start_time = round(s_time / 1000.0, 3)
+                        end_time = round(e_time / 1000.0, 3)
+                        ch_title = (
+                            elem_id or f"Chapter {len(meta.get('chapters', [])) + 1}"
+                        )
+
+                        while cstream.tell() < len(payload):
+                            sub_hdr = cstream.read(10)
+                            if len(sub_hdr) < 10 or sub_hdr[0] == 0:
+                                break
+                            sub_id = sub_hdr[:4].decode("latin-1", errors="ignore")
+                            sub_size = struct.unpack(">I", sub_hdr[4:8])[0]
+                            if sub_size <= 0 or cstream.tell() + sub_size > len(
+                                payload
+                            ):
+                                break
+                            sub_data = cstream.read(sub_size)
+                            if sub_id == "TIT2" and len(sub_data) > 1:
+                                ch_title = _decode_id3_text(sub_data[1:], sub_data[0])
+
+                        if "chapters" not in meta:
+                            meta["chapters"] = []
+                        meta["chapters"].append(
+                            {
+                                "id": len(meta["chapters"]),
+                                "title": ch_title,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                            }
+                        )
+                except Exception as e:
+                    logger.debug("ID3 CHAP parse error: %s", e)
             elif frame_id == "APIC" and "cover_bytes" not in meta:
                 # Attached picture frame: [enc][mime\x00][pic_type][desc\x00][image_bytes]
                 try:
@@ -229,6 +292,18 @@ def parse_flac(file_path: Path) -> dict[str, Any]:
                                 meta["year"] = v_clean[:4]
                             elif k_up == "GENRE":
                                 meta["genre"] = v_clean
+                            elif k_up in ("ALBUMARTIST", "ALBUM ARTIST"):
+                                meta["album_artist"] = v_clean
+                            elif k_up == "NARRATOR":
+                                meta["narrator"] = v_clean
+                            elif k_up in ("COMPOSER", "AUTHOR"):
+                                meta["author"] = v_clean
+                            elif k_up == "COMPILATION":
+                                meta["is_compilation"] = v_clean in (
+                                    "1",
+                                    "true",
+                                    "True",
+                                )
 
                 # PICTURE = block 6
                 elif (
@@ -367,8 +442,172 @@ def extract_audio_cover(file_path: Path) -> bytes | None:
     return None
 
 
+def parse_mp4_chapters(file_path: Path) -> list[dict[str, Any]]:
+    """Pure-Python extractor for QuickTime / MP4 chapter markers (moov -> udta -> chpl)."""
+    chapters: list[dict[str, Any]] = []
+    try:
+        with open(file_path, "rb") as f:
+            moov_bytes = None
+            while True:
+                hdr = f.read(8)
+                if len(hdr) < 8:
+                    break
+                box_size, box_type = struct.unpack(">I4s", hdr)
+                if box_size == 1:
+                    large_hdr = f.read(8)
+                    if len(large_hdr) < 8:
+                        break
+                    box_size = struct.unpack(">Q", large_hdr)[0]
+                    payload_len = box_size - 16
+                elif box_size == 0:
+                    payload_len = None
+                else:
+                    payload_len = box_size - 8
+
+                if box_type == b"moov":
+                    moov_bytes = (
+                        f.read(payload_len) if payload_len is not None else f.read()
+                    )
+                    break
+                else:
+                    if payload_len is not None and payload_len > 0:
+                        f.seek(payload_len, io.SEEK_CUR)
+                    else:
+                        break
+
+            if not moov_bytes:
+                return chapters
+
+            stream = io.BytesIO(moov_bytes)
+            chpl_payload = None
+            timescale = 1000
+            duration = 0.0
+
+            while stream.tell() < len(moov_bytes):
+                hdr = stream.read(8)
+                if len(hdr) < 8:
+                    break
+                sub_size, sub_type = struct.unpack(">I4s", hdr)
+                if sub_size < 8:
+                    break
+                sub_payload_len = sub_size - 8
+                sub_data = stream.read(sub_payload_len)
+
+                if sub_type == b"mvhd" and len(sub_data) >= 20:
+                    ver = sub_data[0]
+                    if ver == 0:
+                        timescale, raw_dur = struct.unpack(">II", sub_data[12:20])
+                    elif ver == 1 and len(sub_data) >= 32:
+                        timescale, raw_dur = struct.unpack(">IQ", sub_data[20:32])
+                    else:
+                        timescale, raw_dur = 1000, 0
+                    if timescale > 0:
+                        duration = round(raw_dur / timescale, 2)
+
+                elif sub_type == b"udta":
+                    u_stream = io.BytesIO(sub_data)
+                    while u_stream.tell() < len(sub_data):
+                        u_hdr = u_stream.read(8)
+                        if len(u_hdr) < 8:
+                            break
+                        u_size, u_type = struct.unpack(">I4s", u_hdr)
+                        if u_size < 8:
+                            break
+                        u_payload_len = u_size - 8
+                        u_payload = u_stream.read(u_payload_len)
+                        if u_type == b"chpl":
+                            chpl_payload = u_payload
+                            break
+
+                elif sub_type == b"chpl":
+                    chpl_payload = sub_data
+
+            if chpl_payload and len(chpl_payload) >= 5:
+                cp_stream = io.BytesIO(chpl_payload)
+                # Skip version (1), flags (3), reserved (1)
+                cp_stream.read(5)
+                count_bytes = cp_stream.read(4)
+                if len(count_bytes) == 4:
+                    num_chapters = struct.unpack(">I", count_bytes)[0]
+                    raw_chapters: list[dict[str, Any]] = []
+                    for i in range(num_chapters):
+                        ts_bytes = cp_stream.read(8)
+                        if len(ts_bytes) < 8:
+                            break
+                        timestamp = struct.unpack(">Q", ts_bytes)[0]
+                        len_byte = cp_stream.read(1)
+                        if not len_byte:
+                            break
+                        title_len = len_byte[0]
+                        title_bytes = cp_stream.read(title_len)
+                        title = (
+                            title_bytes.decode("utf-8", errors="ignore").strip()
+                            or f"Chapter {i + 1}"
+                        )
+                        # In Nero chpl, timestamp is in 100ns units (10 MHz)
+                        start_time = round(timestamp / 10000000.0, 3)
+                        raw_chapters.append(
+                            {"id": i, "title": title, "start_time": start_time}
+                        )
+
+                    for i in range(len(raw_chapters)):
+                        if i + 1 < len(raw_chapters):
+                            raw_chapters[i]["end_time"] = raw_chapters[i + 1][
+                                "start_time"
+                            ]
+                        else:
+                            fallback_end = (
+                                duration
+                                if duration > raw_chapters[i]["start_time"]
+                                else raw_chapters[i]["start_time"] + 60.0
+                            )
+                            raw_chapters[i]["end_time"] = round(fallback_end, 3)
+                    chapters = raw_chapters
+
+    except Exception as e:
+        logger.debug("Failed to parse MP4 chapters from %s: %s", file_path, e)
+
+    return chapters
+
+
+def read_ffprobe_chapters(file_path: Path) -> list[dict[str, Any]]:
+    """Uses ffprobe CLI if available to extract container chapters."""
+    if not shutil.which("ffprobe"):
+        return []
+
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_chapters",
+            str(file_path),
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if res.returncode != 0:
+            return []
+
+        data = json.loads(res.stdout)
+        ch_list = data.get("chapters", [])
+        parsed = []
+        for idx, ch in enumerate(ch_list):
+            start = round(float(ch.get("start_time", 0.0)), 3)
+            end = round(float(ch.get("end_time", start)), 3)
+            tags = ch.get("tags", {})
+            title = tags.get("title") or f"Chapter {idx + 1}"
+            parsed.append(
+                {"id": idx, "title": title, "start_time": start, "end_time": end}
+            )
+        return parsed
+    except Exception as e:
+        logger.debug("ffprobe chapter extraction failed for %s: %s", file_path, e)
+        return []
+
+
 def parse_audio(file_path: Path) -> ParsedAudioMetadata:
-    """Parses audio files into a unified ParsedAudioMetadata representation."""
+    """Parses audio files into a ParsedAudioMetadata, ParsedAudiobookMetadata, or ParsedMusicMetadata."""
     ext = file_path.suffix.lower()
     meta: dict[str, Any] = {}
 
@@ -404,12 +643,65 @@ def parse_audio(file_path: Path) -> ParsedAudioMetadata:
     cover = meta.get("cover_bytes") or extract_audio_cover(file_path)
     creators = [artist] if artist else []
 
-    return ParsedAudioMetadata(
+    # Chapter marker extraction
+    chapters = (
+        meta.get("chapters")
+        or parse_mp4_chapters(file_path)
+        or read_ffprobe_chapters(file_path)
+    )
+
+    is_audiobook = (
+        ext == ".m4b"
+        or "Audiobook" in tags
+        or (genre and "audiobook" in genre.lower())
+        or bool(chapters and duration and duration > 1800)
+    )
+
+    if is_audiobook:
+        author = meta.get("author") or artist
+        narrator = meta.get("narrator")
+        if not narrator:
+            m_narrator = re.search(
+                r"narrat(?:ed)?\s+by\s+([^-_,()]+)", file_path.stem, re.I
+            )
+            if m_narrator:
+                narrator = m_narrator.group(1).strip()
+
+        abridged = bool(
+            re.search(r"\b(abridged)\b", file_path.stem, re.I)
+            and not re.search(r"\b(unabridged)\b", file_path.stem, re.I)
+        )
+
+        return ParsedAudiobookMetadata(
+            title=title,
+            author=author,
+            creators=[author] if author else creators,
+            narrator=narrator,
+            chapters=chapters,
+            abridged=abridged,
+            series=album,
+            series_index=float(track_number) if track_number is not None else None,
+            album=album,
+            track_number=track_number,
+            disc_number=disc_number,
+            duration=duration,
+            bitrate=bitrate,
+            tags=tags,
+            cover_bytes=cover,
+            file_format=ext.lstrip("."),
+            publication_date=year,
+        )
+
+    return ParsedMusicMetadata(
         title=title,
         creators=creators,
         series=album,
         series_index=float(track_number) if track_number is not None else None,
         album=album,
+        album_artist=meta.get("album_artist") or artist,
+        genre=genre,
+        release_year=year,
+        is_compilation=meta.get("is_compilation", False),
         track_number=track_number,
         disc_number=disc_number,
         duration=duration,
@@ -417,6 +709,54 @@ def parse_audio(file_path: Path) -> ParsedAudioMetadata:
         tags=tags,
         cover_bytes=cover,
         file_format=ext.lstrip("."),
-        media_type="audio",
         publication_date=year,
+    )
+
+
+def parse_audiobook(file_path: Path) -> ParsedAudiobookMetadata:
+    """Explicit parser for audiobook files."""
+    meta = parse_audio(file_path)
+    if isinstance(meta, ParsedAudiobookMetadata):
+        return meta
+    # Wrap in ParsedAudiobookMetadata if parsed as generic music
+    return ParsedAudiobookMetadata(
+        title=meta.title,
+        creators=meta.creators,
+        author=meta.creators[0] if meta.creators else None,
+        narrator=None,
+        chapters=[],
+        abridged=False,
+        series=meta.series,
+        series_index=meta.series_index,
+        album=meta.album,
+        track_number=meta.track_number,
+        disc_number=meta.disc_number,
+        duration=meta.duration,
+        bitrate=meta.bitrate,
+        tags=meta.tags,
+        cover_bytes=meta.cover_bytes,
+        file_format=meta.file_format,
+        publication_date=meta.publication_date,
+    )
+
+
+def parse_music(file_path: Path) -> ParsedMusicMetadata:
+    """Explicit parser for music files."""
+    meta = parse_audio(file_path)
+    if isinstance(meta, ParsedMusicMetadata):
+        return meta
+    return ParsedMusicMetadata(
+        title=meta.title,
+        creators=meta.creators,
+        series=meta.series,
+        series_index=meta.series_index,
+        album=meta.album,
+        track_number=meta.track_number,
+        disc_number=meta.disc_number,
+        duration=meta.duration,
+        bitrate=meta.bitrate,
+        tags=meta.tags,
+        cover_bytes=meta.cover_bytes,
+        file_format=meta.file_format,
+        publication_date=meta.publication_date,
     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -83,6 +84,39 @@ class ParsedAudioMetadata(BaseParsedMetadata):
             self.authors = list(self.creators)
         elif self.authors and not self.creators:
             self.creators = list(self.authors)
+
+
+@dataclass
+class ParsedAudiobookMetadata(ParsedAudioMetadata):
+    """Audiobook parsed metadata with chapter and narrator support."""
+
+    author: str | None = None
+    narrator: str | None = None
+    chapters: list[dict[str, Any]] = field(default_factory=list)
+    abridged: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.media_type = "audiobook"
+        if self.author and not self.authors:
+            self.authors = [self.author]
+            self.creators = [self.author]
+        elif not self.author and self.authors:
+            self.author = self.authors[0]
+
+
+@dataclass
+class ParsedMusicMetadata(ParsedAudioMetadata):
+    """Music track parsed metadata."""
+
+    album_artist: str | None = None
+    genre: str | None = None
+    release_year: str | None = None
+    is_compilation: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.media_type = "music"
 
 
 ParserFunc = Callable[[Path], BaseParsedMetadata | None]

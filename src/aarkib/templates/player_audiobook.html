@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ item.title }}{% if item.author %} - {{ item.author }}{% endif %} - Aarkib Audiobook Player</title>
+  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .audiobook-page {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 1.5rem 2.5rem 1.5rem;
+      box-sizing: border-box;
+      background: radial-gradient(circle at center top, #1e1b4b 0%, #0b0f19 80%);
+      position: relative;
+    }
+
+    .player-header {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .round-btn {
+      color: #f8fafc;
+      text-decoration: none;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .round-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .round-btn:active {
+      transform: scale(0.95);
+    }
+
+    .header-center {
+      text-align: center;
+      flex: 1;
+      padding: 0 1rem;
+    }
+    .header-badge {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #a5b4fc;
+      font-weight: 700;
+    }
+    .header-series {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cover-box {
+      width: 260px;
+      height: 260px;
+      max-width: 65vw;
+      max-height: 65vw;
+      border-radius: 1rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1e1b4b;
+      margin: auto 0;
+      position: relative;
+    }
+    .cover-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .cover-fallback {
+      font-size: 5rem;
+      color: #6366f1;
+    }
+
+    .book-info {
+      width: 100%;
+      max-width: 550px;
+      text-align: center;
+      margin-bottom: 1.25rem;
+    }
+    .book-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0 0 0.3rem 0;
+      line-height: 1.25;
+    }
+    .book-author {
+      font-size: 1rem;
+      color: #cbd5e1;
+      margin: 0 0 0.2rem 0;
+      font-weight: 500;
+    }
+    .book-narrator {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+
+    .active-chapter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+      padding: 0.3rem 0.85rem;
+      border-radius: 1.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-top: 0.6rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .active-chapter-pill:hover {
+      background: rgba(99, 102, 241, 0.25);
+    }
+
+    .controls-panel {
+      width: 100%;
+      max-width: 550px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .scrubber-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .scrubber-track {
+      width: 100%;
+      height: 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      position: relative;
+    }
+    .scrubber-progress {
+      height: 100%;
+      border-radius: 4px;
+      background: #6366f1;
+      width: 0%;
+      pointer-events: none;
+    }
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .button-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+    }
+    .step-btn {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      border-radius: 50%;
+      transition: color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .step-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .step-btn:active {
+      transform: scale(0.92);
+    }
+
+    .play-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.45);
+    }
+    .play-btn:hover {
+      background: #4f46e5;
+    }
+
+    .bottom-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0.5rem;
+    }
+
+    .chip-btn {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 0.4rem 0.85rem;
+      border-radius: 1.25rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background 0.15s, color 0.15s;
+    }
+    .chip-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .chip-btn.active {
+      background: rgba(99, 102, 241, 0.3);
+      border-color: #6366f1;
+      color: #c7d2fe;
+    }
+
+    /* Chapter Drawer Modal */
+    .drawer-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      display: none;
+      z-index: 100;
+      justify-content: flex-end;
+    }
+    .drawer-overlay.open {
+      display: flex;
+    }
+    .drawer-content {
+      width: 100%;
+      max-width: 440px;
+      height: 100%;
+      background: #0f172a;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+      animation: slideLeft 0.25s ease-out;
+    }
+    @keyframes slideLeft {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+    .drawer-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .drawer-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 0;
+    }
+    .chapter-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem 0;
+      margin: 0;
+      list-style: none;
+    }
+    .chapter-item {
+      padding: 0.9rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      transition: background 0.15s;
+    }
+    .chapter-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .chapter-item.active {
+      background: rgba(99, 102, 241, 0.15);
+      border-left: 3px solid #6366f1;
+    }
+    .chapter-item.active .ch-title {
+      color: #818cf8;
+      font-weight: 600;
+    }
+    .ch-title {
+      font-size: 0.95rem;
+      color: #f1f5f9;
+      flex: 1;
+      padding-right: 1rem;
+    }
+    .ch-time {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Sleep Timer & Speed Popups */
+    .popup-menu {
+      position: absolute;
+      bottom: 5.5rem;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0.75rem;
+      padding: 0.5rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.25rem;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      z-index: 50;
+      min-width: 140px;
+    }
+    .popup-menu.show {
+      display: flex;
+    }
+    .popup-item {
+      padding: 0.5rem 0.85rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      cursor: pointer;
+      background: none;
+      border: none;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .popup-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+    .popup-item.selected {
+      color: #818cf8;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="audiobook-page">
+    <!-- Header -->
+    <div class="player-header">
+      <a href="/" class="round-btn" title="Back to Library">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      </a>
+
+      <div class="header-center">
+        <div class="header-badge">🎧 Audiobook</div>
+        <div class="header-series">{{ item.series.name if item.series else (item.collection.name if item.collection else "Aarkib Audiobooks") }}</div>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="round-btn" id="chaptersBtn" title="Chapters">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        </button>
+        <a href="/media/{{ item.id }}" class="round-btn" title="Book Details">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Artwork -->
+    <div class="cover-box">
+      {% if item.cover_image_path %}
+      <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
+      <div id="coverFallback" class="cover-fallback" style="display: none;">🎧</div>
+      {% else %}
+      <div class="cover-fallback">🎧</div>
+      {% endif %}
+    </div>
+
+    <!-- Metadata -->
+    <div class="book-info">
+      <h1 class="book-title">{{ item.title }}</h1>
+      <p class="book-author">by {{ item.author or item.creators_display }}</p>
+      {% if item.narrator %}
+      <p class="book-narrator">Narrated by {{ item.narrator }}</p>
+      {% endif %}
+      <div class="active-chapter-pill" id="chapterPill">
+        <span>📖</span>
+        <span id="currentChapterName">Chapter 1</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-panel">
+      <!-- Scrubber -->
+      <div class="scrubber-group">
+        <div class="scrubber-track" id="scrubberTrack">
+          <div class="scrubber-progress" id="scrubberProgress"></div>
+        </div>
+        <div class="time-row">
+          <span id="currentTime">0:00:00</span>
+          <span id="totalDuration">{{ item.formatted_duration or "0:00:00" }}</span>
+        </div>
+      </div>
+
+      <!-- Main Buttons -->
+      <div class="button-row">
+        <button class="step-btn" id="prevChBtn" title="Previous Chapter">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+        </button>
+
+        <button class="step-btn" id="rewind15Btn" title="Rewind 15s">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="6.5" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">15</text></svg>
+        </button>
+
+        <button class="step-btn play-btn" id="playBtn" title="Play">
+          <svg id="playIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <svg id="pauseIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+        </button>
+
+        <button class="step-btn" id="forward30Btn" title="Forward 30s">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="7" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">30</text></svg>
+        </button>
+
+        <button class="step-btn" id="nextChBtn" title="Next Chapter">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+        </button>
+      </div>
+
+      <!-- Extra Controls (Speed, Sleep Timer) -->
+      <div class="bottom-row">
+        <div style="position: relative;">
+          <button class="chip-btn" id="speedMenuBtn" title="Playback Speed">
+            <span id="speedLabel">1.0x</span>
+          </button>
+          <div class="popup-menu" id="speedPopup">
+            <button class="popup-item" data-speed="0.75">0.75x</button>
+            <button class="popup-item selected" data-speed="1.0">1.0x (Normal)</button>
+            <button class="popup-item" data-speed="1.25">1.25x</button>
+            <button class="popup-item" data-speed="1.5">1.5x</button>
+            <button class="popup-item" data-speed="1.75">1.75x</button>
+            <button class="popup-item" data-speed="2.0">2.0x</button>
+          </div>
+        </div>
+
+        <div style="position: relative;">
+          <button class="chip-btn" id="sleepMenuBtn" title="Sleep Timer">
+            <span>⏱️</span>
+            <span id="sleepLabel">Timer</span>
+          </button>
+          <div class="popup-menu" id="sleepPopup">
+            <button class="popup-item selected" data-sleep="0">Off</button>
+            <button class="popup-item" data-sleep="15">15 minutes</button>
+            <button class="popup-item" data-sleep="30">30 minutes</button>
+            <button class="popup-item" data-sleep="45">45 minutes</button>
+            <button class="popup-item" data-sleep="60">60 minutes</button>
+            <button class="popup-item" data-sleep="end-chapter">End of Chapter</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chapters Drawer -->
+  <div class="drawer-overlay" id="drawerOverlay">
+    <div class="drawer-content">
+      <div class="drawer-header">
+        <h2 class="drawer-title">Chapters</h2>
+        <button class="round-btn" id="closeDrawerBtn" title="Close Chapters">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <ul class="chapter-list" id="chapterList">
+        <!-- Rendered dynamically -->
+      </ul>
+    </div>
+  </div>
+
+  <audio id="audioElement" src="/api/media/{{ item.id }}/stream" preload="metadata"></audio>
+
+  <script>
+    const audio = document.getElementById("audioElement");
+    const playBtn = document.getElementById("playBtn");
+    const playIcon = document.getElementById("playIcon");
+    const pauseIcon = document.getElementById("pauseIcon");
+    const scrubberTrack = document.getElementById("scrubberTrack");
+    const scrubberProgress = document.getElementById("scrubberProgress");
+    const currentTimeEl = document.getElementById("currentTime");
+    const totalDurationEl = document.getElementById("totalDuration");
+    const rewind15Btn = document.getElementById("rewind15Btn");
+    const forward30Btn = document.getElementById("forward30Btn");
+    const prevChBtn = document.getElementById("prevChBtn");
+    const nextChBtn = document.getElementById("nextChBtn");
+    const chaptersBtn = document.getElementById("chaptersBtn");
+    const chapterPill = document.getElementById("chapterPill");
+    const currentChapterNameEl = document.getElementById("currentChapterName");
+    const drawerOverlay = document.getElementById("drawerOverlay");
+    const closeDrawerBtn = document.getElementById("closeDrawerBtn");
+    const chapterListEl = document.getElementById("chapterList");
+
+    const speedMenuBtn = document.getElementById("speedMenuBtn");
+    const speedPopup = document.getElementById("speedPopup");
+    const speedLabel = document.getElementById("speedLabel");
+
+    const sleepMenuBtn = document.getElementById("sleepMenuBtn");
+    const sleepPopup = document.getElementById("sleepPopup");
+    const sleepLabel = document.getElementById("sleepLabel");
+
+    const itemId = {{ item.id }};
+    const initialTime = {{ initial_time }};
+    const chapters = {{ (chapters or item.chapters or []) | tojson }};
+
+    let activeChapterIdx = 0;
+    let sleepTimeout = null;
+    let sleepInterval = null;
+    let sleepTargetTime = null;
+    let sleepMode = "off";
+
+    function formatTime(secs) {
+      if (isNaN(secs) || secs < 0) return "0:00:00";
+      const total = Math.floor(secs);
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) {
+        return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+      }
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    // Build Chapter Drawer items
+    function initChapters() {
+      chapterListEl.innerHTML = "";
+      if (!chapters || chapters.length === 0) {
+        chapterListEl.innerHTML = `<li class="chapter-item" style="color: #64748b; cursor: default;">No chapter marks in this audiobook.</li>`;
+        currentChapterNameEl.textContent = "{{ item.title }}";
+        return;
+      }
+
+      chapters.forEach((ch, idx) => {
+        const li = document.createElement("li");
+        li.className = "chapter-item" + (idx === 0 ? " active" : "");
+        li.dataset.idx = idx;
+        li.dataset.start = ch.start_time;
+        li.innerHTML = `
+          <span class="ch-title">${ch.title || 'Chapter ' + (idx + 1)}</span>
+          <span class="ch-time">${formatTime(ch.start_time)}</span>
+        `;
+        li.addEventListener("click", () => {
+          audio.currentTime = ch.start_time;
+          closeDrawer();
+          if (audio.paused) togglePlay();
+        });
+        chapterListEl.appendChild(li);
+      });
+      updateCurrentChapter();
+    }
+
+    function updateCurrentChapter() {
+      if (!chapters || chapters.length === 0) return;
+      const t = audio.currentTime;
+      let curIdx = 0;
+      for (let i = 0; i < chapters.length; i++) {
+        if (t >= chapters[i].start_time) {
+          curIdx = i;
+        } else {
+          break;
+        }
+      }
+      if (curIdx !== activeChapterIdx || currentChapterNameEl.textContent === "Chapter 1") {
+        activeChapterIdx = curIdx;
+        const ch = chapters[activeChapterIdx];
+        currentChapterNameEl.textContent = ch.title || `Chapter ${activeChapterIdx + 1}`;
+        
+        // Highlight in drawer
+        const allItems = chapterListEl.querySelectorAll(".chapter-item");
+        allItems.forEach((el, idx) => {
+          if (idx === activeChapterIdx) el.classList.add("active");
+          else el.classList.remove("active");
+        });
+      }
+    }
+
+    // Drawer Controls
+    function openDrawer() { drawerOverlay.classList.add("open"); }
+    function closeDrawer() { drawerOverlay.classList.remove("open"); }
+    chaptersBtn.addEventListener("click", openDrawer);
+    chapterPill.addEventListener("click", openDrawer);
+    closeDrawerBtn.addEventListener("click", closeDrawer);
+    drawerOverlay.addEventListener("click", (e) => {
+      if (e.target === drawerOverlay) closeDrawer();
+    });
+
+    // Previous / Next Chapter
+    prevChBtn.addEventListener("click", () => {
+      if (!chapters || chapters.length === 0) {
+        audio.currentTime = Math.max(0, audio.currentTime - 30);
+        return;
+      }
+      const cur = chapters[activeChapterIdx];
+      if (audio.currentTime - cur.start_time > 3.0 || activeChapterIdx === 0) {
+        audio.currentTime = cur.start_time;
+      } else {
+        audio.currentTime = chapters[activeChapterIdx - 1].start_time;
+      }
+    });
+
+    nextChBtn.addEventListener("click", () => {
+      if (!chapters || chapters.length === 0) {
+        audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 30);
+        return;
+      }
+      if (activeChapterIdx + 1 < chapters.length) {
+        audio.currentTime = chapters[activeChapterIdx + 1].start_time;
+      }
+    });
+
+    // Metadata Loaded
+    audio.addEventListener("loadedmetadata", () => {
+      if (initialTime > 0 && initialTime < audio.duration) {
+        audio.currentTime = initialTime;
+      }
+      totalDurationEl.textContent = formatTime(audio.duration);
+      initChapters();
+    });
+
+    // Play / Pause
+    function togglePlay() {
+      if (audio.paused) {
+        audio.play().then(() => {
+          playIcon.style.display = "none";
+          pauseIcon.style.display = "block";
+        }).catch(err => console.error("Audiobook play failed:", err));
+      } else {
+        audio.pause();
+        playIcon.style.display = "block";
+        pauseIcon.style.display = "none";
+        saveProgress();
+      }
+    }
+    playBtn.addEventListener("click", togglePlay);
+
+    // Time update & scrubber
+    audio.addEventListener("timeupdate", () => {
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      if (audio.duration) {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        scrubberProgress.style.width = pct + "%";
+      }
+      updateCurrentChapter();
+      checkSleepEndOfChapter();
+    });
+
+    scrubberTrack.addEventListener("click", (e) => {
+      if (!audio.duration) return;
+      const rect = scrubberTrack.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      audio.currentTime = pct * audio.duration;
+    });
+
+    rewind15Btn.addEventListener("click", () => {
+      audio.currentTime = Math.max(0, audio.currentTime - 15);
+    });
+    forward30Btn.addEventListener("click", () => {
+      audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 30);
+    });
+
+    // Variable Speed
+    speedMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      speedPopup.classList.toggle("show");
+      sleepPopup.classList.remove("show");
+    });
+    speedPopup.querySelectorAll(".popup-item").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const spd = parseFloat(btn.dataset.speed);
+        audio.playbackRate = spd;
+        speedLabel.textContent = spd + "x";
+        speedPopup.querySelectorAll(".popup-item").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        speedPopup.classList.remove("show");
+      });
+    });
+
+    // Sleep Timer
+    sleepMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      sleepPopup.classList.toggle("show");
+      speedPopup.classList.remove("show");
+    });
+
+    function setSleepTimer(minutes, mode = "duration") {
+      clearTimeout(sleepTimeout);
+      clearInterval(sleepInterval);
+      sleepMode = mode;
+
+      if (mode === "off" || minutes === 0) {
+        sleepLabel.textContent = "Timer";
+        sleepMenuBtn.classList.remove("active");
+        return;
+      }
+
+      if (mode === "end-chapter") {
+        sleepLabel.textContent = "End Ch.";
+        sleepMenuBtn.classList.add("active");
+        return;
+      }
+
+      sleepTargetTime = Date.now() + (minutes * 60 * 1000);
+      sleepMenuBtn.classList.add("active");
+
+      function tick() {
+        const leftSec = Math.round((sleepTargetTime - Date.now()) / 1000);
+        if (leftSec <= 0) {
+          triggerSleepFade();
+          return;
+        }
+        const m = Math.ceil(leftSec / 60);
+        sleepLabel.textContent = `${m}m`;
+      }
+      tick();
+      sleepInterval = setInterval(tick, 10000);
+
+      sleepTimeout = setTimeout(triggerSleepFade, minutes * 60 * 1000);
+    }
+
+    function checkSleepEndOfChapter() {
+      if (sleepMode !== "end-chapter" || !chapters || chapters.length === 0) return;
+      const cur = chapters[activeChapterIdx];
+      if (cur && cur.end_time && audio.currentTime >= cur.end_time - 1.0) {
+        triggerSleepFade();
+      }
+    }
+
+    function triggerSleepFade() {
+      clearTimeout(sleepTimeout);
+      clearInterval(sleepInterval);
+      sleepLabel.textContent = "Timer";
+      sleepMenuBtn.classList.remove("active");
+      sleepMode = "off";
+
+      // 10s graceful fade-out
+      let fadeStep = 10;
+      const startVol = audio.volume;
+      const fadeInt = setInterval(() => {
+        fadeStep--;
+        if (fadeStep <= 0) {
+          clearInterval(fadeInt);
+          audio.pause();
+          audio.volume = startVol;
+          playIcon.style.display = "block";
+          pauseIcon.style.display = "none";
+          saveProgress();
+        } else {
+          audio.volume = Math.max(0, startVol * (fadeStep / 10));
+        }
+      }, 1000);
+    }
+
+    sleepPopup.querySelectorAll(".popup-item").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const val = btn.dataset.sleep;
+        sleepPopup.querySelectorAll(".popup-item").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        sleepPopup.classList.remove("show");
+
+        if (val === "end-chapter") {
+          setSleepTimer(0, "end-chapter");
+        } else {
+          const mins = parseInt(val, 10);
+          setSleepTimer(mins, mins > 0 ? "duration" : "off");
+        }
+      });
+    });
+
+    document.addEventListener("click", () => {
+      speedPopup.classList.remove("show");
+      sleepPopup.classList.remove("show");
+    });
+
+    // Progress persistence
+    function saveProgress() {
+      if (!audio.duration || audio.currentTime < 1) return;
+      const pct = (audio.currentTime / audio.duration) * 100;
+      const chName = chapters && chapters[activeChapterIdx] ? chapters[activeChapterIdx].title : "";
+
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_item_id: itemId,
+          book_id: itemId,
+          progress_location: String(audio.currentTime),
+          percentage: pct,
+          chapter_title: chName,
+          is_completed: pct >= 95
+        })
+      }).catch(err => console.debug("Audiobook progress sync skipped:", err));
+    }
+
+    setInterval(() => {
+      if (!audio.paused) saveProgress();
+    }, 10000);
+    window.addEventListener("beforeunload", saveProgress);
+  </script>
+</body>
+</html>

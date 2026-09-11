@@ -147,6 +147,9 @@
           <option value="book">📚 Books Only</option>
           <option value="comic">🎨 Comics & Manga</option>
           <option value="video">🎬 Movies & TV Shows</option>
+          <option value="audiobook">🎧 Audiobooks</option>
+          <option value="music">🎵 Music Tracks</option>
+          <option value="audio">🔊 All Audio</option>
         </select>
       </div>
       <div style="display: flex; gap: 0.35rem;">
@@ -183,6 +186,9 @@
               <option value="book" {% if lib.media_type == 'book' %}selected{% endif %}>📚 Books Only</option>
               <option value="comic" {% if lib.media_type == 'comic' %}selected{% endif %}>🎨 Comics & Manga</option>
               <option value="video" {% if lib.media_type == 'video' %}selected{% endif %}>🎬 Movies & TV Shows</option>
+              <option value="audiobook" {% if lib.media_type == 'audiobook' %}selected{% endif %}>🎧 Audiobooks</option>
+              <option value="music" {% if lib.media_type == 'music' %}selected{% endif %}>🎵 Music Tracks</option>
+              <option value="audio" {% if lib.media_type == 'audio' %}selected{% endif %}>🔊 All Audio</option>
             </select>
           </td>
           <td style="padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.85rem;">

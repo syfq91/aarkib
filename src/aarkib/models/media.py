@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -14,6 +16,9 @@ class MediaType(StrEnum):
     COMIC = "comic"
     AUDIO = "audio"
     VIDEO = "video"
+    AUDIOBOOK = "audiobook"
+    MUSIC = "music"
+    PODCAST = "podcast"
 
 
 class MediaItemMixin:
@@ -76,9 +81,14 @@ class MediaItemMixin:
 
     @property
     def is_audio(self) -> bool:
-        """Check if this item is an audio track or audiobook."""
+        """Check if this item is an audio track, music, or audiobook."""
         if self.media_type:
-            return self.media_type == MediaType.AUDIO.value
+            return self.media_type in (
+                MediaType.AUDIO.value,
+                MediaType.AUDIOBOOK.value,
+                MediaType.MUSIC.value,
+                MediaType.PODCAST.value,
+            )
         return (self.file_format or "").lower() in (
             "mp3",
             "m4a",
@@ -89,6 +99,27 @@ class MediaItemMixin:
             "wav",
             "aac",
         )
+
+    @property
+    def is_audiobook(self) -> bool:
+        """Check if this item is specifically an audiobook."""
+        if self.media_type == MediaType.AUDIOBOOK.value:
+            return True
+        if self.media_type in (MediaType.AUDIO.value, None, ""):
+            return (self.file_format or "").lower() == "m4b"
+        return False
+
+    @property
+    def is_music(self) -> bool:
+        """Check if this item is specifically a music track."""
+        if self.media_type == MediaType.MUSIC.value:
+            return True
+        return self.is_audio and not self.is_audiobook
+
+    @property
+    def is_podcast(self) -> bool:
+        """Check if this item is a podcast episode."""
+        return self.media_type == MediaType.PODCAST.value
 
     @property
     def is_video(self) -> bool:
@@ -113,12 +144,36 @@ class PlayableItemMixin:
     bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)  # in kbps
 
 
+class AudiobookItemMixin(PlayableItemMixin):
+    """Blueprint mixin for audiobook metadata attributes."""
+
+    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    narrator: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    chapters_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    abridged: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    @property
+    def chapters(self) -> list[dict[str, Any]]:
+        """Returns parsed list of chapter dictionaries."""
+        if not self.chapters_json:
+            return []
+        try:
+            data = json.loads(self.chapters_json)
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+
 class AudioTrackMixin(PlayableItemMixin):
-    """Blueprint mixin for audio track metadata attributes."""
+    """Blueprint mixin for music track metadata attributes."""
 
     album: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    album_artist: Mapped[str | None] = mapped_column(String(255), nullable=True)
     track_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     disc_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    release_year: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    is_compilation: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class VideoItemMixin(PlayableItemMixin):

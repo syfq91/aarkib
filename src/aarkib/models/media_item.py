@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from aarkib.extensions import db
 from aarkib.models.creator import media_creators
 from aarkib.models.media import (
+    AudiobookItemMixin,
     AudioTrackMixin,
     MediaItemMixin,
     MediaType,
@@ -19,11 +20,18 @@ if TYPE_CHECKING:
     from aarkib.models.collection import Collection
     from aarkib.models.creator import Creator
     from aarkib.models.library import Library
+    from aarkib.models.playlist import PlaylistItem, UserFavorite
     from aarkib.models.progress import Bookmark, UserProgress
     from aarkib.models.tag import Tag
 
 
-class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
+class MediaItem(
+    db.Model,
+    MediaItemMixin,
+    VideoItemMixin,
+    AudiobookItemMixin,
+    AudioTrackMixin,
+):
     """Unified catalog model representing books, comics, videos, and audio in Aarkib."""
 
     __tablename__ = "media_items"
@@ -69,6 +77,12 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
     )
     bookmarks: Mapped[list[Bookmark]] = relationship(
         "Bookmark", back_populates="media_item", cascade="all, delete-orphan"
+    )
+    favorited_by: Mapped[list[UserFavorite]] = relationship(
+        "UserFavorite", back_populates="media_item", cascade="all, delete-orphan"
+    )
+    playlist_entries: Mapped[list[PlaylistItem]] = relationship(
+        "PlaylistItem", back_populates="media_item", cascade="all, delete-orphan"
     )
 
     # Generalized domain synonyms
@@ -142,10 +156,22 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
         if not self.creators:
             if self.is_video:
                 return "Unknown Director"
-            elif self.is_audio:
+            elif self.is_audiobook:
+                if self.author:
+                    return (
+                        f"{self.author} (Narrated by {self.narrator})"
+                        if self.narrator
+                        else self.author
+                    )
+                return "Unknown Author"
+            elif self.is_music or self.is_audio:
                 return "Unknown Artist"
             return "Unknown Author"
-        return ", ".join(c.name for c in self.creators)
+
+        names = ", ".join(c.name for c in self.creators)
+        if self.is_audiobook and self.narrator:
+            return f"{names} (Narrated by {self.narrator})"
+        return names
 
     @property
     def authors_display(self) -> str:
@@ -169,6 +195,10 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
 
         if (self.file_format or "").lower() in ("cbz", "zip", "cbr"):
             return f"/reader/cbz/{self.id}"
+        elif self.media_type == MediaType.AUDIOBOOK.value:
+            return f"/reader/audiobook/{self.id}"
+        elif self.media_type == MediaType.MUSIC.value:
+            return f"/reader/music/{self.id}"
         elif (self.file_format or "").lower() in (
             "mp3",
             "m4a",

@@ -280,10 +280,13 @@ def test_job_persistence_lifecycle(app):
     job = jm.submit_job("test_persist", sample_worker, app=app)
     job_id = job.id
 
-    timeout = 3.0
-    start = time.time()
-    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
-        time.sleep(0.02)
+    if job._future:
+        job._future.result(timeout=3.0)
+    else:
+        timeout = 3.0
+        start = time.time()
+        while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+            time.sleep(0.02)
 
     assert job.status == JobStatus.COMPLETED
 
@@ -310,10 +313,13 @@ def test_job_retrieval_after_memory_cleared(app):
     job = jm.submit_job("restore_test", quick_fn, app=app)
     job_id = job.id
 
-    timeout = 3.0
-    start = time.time()
-    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
-        time.sleep(0.02)
+    if job._future:
+        job._future.result(timeout=3.0)
+    else:
+        timeout = 3.0
+        start = time.time()
+        while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+            time.sleep(0.02)
 
     # Wipe in-memory dictionary to simulate server restart or cache eviction
     with jm._lock:
@@ -391,10 +397,13 @@ def test_job_cleanup_db(app):
         return 1
 
     job = jm.submit_job("cleanup_test", simple_worker, app=app)
-    timeout = 3.0
-    start = time.time()
-    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
-        time.sleep(0.02)
+    if job._future:
+        job._future.result(timeout=3.0)
+    else:
+        timeout = 3.0
+        start = time.time()
+        while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+            time.sleep(0.02)
 
     jm.cleanup_old_jobs(max_age_seconds=0, app=app, delete_db=True)
     assert jm.get_job(job.id, app=app) is None

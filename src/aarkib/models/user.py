@@ -11,6 +11,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from aarkib.extensions import db
 
 if TYPE_CHECKING:
+    from aarkib.models.playlist import Playlist, UserFavorite
     from aarkib.models.progress import Bookmark, UserProgress
 
 
@@ -33,6 +34,12 @@ class User(UserMixin, db.Model):
     )
     bookmarks: Mapped[list[Bookmark]] = relationship(
         "Bookmark", back_populates="user", cascade="all, delete-orphan"
+    )
+    favorites: Mapped[list[UserFavorite]] = relationship(
+        "UserFavorite", back_populates="user", cascade="all, delete-orphan"
+    )
+    playlists: Mapped[list[Playlist]] = relationship(
+        "Playlist", back_populates="user", cascade="all, delete-orphan"
     )
 
     def set_password(self, password: str) -> None:
