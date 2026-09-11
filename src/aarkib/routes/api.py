@@ -662,10 +662,13 @@ def get_book_cover(book_id: int):
 @api_bp.route("/books/<int:book_id>/file", methods=["GET"])
 @api_bp.route("/books/<int:book_id>/file/<path:filename>", methods=["GET"])
 @api_bp.route("/books/<int:book_id>/book.epub", methods=["GET"])
+@api_bp.route("/books/<int:book_id>/stream", methods=["GET"])
 @api_bp.route("/items/<int:book_id>/file", methods=["GET"])
 @api_bp.route("/items/<int:book_id>/file/<path:filename>", methods=["GET"])
+@api_bp.route("/items/<int:book_id>/stream", methods=["GET"])
 @api_bp.route("/media/<int:book_id>/file", methods=["GET"])
 @api_bp.route("/media/<int:book_id>/file/<path:filename>", methods=["GET"])
+@api_bp.route("/media/<int:book_id>/stream", methods=["GET"])
 def get_book_file(book_id: int, filename: str | None = None):
     """Stream the original media file with HTTP 206 byte-range support."""
     book = db.session.get(Book, book_id)
@@ -689,6 +692,20 @@ def get_book_file(book_id: int, filename: str | None = None):
         mimetype = "video/webm"
     elif book.file_format == "mkv":
         mimetype = "video/x-matroska"
+    elif book.file_format in ("m4b", "m4a"):
+        mimetype = "audio/mp4"
+    elif book.file_format == "mp3":
+        mimetype = "audio/mpeg"
+    elif book.file_format == "flac":
+        mimetype = "audio/flac"
+    elif book.file_format == "wav":
+        mimetype = "audio/wav"
+    elif book.file_format == "ogg":
+        mimetype = "audio/ogg"
+    elif book.file_format == "opus":
+        mimetype = "audio/opus"
+    elif book.file_format == "aac":
+        mimetype = "audio/aac"
     else:
         mimetype = "application/octet-stream"
 
@@ -1029,7 +1046,8 @@ def delete_bookmark(bookmark_id: int):
     bm = db.session.get(Bookmark, bookmark_id)
     if not bm:
         return api_error("Bookmark not found", 404)
-    if bm.user_id and bm.user_id != current_user.id:
+    user_id = current_user.id if current_user.is_authenticated else None
+    if bm.user_id and bm.user_id != user_id:
         return api_error("Forbidden", 403)
     db.session.delete(bm)
     db.session.commit()
@@ -1324,7 +1342,7 @@ def add_playlist_item(playlist_id: int):
     playlist = db.session.get(Playlist, playlist_id)
     if not playlist:
         return api_error("Playlist not found", 404)
-    if user_id and playlist.user_id and playlist.user_id != user_id:
+    if playlist.user_id is not None and playlist.user_id != user_id:
         return api_error("Only the playlist owner can add items", 403)
 
     data = request.get_json(silent=True) or {}
@@ -1358,7 +1376,7 @@ def remove_playlist_item(playlist_id: int, item_id: int):
     playlist = db.session.get(Playlist, playlist_id)
     if not playlist:
         return api_error("Playlist not found", 404)
-    if user_id and playlist.user_id and playlist.user_id != user_id:
+    if playlist.user_id is not None and playlist.user_id != user_id:
         return api_error("Only the playlist owner can remove items", 403)
 
     target_entry = db.session.scalar(
@@ -1383,7 +1401,7 @@ def reorder_playlist_items(playlist_id: int):
     playlist = db.session.get(Playlist, playlist_id)
     if not playlist:
         return api_error("Playlist not found", 404)
-    if user_id and playlist.user_id and playlist.user_id != user_id:
+    if playlist.user_id is not None and playlist.user_id != user_id:
         return api_error("Only the playlist owner can reorder items", 403)
 
     data = request.get_json(silent=True) or {}
@@ -1413,7 +1431,7 @@ def delete_playlist(playlist_id: int):
     playlist = db.session.get(Playlist, playlist_id)
     if not playlist:
         return api_error("Playlist not found", 404)
-    if user_id and playlist.user_id and playlist.user_id != user_id:
+    if playlist.user_id is not None and playlist.user_id != user_id:
         return api_error("Only the playlist owner can delete this playlist", 403)
 
     db.session.delete(playlist)

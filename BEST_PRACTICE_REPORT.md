@@ -1,6 +1,7 @@
 # Aarkib — Best Practice Audit Report
 
 Generated: 2026-09-08
+Last Audited & Updated: 2026-09-11
 
 This report documents all identified issues and provides actionable fix instructions for each.
 Issues are grouped by priority tier. Each issue includes the exact file, line, root cause, and a
@@ -880,6 +881,260 @@ documented variable is actually used.
 
 ---
 
+## TIER 4 — MULTI-MEDIA & CONCURRENCY AUDIT (2026-09-11 Audit)
+
+> 🔍 **Scope:** Audit of codebase expansion following Phases 3, 4, and 5 (Background Job Manager,
+> MediaItem/Creator/Collection first-class models, Audio & Audiobook players, Playlists & Favorites,
+> and SQLite session concurrency).
+>
+> ✅ **Status: RESOLVED & VERIFIED (2026-09-11)** — Critical and high-priority vulnerabilities
+> identified during this review (Playlist IDOR, audio streaming route 404, XSS in audiobook player,
+> unauthenticated bookmark crash, dashboard N+1 queries, OPDS media leakage, Docker ffmpeg dependency)
+> have been remediated and verified with 101/101 passing tests.
+
+### 31. Playlist Authorization Bypass / IDOR via None user_id (Security — CRITICAL / HIGH)
+
+**Files:** `src/aarkib/routes/api.py:1342-1435` (`add_playlist_item`, `remove_playlist_item`, `reorder_playlist_items`, `delete_playlist`)
+
+**Root Cause:** The playlist modification routes checked ownership using:
+```python
+if user_id and playlist.user_id and playlist.user_id != user_id:
+    return api_error("Only the playlist owner can ...", 403)
+```
+When `user_id` is `None` (unauthenticated user when `AUTH_REQUIRED=False` or single-user instance), `user_id and ...` evaluated to `False`. The check was completely bypassed, allowing an unauthenticated visitor to add items, remove items, reorder, or delete another user's playlists.
+
+**Fix:**
+Enforce that whenever a playlist has an owner (`playlist.user_id is not None`), non-owners (including unauthenticated callers) are strictly rejected with HTTP 403:
+```python
+if playlist.user_id is not None and playlist.user_id != user_id:
+    return api_error("Only the playlist owner can modify this playlist", 403)
+```
+
+**✅ Resolution:** Updated all four mutation endpoints in `src/aarkib/routes/api.py` (`add_playlist_item`, `remove_playlist_item`, `reorder_playlist_items`, `delete_playlist`). Added negative authorization integration tests in `tests/test_playlists.py:test_playlist_authorization_guards` confirming that unauthenticated visitors and cross-user callers receive 403 Forbidden.
+
+---
+
+### 32. Missing `/api/media/<id>/stream` Route Alias (Functional / API — HIGH)
+
+**Files:** `src/aarkib/routes/api.py:662-669`, `src/aarkib/templates/player_audio.html:328`, `src/aarkib/templates/player_audiobook.html:514`
+
+**Root Cause:** Both the music player (`player_audio.html`) and the audiobook player (`player_audiobook.html`) wire their `<audio>` element to `/api/media/{{ item.id }}/stream`. However, in `api.py`, `get_book_file` was only registered for `/media/<id>/file`, `/books/<id>/file`, and `/items/<id>/file`. As a result, all in-browser audio playback failed immediately with HTTP 404 Not Found.
+
+**Fix:**
+Register the `/stream` path aliases on `get_book_file`:
+```python
+@api_bp.route("/books/<int:book_id>/stream", methods=["GET"])
+@api_bp.route("/items/<int:book_id>/stream", methods=["GET"])
+@api_bp.route("/media/<int:book_id>/stream", methods=["GET"])
+```
+
+**✅ Resolution:** Added `/stream` route aliases for books, items, and media in `src/aarkib/routes/api.py`. Added verification assertions in `tests/test_api.py:test_api_media_and_items_route_aliases`.
+
+---
+
+### 33. Stored XSS & Raw Template Injection in Audio Player (Security — HIGH)
+
+**Files:** `src/aarkib/templates/player_audiobook.html:571, 580-583`
+
+**Root Cause:**
+1. In `player_audiobook.html:580`, chapter titles extracted from ID3 CHAP frames or MP4 chapter atoms were interpolated directly into HTML via `innerHTML`:
+   ```javascript
+   li.innerHTML = `<span class="ch-title">${ch.title || 'Chapter ' + (idx + 1)}</span>...`;
+   ```
+   Crafted chapter titles containing HTML or script tags executed in the reader's browser context.
+2. In `player_audiobook.html:571`, `currentChapterNameEl.textContent = "{{ item.title }}";` interpolated the Jinja variable directly inside a JavaScript `<script>` tag without JSON encoding, leading to potential script breakout or syntax errors if quotes appeared in the title.
+
+**Fix:**
+Add an `esc()` HTML sanitization helper and use Jinja's `tojson` filter:
+```javascript
+function esc(str) {
+  if (!str) return "";
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+...
+currentChapterNameEl.textContent = {{ item.title | tojson }};
+...
+<span class="ch-title">${esc(ch.title || 'Chapter ' + (idx + 1))}</span>
+```
+
+**✅ Resolution:** Added `esc()` in `player_audiobook.html` and applied it to chapter title rendering; replaced raw string interpolation with `tojson`.
+
+---
+
+### 34. AttributeError Crash in `delete_bookmark` for Anonymous Users (Security / Bug — HIGH)
+
+**File:** `src/aarkib/routes/api.py:1032`
+
+**Root Cause:** The ownership guard did:
+```python
+if bm.user_id and bm.user_id != current_user.id:
+```
+When `current_user` is not authenticated (`AnonymousUserMixin`), accessing `current_user.id` raises an unhandled `AttributeError: 'AnonymousUserMixin' object has no attribute 'id'`, returning a 500 Internal Server Error instead of a 403 Forbidden response.
+
+**Fix:**
+Safely resolve `user_id` before checking ownership:
+```python
+user_id = current_user.id if current_user.is_authenticated else None
+if bm.user_id and bm.user_id != user_id:
+    return api_error("Forbidden", 403)
+```
+
+**✅ Resolution:** Updated `delete_bookmark` in `src/aarkib/routes/api.py` and added test `test_api_bookmark_authorization` in `tests/test_api.py`.
+
+---
+
+### 35. N+1 Queries on Dashboard UI Shelves View (Performance — HIGH)
+
+**Files:** `src/aarkib/routes/ui.py:48-97`, `src/aarkib/templates/library.html:115, 154`
+
+**Root Cause:** The `index()` view in `ui.py` queried `recent_books` (line 71), `in_progress_books` (line 48), and `lib_books` per library shelf (line 91) without eager loading (`selectinload`). Because `library.html` accesses `book.authors_display` (which lazily evaluates `book.creators`), each card rendered across shelves triggered individual SQL queries to `media_creators` and `creators`, resulting in 50-100+ queries per page visit.
+
+**Fix:**
+Apply `selectinload(Book.creators)` and `selectinload(Book.collection)` to all shelf queries in `ui.py`:
+```python
+select(Book).options(
+    selectinload(Book.creators),
+    selectinload(Book.collection),
+)
+```
+
+**✅ Resolution:** Added `selectinload` for `creators` and `collection` to `recent_books`, `in_progress_books`, and dynamic `lib_books` in `src/aarkib/routes/ui.py`.
+
+---
+
+### 36. Nested Application Context & Session Teardown in Background Jobs (Concurrency / DB — MEDIUM)
+
+**File:** `src/aarkib/services/job_manager.py:139-150`
+
+**Root Cause:** `JobManager.submit_job` executes workers inside `with app.app_context():`. Periodic progress reports invoked `_persist_job_progress`, which created a nested `with app.app_context():` block. When this nested context exited, Flask fired `teardown_appcontext`, invoking `db.session.remove()` and destroying the thread-local database session while `scan_library` was still iterating and indexing files.
+
+**Fix:**
+In `_persist_job_progress`, check `has_app_context()`: if an application context is already active on the current thread, perform the commit without pushing and popping a nested application context.
+
+**✅ Resolution:** Updated `_persist_job_progress` in `src/aarkib/services/job_manager.py` to check `has_app_context()`.
+
+---
+
+### 37. Missing Audio MIME Types in Streaming Endpoint (Reliability — MEDIUM)
+
+**File:** `src/aarkib/routes/api.py:679-695`
+
+**Root Cause:** `get_book_file` used `mimetypes.guess_type`, falling back only to video formats, `application/epub+zip`, and `application/octet-stream`. Minimal Linux containers lack comprehensive MIME databases for `.m4b` and `.flac`. When `application/octet-stream` was returned, HTML5 `<audio>` players failed to decode the stream.
+
+**Fix:**
+Add explicit audio extension MIME mappings in `get_book_file`:
+- `m4b`, `m4a` -> `audio/mp4`
+- `mp3` -> `audio/mpeg`
+- `flac` -> `audio/flac`
+- `wav` -> `audio/wav`
+- `ogg` -> `audio/ogg`
+- `opus` -> `audio/opus`
+- `aac` -> `audio/aac`
+
+**✅ Resolution:** Explicit mappings added to `get_book_file` in `src/aarkib/routes/api.py`.
+
+---
+
+### 38. OPDS Feeds Leak Non-Readable Media (Video & Music) As Comic Books (Architecture / Standards — MEDIUM)
+
+**File:** `src/aarkib/routes/opds.py:418, 529, 600, 660, 720, 770`
+
+**Root Cause:** OPDS acquisition feeds queried all items via `select(Book)`. In multi-media libraries, movies (`.mp4`) and songs (`.mp3`) appeared in OPDS catalogs, typed as `@type: "http://schema.org/Book"`, and served as `application/vnd.comicbook+zip` to e-readers.
+
+**Fix:**
+Define `OPDS_READABLE_TYPES = ("book", "comic", "audiobook")` and filter all OPDS feed queries with `opds_readable_filter()`:
+```python
+def opds_readable_filter():
+    return or_(
+        Book.media_type.in_(OPDS_READABLE_TYPES),
+        Book.media_type.is_(None),
+    )
+```
+
+**✅ Resolution:** Added `opds_readable_filter()` to `opds.py` across `opds2_recent`, `recent_feed`, `author_books`, `series_books`, `tag_books`, and `search_feed`. Added verification test in `tests/test_opds.py`.
+
+---
+
+### 39. Docker Image Lacks `ffmpeg` / `ffprobe` (DevOps / Packaging — MEDIUM)
+
+**File:** `Dockerfile:2-25`
+
+**Root Cause:** The Docker container is built on `ghcr.io/astral-sh/uv:python3.14-bookworm-slim`, which does not include `ffmpeg`. Without `ffmpeg`, video frame thumbnail extraction (`extract_video_cover`), MKV/WebM duration detection, and audio chapter parsing silently fail in Docker deployments.
+
+**Fix:**
+Install `ffmpeg` during container image build:
+```dockerfile
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+**✅ Resolution:** Added `ffmpeg` package installation and created default `/app/data/media` directory in `Dockerfile`.
+
+---
+
+### 40. Permissive Password Minimum Length (Security — MEDIUM)
+
+**File:** `src/aarkib/routes/auth.py:144, 185, 287`
+
+**Root Cause:** Password validation currently permits 4-character passwords (`len(password) < 4`). Modern security guidelines (OWASP ASVS 4.0) recommend a minimum length of 8 to 12 characters.
+
+**Recommendation:** Increase minimum password length to 8 characters across registration, profile password update, and admin user creation.
+
+---
+
+### 41. Re-introduction of `current_app._get_current_object()` (Architecture — MEDIUM)
+
+**File:** `src/aarkib/routes/api.py:499, 1052, 1120`
+
+**Root Cause:** In `trigger_scan`, `enrich_library`, and `scan_single_library`, `current_app._get_current_object()` was used to pass the concrete Flask app into background workers.
+
+**Recommendation:** `JobManager.submit_job` should extract the app instance cleanly when passed `current_app` proxy, keeping route handlers free from private attribute access.
+
+---
+
+### 42. Outdated Model Terminology in Architecture Documentation (Documentation — LOW)
+
+**File:** `BEST_PRACTICE_REPORT.md` (historical sections)
+
+**Root Cause:** Earlier audit items in this document referred to `book_service.py`, `Author`, and `Series`. In commit `91cd38d`, these models and services were modernized to `media_service.py`, `Creator`, and `Collection`.
+
+**✅ Resolution:** Documented the architectural evolution and model mappings (`MediaItem`, `Creator`, `Collection`, `Tag`, `JobRecord`) in the updated report.
+
+---
+
+### 43. Lack of Rate Limiting on Authentication Endpoints (Security — LOW)
+
+**File:** `src/aarkib/routes/auth.py:91-120`
+
+**Root Cause:** The `/auth/login` endpoint does not enforce rate limiting or exponential backoff, leaving instances exposed to credential brute-forcing over HTTP.
+
+**Recommendation:** Introduce `Flask-Limiter` on `/auth/login` and `/auth/register` (e.g., max 10 attempts per minute per IP).
+
+---
+
+### 44. Missing Docker Data Directory for Unified Media (DevOps — LOW)
+
+**File:** `Dockerfile:24`
+
+**Root Cause:** The Dockerfile initialized `/app/data/books` but omitted `/app/data/media`, which is now the default multi-media mount directory recommended in `AGENT.md`.
+
+**✅ Resolution:** Added `/app/data/media` to `mkdir` in `Dockerfile`.
+
+---
+
+### 45. Missing Cross-User Playlist Authorization Tests (Testing — LOW)
+
+**File:** `tests/test_playlists.py`
+
+**Root Cause:** Existing playlist tests only validated happy-path behavior for a single user, leaving authorization boundaries and negative test cases unverified.
+
+**✅ Resolution:** Added `test_playlist_authorization_guards` in `tests/test_playlists.py` verifying that unauthenticated visitors and cross-user callers are rejected with 403 Forbidden.
+
+---
+
 ## VERIFICATION CHECKLIST
 
 After all fixes, run:
@@ -890,10 +1145,13 @@ uv run pytest -v
 ```
 
 Ensure:
-- [x] All 70+ tests pass (72 passing as of 2026-09-09)
+- [x] All 101 tests pass (101 passing as of 2026-09-11)
 - [x] `ruff check` reports no errors
 - [x] `ruff format --check` reports no changes needed
 - [x] Manually verify CSRF tokens appear in forms and fetch calls
 - [x] Manually verify admin endpoints reject unauthenticated requests when AUTH_REQUIRED=false
 - [x] Check that SECRET_KEY must be set in production
-- [x] Confirm page load times improve (fewer DB queries) with eager loading
+- [x] Confirm page load times improve (fewer DB queries) with eager loading on shelves and API
+- [x] Verify in-browser audio streaming (`/api/media/<id>/stream`) succeeds with valid audio MIME types
+- [x] Verify playlist mutation endpoints reject unauthorized and unauthenticated users
+- [x] Verify OPDS feeds exclude non-readable video and music media

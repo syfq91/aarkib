@@ -33,6 +33,16 @@ PROBLEM_JSON_TYPE = "application/problem+json"
 
 PRESET_RULE = "<any(x3,x4,kindle,kobo,eink,generic):preset>"
 
+OPDS_READABLE_TYPES: tuple[str, ...] = ("book", "comic", "audiobook")
+
+
+def opds_readable_filter():
+    """Filter condition restricting OPDS catalog items to readable media."""
+    return or_(
+        Book.media_type.in_(OPDS_READABLE_TYPES),
+        Book.media_type.is_(None),
+    )
+
 
 def get_opds_user() -> User | None:
     """Returns the authenticated user via session or HTTP Basic Auth."""
@@ -417,6 +427,7 @@ def opds2_recent(preset: str | None = None):
     books = db.session.scalars(
         select(Book)
         .options(selectinload(Book.authors), selectinload(Book.series))
+        .where(opds_readable_filter())
         .order_by(Book.created_at.desc())
         .limit(50)
     ).all()
@@ -528,6 +539,7 @@ def recent_feed(preset: str | None = None):
     query = (
         select(Book)
         .options(selectinload(Book.authors), selectinload(Book.tags))
+        .where(opds_readable_filter())
         .order_by(Book.created_at.desc())
     )
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
@@ -588,7 +600,7 @@ def author_books(author_id: int, preset: str | None = None):
     query = (
         select(Book)
         .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.authors.any(Author.id == author_id))
+        .filter(Book.authors.any(Author.id == author_id), opds_readable_filter())
         .order_by(Book.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
@@ -648,7 +660,7 @@ def series_books(series_id: int, preset: str | None = None):
     query = (
         select(Book)
         .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.series_id == series_id)
+        .filter(Book.series_id == series_id, opds_readable_filter())
         .order_by(Book.series_index.asc(), Book.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
@@ -708,7 +720,7 @@ def tag_books(tag_id: int, preset: str | None = None):
     query = (
         select(Book)
         .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.tags.any(Tag.id == tag_id))
+        .filter(Book.tags.any(Tag.id == tag_id), opds_readable_filter())
         .order_by(Book.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
@@ -759,7 +771,11 @@ def search_feed(preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     per_page = 30
 
-    query = select(Book).options(selectinload(Book.authors), selectinload(Book.tags))
+    query = (
+        select(Book)
+        .options(selectinload(Book.authors), selectinload(Book.tags))
+        .where(opds_readable_filter())
+    )
     if q:
         search_filter = or_(
             Book.title.ilike(f"%{q}%"),

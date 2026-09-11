@@ -236,3 +236,38 @@ def test_api_media_and_items_route_aliases(client, app, sample_epub):
     assert ui_item.status_code == 200
     ui_media = client.get(f"/media/{book_id}")
     assert ui_media.status_code == 200
+
+    # Test /stream route aliases
+    res_stream_media = client.get(f"/api/media/{book_id}/stream")
+    assert res_stream_media.status_code == 200
+    assert res_stream_media.headers["Content-Type"].startswith("application/epub+zip")
+
+    res_stream_book = client.get(f"/api/books/{book_id}/stream")
+    assert res_stream_book.status_code == 200
+
+
+def test_api_bookmark_authorization(client, app, sample_epub):
+    from aarkib.extensions import db
+    from aarkib.models import Bookmark
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        u1 = User(username="reader_bm", is_admin=False)
+        u1.set_password("pass")
+        db.session.add(u1)
+        db.session.commit()
+
+        bm = Bookmark(
+            user_id=u1.id,
+            book_id=book.id,
+            location="epubcfi(/6/4)",
+            title="User Bookmark",
+        )
+        db.session.add(bm)
+        db.session.commit()
+        bm_id = bm.id
+
+    # Unauthenticated attempt to delete user1's bookmark should return 403 without crashing
+    res_del_unauth = client.delete(f"/api/bookmarks/{bm_id}")
+    assert res_del_unauth.status_code == 403

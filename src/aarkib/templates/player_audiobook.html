@@ -563,12 +563,19 @@
       return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
+    function esc(str) {
+      if (!str) return "";
+      const d = document.createElement("div");
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
     // Build Chapter Drawer items
     function initChapters() {
       chapterListEl.innerHTML = "";
       if (!chapters || chapters.length === 0) {
         chapterListEl.innerHTML = `<li class="chapter-item" style="color: #64748b; cursor: default;">No chapter marks in this audiobook.</li>`;
-        currentChapterNameEl.textContent = "{{ item.title }}";
+        currentChapterNameEl.textContent = {{ item.title | tojson }};
         return;
       }
 
@@ -578,7 +585,7 @@
         li.dataset.idx = idx;
         li.dataset.start = ch.start_time;
         li.innerHTML = `
-          <span class="ch-title">${ch.title || 'Chapter ' + (idx + 1)}</span>
+          <span class="ch-title">${esc(ch.title || 'Chapter ' + (idx + 1))}</span>
           <span class="ch-time">${formatTime(ch.start_time)}</span>
         `;
         li.addEventListener("click", () => {

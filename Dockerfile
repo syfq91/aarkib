@@ -18,10 +18,15 @@ COPY src/ ./src/
 COPY README.md LICENSE ./
 RUN uv sync --frozen --no-dev
 
+# Install system runtime dependencies (ffmpeg for media analysis, video thumbnails, and audio metadata)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create unprivileged user and default data directories
 RUN groupadd -g 1000 aarkib && \
     useradd -u 1000 -g aarkib -d /app -s /bin/sh aarkib && \
-    mkdir -p /app/data/books /app/data/covers /app/data/optimized && \
+    mkdir -p /app/data/media /app/data/books /app/data/covers /app/data/optimized && \
     chown -R aarkib:aarkib /app
 
 # Expose default HTTP port

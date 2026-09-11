@@ -21,6 +21,14 @@ def test_opds_recent_feed(client, app):
         author = Author(name="OPDS Author")
         book.authors.append(author)
         db.session.add_all([book, author])
+        video = Book(
+            title="OPDS Movie Item",
+            original_file_path="/path/movie.mp4",
+            file_format="mp4",
+            file_hash="hashvid123",
+            media_type="video",
+        )
+        db.session.add(video)
         db.session.commit()
 
     response = client.get("/opds/recent")
@@ -28,6 +36,7 @@ def test_opds_recent_feed(client, app):
     assert "application/atom+xml" in response.headers["Content-Type"]
     assert b"OPDS Test Book" in response.data
     assert b"OPDS Author" in response.data
+    assert b"OPDS Movie Item" not in response.data
     assert b"http://opds-spec.org/acquisition" in response.data
     assert b"http://opds-spec.org/progression" in response.data
     assert b"application/opds-progression+json" in response.data

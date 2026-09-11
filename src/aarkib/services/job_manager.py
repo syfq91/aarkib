@@ -139,13 +139,21 @@ class JobManager:
     def _persist_job_progress(self, job: Job, app: Flask | None) -> None:
         if app is None:
             return
+        from flask import has_app_context
+
+        def _update():
+            rec = db.session.get(JobRecord, job.id)
+            if rec and rec.status == JobStatus.RUNNING.value:
+                rec.progress = job.progress
+                rec.progress_message = job.progress_message
+                db.session.commit()
+
         try:
-            with app.app_context():
-                rec = db.session.get(JobRecord, job.id)
-                if rec and rec.status == JobStatus.RUNNING.value:
-                    rec.progress = job.progress
-                    rec.progress_message = job.progress_message
-                    db.session.commit()
+            if has_app_context():
+                _update()
+            else:
+                with app.app_context():
+                    _update()
         except Exception as e:
             logger.debug("Failed to persist job progress for %s: %s", job.id, e)
 

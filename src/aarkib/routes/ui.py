@@ -11,6 +11,7 @@ from flask import (
 )
 from flask_login import current_user
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import (
@@ -48,6 +49,10 @@ def index():
     prog_stmt = (
         select(Book, UserProgress)
         .join(UserProgress, Book.id == UserProgress.book_id)
+        .options(
+            selectinload(Book.creators),
+            selectinload(Book.collection),
+        )
         .where(
             user_cond,
             UserProgress.percentage > 0,
@@ -69,7 +74,13 @@ def index():
 
     # 2. Recently added books across all libraries
     recent_books = db.session.scalars(
-        select(Book).order_by(Book.created_at.desc()).limit(16)
+        select(Book)
+        .options(
+            selectinload(Book.creators),
+            selectinload(Book.collection),
+        )
+        .order_by(Book.created_at.desc())
+        .limit(16)
     ).all()
 
     # 3. Dynamic shelves based on configured libraries
@@ -90,6 +101,10 @@ def index():
         else:
             lib_books = db.session.scalars(
                 select(Book)
+                .options(
+                    selectinload(Book.creators),
+                    selectinload(Book.collection),
+                )
                 .where(lib_filter)
                 .order_by(Book.created_at.desc())
                 .limit(16)

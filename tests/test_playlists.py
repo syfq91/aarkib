@@ -153,3 +153,71 @@ def test_playlists_model_and_api(client, app):
 
     res_get_gone = client.get(f"/api/playlists/{playlist_id}")
     assert res_get_gone.status_code == 404
+
+
+def test_playlist_authorization_guards(client, app):
+    with app.app_context():
+        user1 = User(username="user1")
+        user1.set_password("pass1")
+        user2 = User(username="user2")
+        user2.set_password("pass2")
+        db.session.add_all([user1, user2])
+        db.session.commit()
+
+        track = MediaItem(
+            title="Song",
+            original_file_path="/music/song.mp3",
+            file_format="mp3",
+            file_hash="h_song",
+            media_type=MediaType.MUSIC.value,
+        )
+        db.session.add(track)
+        db.session.commit()
+        track_id = track.id
+
+    # Log in as user1 and create a private playlist
+    client.post(
+        "/auth/login",
+        data={"username": "user1", "password": "pass1"},
+        follow_redirects=True,
+    )
+    res_create = client.post(
+        "/api/playlists",
+        json={"title": "User1 Private", "is_public": False},
+    )
+    assert res_create.status_code == 201
+    playlist_id = res_create.json["playlist"]["id"]
+
+    # Log out user1
+    client.get("/auth/logout", follow_redirects=True)
+
+    # Unauthenticated user should not be able to delete or modify user1's playlist
+    res_unauth_del = client.delete(f"/api/playlists/{playlist_id}")
+    assert res_unauth_del.status_code == 403
+
+    res_unauth_add = client.post(
+        f"/api/playlists/{playlist_id}/items",
+        json={"media_item_id": track_id},
+    )
+    assert res_unauth_add.status_code == 403
+
+    # Log in as user2
+    client.post(
+        "/auth/login",
+        data={"username": "user2", "password": "pass2"},
+        follow_redirects=True,
+    )
+
+    # User2 should not be able to delete or modify user1's playlist
+    res_u2_del = client.delete(f"/api/playlists/{playlist_id}")
+    assert res_u2_del.status_code == 403
+
+    res_u2_add = client.post(
+        f"/api/playlists/{playlist_id}/items",
+        json={"media_item_id": track_id},
+    )
+    assert res_u2_add.status_code == 403
+
+    # User2 should not be able to read user1's private playlist
+    res_u2_get = client.get(f"/api/playlists/{playlist_id}")
+    assert res_u2_get.status_code == 403
