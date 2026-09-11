@@ -596,10 +596,10 @@ gantt
     Audiobooks (M4B Chapters) & Playlists:done, p5, 2026-11, 2026-12
     section Phase 6 (Completed)
     TMDB & MusicBrainz Metadata Providers:done, p6, 2026-12, 2027-01
-    section Phase 7 (Next)
-    SQLite FTS5 Unified Grouped Search   :active, p7, 2027-01, 2027-02
-    section Phase 8
-    Local Podcasts & Audio Shows         :p8, 2027-02, 2027-03
+    section Phase 7 (Completed)
+    SQLite FTS5 Unified Grouped Search   :done, p7, 2027-01, 2027-02
+    section Phase 8 (Next)
+    Local Podcasts & Audio Shows         :active, p8, 2027-02, 2027-03
     section Phase 9
     Production Packaging & Third-Party API:p9, 2027-03, 2027-04
 ```
@@ -654,11 +654,11 @@ gantt
 - [x] Implement `TMDBProvider` for Movies & TV Shows and `MusicBrainzProvider` for music albums and tracks.
 - [x] Build UI "Fix Match / Enrich" modal supporting candidate search, match confidence scoring, and field-level locking (`locked_fields`) to prevent automated overwrites.
 
-### Phase 7: SQLite FTS5 Unified Grouped Search `[PLANNED]`
-- [ ] Implement SQLite FTS5 external-content virtual table `media_items_fts` (`content='media_items'`).
-- [ ] Implement bulk vs. reactive synchronization strategy: defer/bypass per-row triggers during bulk scans in favor of batch/chunked index updates or post-scan rebuilds at transaction boundaries.
-- [ ] Update `/api/media?q=` to query FTS5 index with sub-millisecond latency.
-- [ ] Categorize search results in WebUI by media type (Movies, TV, Books, Audiobooks, Music, Comics).
+### Phase 7: SQLite FTS5 Unified Grouped Search `[COMPLETED]`
+- [x] Implement SQLite FTS5 virtual table `media_items_fts` indexing title, creators, collection, description, and tags with porter unicode61 tokenizer.
+- [x] Implement bulk vs. reactive synchronization strategy: single set-based index sync at transaction boundary on scans, reactive item sync on metadata updates and watchdog events.
+- [x] Update `/api/media?q=` and OPDS search feeds to query FTS5 index with sub-millisecond latency and BM25 relevance ranking.
+- [x] Categorize search results in WebUI by media type (Movies, TV, Books, Audiobooks, Music, Comics) with grouped result sections, item counts, and category navigation.
 
 ### Phase 8: Local Podcasts & Audio Shows `[PLANNED]`
 - [ ] Create `PodcastMediaPlugin` to index locally stored podcast audio files (`.mp3`, `.m4a`).

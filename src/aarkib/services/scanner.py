@@ -823,6 +823,14 @@ def scan_library(
         if deleted > 0:
             db.session.commit()
 
+        if added > 0 or deleted > 0:
+            try:
+                from aarkib.services.search import rebuild_search_index
+
+                rebuild_search_index()
+            except Exception as e:
+                logger.warning("FTS search index rebuild failed after scan: %s", e)
+
         if progress_callback:
             progress_callback(
                 100.0, f"Scan complete: {len(existing_files)} files processed"
@@ -855,7 +863,7 @@ class LibraryChangeHandler(FileSystemEventHandler):
                         if res_p.startswith(p_res) or str(file_path).startswith(p_raw):
                             matched_lib = lib
                             break
-                    index_single_book(
+                    b = index_single_book(
                         file_path,
                         covers_dir,
                         library_media_type=matched_lib.media_type
@@ -865,6 +873,10 @@ class LibraryChangeHandler(FileSystemEventHandler):
                         if matched_lib
                         else None,
                     )
+                    if b:
+                        from aarkib.services.search import sync_media_item_fts
+
+                        sync_media_item_fts(b.id)
                 else:
                     book = db.session.scalar(
                         select(Book).where(
@@ -872,8 +884,12 @@ class LibraryChangeHandler(FileSystemEventHandler):
                         )
                     )
                     if book:
+                        b_id = book.id
                         db.session.delete(book)
                         db.session.commit()
+                        from aarkib.services.search import remove_media_item_fts
+
+                        remove_media_item_fts(b_id)
 
     def on_created(self, event: FileSystemEvent) -> None:
         if not event.is_directory:

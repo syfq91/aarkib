@@ -383,7 +383,29 @@ async function fetchBooks() {
   const format = document.getElementById("format-filter").value;
   const libFilter = libSelect ? libSelect.value : activeLibraryId;
   const [sort, order] = document.getElementById("sort-select").value.split(":");
-  
+
+  // When searching across all media types with no secondary filters, display grouped search results
+  const isGroupedSearch = Boolean(q && !type && !format && !activeAuthorId && !activeSeriesId && !activeTagId);
+
+  if (isGroupedSearch) {
+    const searchParams = new URLSearchParams({ q });
+    if (libFilter) searchParams.append("library_id", libFilter);
+    try {
+      const res = await fetch(`/api/search?${searchParams.toString()}`);
+      if (res.status === 401) {
+        window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname + window.location.search);
+        return;
+      }
+      const data = await res.json();
+      if (res.ok) {
+        renderGroupedSearchResults(data, q);
+      }
+    } catch (err) {
+      console.error("Failed to load grouped search results", err);
+    }
+    return;
+  }
+
   const params = new URLSearchParams({
     page: currentPage,
     sort: sort,
@@ -413,6 +435,86 @@ async function fetchBooks() {
   }
 }
 
+function renderBookCard(book) {
+  const progressPercent = book.progress ? Math.round(book.progress.percentage) : 0;
+  const title = esc(book.title);
+  const format = esc(book.file_format || "");
+  const authors = esc(book.authors_display || (book.authors && book.authors.join(", ")) || "");
+  let badge = format ? format.toUpperCase() : "";
+  if (book.season && book.episode) {
+    badge = `S${String(book.season).padStart(2, '0')}E${String(book.episode).padStart(2, '0')}`;
+  }
+
+  return `
+    <a href="/book/${book.id}" class="book-card">
+      <div class="book-cover-wrap">
+        <img src="${book.cover_url}" alt="${title}" class="book-cover-img" loading="lazy" onerror="this.src='/static/icons/icon.svg'">
+        ${badge ? `<span class="badge-format">${badge}</span>` : ""}
+      </div>
+      ${progressPercent > 0 ? `
+        <div class="progress-bar-container" title="${progressPercent}% completed">
+          <div class="progress-bar-fill" style="width: ${progressPercent}%;"></div>
+        </div>
+      ` : ""}
+      <div class="book-info">
+        <div class="book-title" title="${title}">${title}</div>
+        <div class="book-author">${authors}</div>
+      </div>
+    </a>
+  `;
+}
+
+function renderGroupedSearchResults(data, query) {
+  const grid = document.getElementById("book-grid");
+  const paginationControls = document.getElementById("pagination-controls");
+  if (paginationControls) paginationControls.innerHTML = "";
+  if (!grid) return;
+
+  if (!data || data.total_results === 0) {
+    grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-secondary);">
+      <h3>No matching media found for "${esc(query)}"</h3>
+      <p style="margin-top: 0.5rem; font-size: 0.9rem;">Try searching by different keywords, creators, or tags.</p>
+    </div>`;
+    return;
+  }
+
+  let html = `<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2rem; width: 100%;">`;
+  const groups = data.groups || {};
+  for (const [key, grp] of Object.entries(groups)) {
+    if (!grp.count || grp.count === 0) continue;
+    html += `
+      <div class="search-category-group" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.25rem;">${grp.icon}</span>
+            <span style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">${esc(grp.label)}</span>
+            <span style="background: var(--bg-surface-elevated, rgba(255,255,255,0.08)); padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.8rem; color: var(--text-secondary); border: 1px solid var(--border);">${grp.count}</span>
+          </div>
+          ${grp.count > grp.items.length ? `
+            <button type="button" class="btn btn-sm btn-ghost" onclick="filterByGroup('${key}')" style="font-size: 0.85rem; color: var(--primary, #6366f1); cursor: pointer; padding: 0.2rem 0.5rem;">
+              View all ${grp.count} →
+            </button>
+          ` : ""}
+        </div>
+        <div class="book-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.25rem;">
+          ${grp.items.map(renderBookCard).join('')}
+        </div>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  grid.innerHTML = html;
+}
+
+function filterByGroup(groupKey) {
+  const typeSelect = document.getElementById("type-filter");
+  if (typeSelect) {
+    typeSelect.value = groupKey;
+  }
+  currentPage = 1;
+  fetchBooks();
+}
+
 function renderBooks(books) {
   const grid = document.getElementById("book-grid");
   if (!grid) return;
@@ -425,30 +527,7 @@ function renderBooks(books) {
     return;
   }
 
-  grid.innerHTML = books.map(book => {
-    const progressPercent = book.progress ? Math.round(book.progress.percentage) : 0;
-    const title = esc(book.title);
-    const format = esc(book.file_format);
-    const authors = esc(book.authors_display);
-
-    return `
-      <a href="/book/${book.id}" class="book-card">
-        <div class="book-cover-wrap">
-          <img src="${book.cover_url}" alt="${title}" class="book-cover-img" loading="lazy">
-          <span class="badge-format">${format}</span>
-        </div>
-        ${progressPercent > 0 ? `
-          <div class="progress-bar-container" title="${progressPercent}% completed">
-            <div class="progress-bar-fill" style="width: ${progressPercent}%;"></div>
-          </div>
-        ` : ''}
-        <div class="book-info">
-          <div class="book-title" title="${title}">${title}</div>
-          <div class="book-author">${authors}</div>
-        </div>
-      </a>
-    `;
-  }).join('');
+  grid.innerHTML = books.map(renderBookCard).join('');
 }
 
 function renderPagination(data) {

@@ -579,6 +579,9 @@ def enrich_media_item(
 
     if changes:
         db.session.commit()
+        from aarkib.services.search import sync_media_item_fts
+
+        sync_media_item_fts(item.id)
         logger.info(
             "Enriched %s ID %d (%s) with: %s",
             item.media_type,

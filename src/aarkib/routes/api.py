@@ -161,15 +161,36 @@ def list_books():
         selectinload(Book.tags),
     )
 
+    relevance_order = False
     if q:
-        search_filter = or_(
-            Book.title.ilike(f"%{q}%"),
-            Book.description.ilike(f"%{q}%"),
-            Book.authors.any(Author.name.ilike(f"%{q}%")),
-            Book.tags.any(Tag.name.ilike(f"%{q}%")),
-            Book.series.has(Series.name.ilike(f"%{q}%")),
-        )
-        query = query.filter(search_filter)
+        from aarkib.services.search import search_media_ids
+
+        # Attempt FTS5 search
+        matching_ids = search_media_ids(q, limit=2000)
+        if matching_ids:
+            query = query.filter(Book.id.in_(matching_ids))
+            if sort_by in ("relevance", "rank") or (
+                sort_by == "added_at" and "sort" not in request.args
+            ):
+                from sqlalchemy import case
+
+                relevance_order = True
+                order_case = case(
+                    {mid: idx for idx, mid in enumerate(matching_ids)},
+                    value=Book.id,
+                )
+                query = query.order_by(order_case.asc())
+        elif matching_ids == []:
+            query = query.filter(Book.id == -1)
+        else:
+            search_filter = or_(
+                Book.title.ilike(f"%{q}%"),
+                Book.description.ilike(f"%{q}%"),
+                Book.authors.any(Author.name.ilike(f"%{q}%")),
+                Book.tags.any(Tag.name.ilike(f"%{q}%")),
+                Book.series.has(Series.name.ilike(f"%{q}%")),
+            )
+            query = query.filter(search_filter)
 
     if author_id:
         query = query.filter(Book.authors.any(Author.id == author_id))
@@ -208,16 +229,17 @@ def list_books():
             query = query.filter(Book.original_file_path.startswith(prefix))
 
     # Sorting
-    if sort_by == "title":
-        col = Book.sort_title if hasattr(Book, "sort_title") else Book.title
-    elif sort_by == "series_index":
-        col = Book.series_index
-    elif sort_by == "author":
-        col = Book.title
-    else:
-        col = Book.created_at
+    if not relevance_order:
+        if sort_by == "title":
+            col = Book.sort_title if hasattr(Book, "sort_title") else Book.title
+        elif sort_by == "series_index":
+            col = Book.series_index
+        elif sort_by == "author":
+            col = Book.title
+        else:
+            col = Book.created_at
 
-    query = query.order_by(col.desc() if order == "desc" else col.asc())
+        query = query.order_by(col.desc() if order == "desc" else col.asc())
 
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
@@ -290,6 +312,35 @@ def list_books():
             "total": pagination.total,
             "has_prev": pagination.has_prev,
             "has_next": pagination.has_next,
+        }
+    )
+
+
+@api_bp.route("/search", methods=["GET"])
+def search_catalog():
+    """Unified full-text search returning results grouped by media type."""
+    q = request.args.get("q", "").strip()
+    library_id = request.args.get("library_id", type=int)
+    limit = min(request.args.get("limit", 8, type=int), 50)
+
+    from aarkib.services.search import search_grouped
+
+    results = search_grouped(q=q, library_id=library_id, limit_per_group=limit)
+    return jsonify(results)
+
+
+@api_bp.route("/search/reindex", methods=["POST"])
+@api_admin_required
+def reindex_search():
+    """Admin-only endpoint to trigger a complete rebuild of the SQLite FTS5 index."""
+    from aarkib.services.search import rebuild_search_index
+
+    count = rebuild_search_index()
+    return jsonify(
+        {
+            "status": "success",
+            "message": f"FTS5 search index rebuilt successfully ({count} items indexed).",
+            "indexed_count": count,
         }
     )
 
@@ -466,11 +517,17 @@ def delete_library(identifier: str):
     )
     books = db.session.scalars(select(Book).where(cond)).all()
     deleted_count = len(books)
+    book_ids = [b.id for b in books]
     for b in books:
         db.session.delete(b)
 
     db.session.delete(lib)
     db.session.commit()
+
+    from aarkib.services.search import remove_media_item_fts
+
+    for bid in book_ids:
+        remove_media_item_fts(bid)
 
     return jsonify(
         {
@@ -1556,6 +1613,11 @@ def edit_book_metadata(book_id: int):
     data = request.get_json(silent=True) or request.form
     apply_edits(book, data)
     db.session.commit()
+
+    from aarkib.services.search import sync_media_item_fts
+
+    sync_media_item_fts(book.id)
+
     return jsonify(
         {
             "status": "success",

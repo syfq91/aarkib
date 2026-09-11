@@ -114,6 +114,12 @@ def migrate_database() -> None:
                 )
                 conn.execute(text(stmt))
 
+    # Initialize SQLite FTS5 full-text search virtual table
+    from aarkib.services.search import init_search_fts
+
+    with db.engine.begin() as conn:
+        init_search_fts(conn)
+
 
 def create_app(config_class: type[Config] | None = None) -> Flask:
     if config_class is None:
@@ -231,6 +237,15 @@ def register_commands(app: Flask) -> None:
         click.echo("Scanning library...")
         result = scan_library(app)
         click.echo(f"Scan complete: {result}")
+
+    @app.cli.command("reindex-search")
+    def reindex_search_command():
+        """Rebuild SQLite FTS5 full-text search index."""
+        from aarkib.services.search import rebuild_search_index
+
+        click.echo("Rebuilding SQLite FTS5 search index...")
+        count = rebuild_search_index()
+        click.echo(f"Search index rebuild complete: {count} items indexed.")
 
     @app.cli.command("create-admin")
     @click.argument("username")

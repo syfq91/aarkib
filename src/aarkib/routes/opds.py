@@ -776,17 +776,35 @@ def search_feed(preset: str | None = None):
         .options(selectinload(Book.authors), selectinload(Book.tags))
         .where(opds_readable_filter())
     )
+    relevance_order = False
     if q:
-        search_filter = or_(
-            Book.title.ilike(f"%{q}%"),
-            Book.description.ilike(f"%{q}%"),
-            Book.authors.any(Author.name.ilike(f"%{q}%")),
-            Book.tags.any(Tag.name.ilike(f"%{q}%")),
-            Book.series.has(Series.name.ilike(f"%{q}%")),
-        )
-        query = query.filter(search_filter)
+        from aarkib.services.search import search_media_ids
 
-    query = query.order_by(Book.title.asc())
+        matching_ids = search_media_ids(q, limit=1000)
+        if matching_ids:
+            query = query.filter(Book.id.in_(matching_ids))
+            from sqlalchemy import case
+
+            relevance_order = True
+            order_case = case(
+                {mid: idx for idx, mid in enumerate(matching_ids)},
+                value=Book.id,
+            )
+            query = query.order_by(order_case.asc())
+        elif matching_ids == []:
+            query = query.filter(Book.id == -1)
+        else:
+            search_filter = or_(
+                Book.title.ilike(f"%{q}%"),
+                Book.description.ilike(f"%{q}%"),
+                Book.authors.any(Author.name.ilike(f"%{q}%")),
+                Book.tags.any(Tag.name.ilike(f"%{q}%")),
+                Book.series.has(Series.name.ilike(f"%{q}%")),
+            )
+            query = query.filter(search_filter)
+
+    if not relevance_order:
+        query = query.order_by(Book.title.asc())
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
