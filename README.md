@@ -81,7 +81,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `SECRET_KEY` | `aarkib-secret-key-change-in-production` | Secret key for session security & signing. |
+| `SECRET_KEY` | Auto-generated in `<DATA_DIR>/secret_key` | Secret key for session security & signing. Auto-generated and persisted on first boot if omitted. |
 | `AARKIB_DATA_DIR` | `./data` | Base storage directory. |
 | `AARKIB_MEDIA_DIR` / `AARKIB_LIBRARY_DIR` | `./data/media` or `./data/books` | Primary media folder (or delimited list: `/dir1:/dir2`). |
 | `AARKIB_MEDIA_DIRS` / `MEDIA_DIRS` | *(none)* | Delimited list of multiple media directories. |

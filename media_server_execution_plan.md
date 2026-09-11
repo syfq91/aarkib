@@ -707,7 +707,7 @@ services:
       - AARKIB_ALLOW_REGISTRATION=true
       - AARKIB_AUTO_SCAN=true
       - AARKIB_WATCH_LIBRARY=true
-      - SECRET_KEY=generate_a_secure_secret_key_here
+      - SECRET_KEY=${SECRET_KEY:-}
     volumes:
       - ./data:/app/data
       - /path/to/media/books:/app/data/books:ro
