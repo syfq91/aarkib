@@ -199,6 +199,15 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         except Exception as e:
             logger.debug("Startup library sync skipped: %s", e)
 
+        try:
+            from aarkib.services.transcoder import transcode_supervisor
+
+            transcode_dir = Path(app.config.get("TRANSCODE_DIR", Path("/tmp/transcode")))
+            transcode_dir.mkdir(parents=True, exist_ok=True)
+            transcode_supervisor.clean_stale_directories(transcode_dir)
+        except Exception as e:
+            logger.debug("Startup transcode cleanup skipped: %s", e)
+
     # Register CLI commands
     register_commands(app)
 

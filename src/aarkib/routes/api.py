@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
 
-from flask import Blueprint, abort, current_app, jsonify, request, send_file
+from flask import Blueprint, Response, abort, current_app, jsonify, request, send_file
 from flask_login import current_user, login_required, login_user
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import selectinload
@@ -710,6 +710,245 @@ def get_book_file(book_id: int, filename: str | None = None):
         mimetype = "application/octet-stream"
 
     return send_file(file_path, mimetype=mimetype, conditional=True)
+
+
+# ---------------------------------------------------------------------------
+# Streaming, Remuxing & Transcoding Endpoints (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/stream/<int:book_id>/info", methods=["GET"])
+@api_bp.route("/books/<int:book_id>/stream/info", methods=["GET"])
+def get_stream_info(book_id: int):
+    """Returns technical stream metadata, codecs, tracks, and recommended playback strategy."""
+    book = db.session.get(Book, book_id)
+    if not book:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(book.original_file_path)
+    if not file_path.exists():
+        return api_error("File missing from storage", 404)
+
+    from aarkib.services.transcoder import (
+        evaluate_playback_strategy,
+        probe_media_streams,
+    )
+
+    streams = probe_media_streams(file_path)
+    eval_res = evaluate_playback_strategy(file_path, streams)
+
+    return jsonify({
+        "id": book.id,
+        "title": book.title,
+        "file_format": book.file_format,
+        "original_file_path": str(file_path),
+        "streams": streams,
+        "evaluation": eval_res,
+        "direct_url": f"/api/books/{book.id}/file",
+        "remux_url": f"/api/stream/{book.id}/remux",
+        "hls_url": f"/api/stream/{book.id}/hls/master.m3u8",
+    })
+
+
+@api_bp.route("/stream/<int:book_id>/remux", methods=["GET"])
+@api_bp.route("/books/<int:book_id>/stream/remux", methods=["GET"])
+def stream_remux_video(book_id: int):
+    """Progressive on-the-fly container remux (e.g. MKV -> fragmented MP4) via FFmpeg pipe."""
+    book = db.session.get(Book, book_id)
+    if not book:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(book.original_file_path)
+    if not file_path.exists():
+        return api_error("File missing from storage", 404)
+
+    from aarkib.services.transcoder import stream_remux_pipe
+
+    seek_sec = request.args.get("start", 0.0, type=float)
+    audio_transcode = request.args.get("audio_transcode", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+    return Response(
+        stream_remux_pipe(
+            file_path, seek_seconds=seek_sec, audio_transcode=audio_transcode
+        ),
+        mimetype="video/mp4",
+        headers={
+            "Content-Type": "video/mp4",
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@api_bp.route("/stream/<int:book_id>/hls/master.m3u8", methods=["GET"])
+@api_bp.route("/books/<int:book_id>/stream/hls/master.m3u8", methods=["GET"])
+def get_hls_master_playlist(book_id: int):
+    """Spawns/attaches to an HLS transcode session and returns the master playlist."""
+    book = db.session.get(Book, book_id)
+    if not book:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(book.original_file_path)
+    if not file_path.exists():
+        return api_error("File missing from storage", 404)
+
+    from aarkib.services.transcoder import RESOLUTION_PRESETS, transcode_supervisor
+
+    resolution = request.args.get("resolution", "original")
+    seek_offset = request.args.get("start", 0.0, type=float)
+    audio_track = request.args.get("audio_track", 0, type=int)
+
+    transcode_dir = Path(
+        current_app.config.get(
+            "TRANSCODE_DIR",
+            Path(current_app.config.get("DATA_DIR", "data")) / "transcode",
+        )
+    )
+
+    session = transcode_supervisor.create_or_get_hls_session(
+        media_item_id=book.id,
+        file_path=file_path,
+        transcode_base_dir=transcode_dir,
+        resolution=resolution,
+        seek_offset=seek_offset,
+        audio_track_index=audio_track,
+    )
+
+    preset = RESOLUTION_PRESETS.get(resolution, RESOLUTION_PRESETS["original"])
+    bandwidth = preset["video_bitrate"] * 1000
+
+    master_content = (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:7\n"
+        f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},NAME="{resolution}"\n'
+        f"/api/stream/{book.id}/hls/{session.session_id}/playlist.m3u8\n"
+    )
+
+    return Response(
+        master_content,
+        mimetype="application/vnd.apple.mpegurl",
+        headers={
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@api_bp.route("/stream/<int:book_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
+def get_hls_session_playlist(book_id: int, session_id: str):
+    """Serves the HLS playlist generated by an active transcode session."""
+    from aarkib.services.transcoder import transcode_supervisor
+
+    session = transcode_supervisor.get_session(session_id)
+    if not session or not session.is_active:
+        return api_error("Transcode session expired or not found", 404)
+
+    session.touch()
+    playlist_path = session.output_dir / "playlist.m3u8"
+
+    if not playlist_path.exists():
+        return api_error("Playlist generating, please retry", 503)
+
+    return send_file(playlist_path, mimetype="application/vnd.apple.mpegurl")
+
+
+@api_bp.route(
+    "/stream/<int:book_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
+)
+def get_hls_segment(book_id: int, session_id: str, segment_name: str):
+    """Serves an HLS segment (.m4s or init.mp4) and updates session heartbeat."""
+    from aarkib.services.transcoder import transcode_supervisor
+
+    # Prevent directory traversal
+    if ".." in segment_name or segment_name.startswith(("/", "\\")):
+        return api_error("Invalid segment name", 400)
+
+    session = transcode_supervisor.get_session(session_id)
+    if not session or not session.is_active:
+        return api_error("Transcode session expired or not found", 404)
+
+    session.touch()
+    segment_path = (session.output_dir / segment_name).resolve()
+
+    if (
+        not segment_path.is_relative_to(session.output_dir.resolve())
+        or not segment_path.exists()
+    ):
+        return api_error("Segment not ready or not found", 404)
+
+    mimetype = "video/iso.segment" if segment_name.endswith(".m4s") else "video/mp4"
+    return send_file(segment_path, mimetype=mimetype)
+
+
+@api_bp.route("/stream/<int:book_id>/hls/<session_id>/heartbeat", methods=["POST"])
+def hls_heartbeat(book_id: int, session_id: str):
+    """Client heartbeat ping to keep an active HLS transcode session alive."""
+    from aarkib.services.transcoder import transcode_supervisor
+
+    session = transcode_supervisor.get_session(session_id)
+    if not session or not session.is_active:
+        return api_error("Session not found or expired", 404)
+
+    session.touch()
+    return jsonify({"status": "ok", "session_id": session_id})
+
+
+@api_bp.route("/stream/<int:book_id>/hls/<session_id>/stop", methods=["POST"])
+def stop_hls_session(book_id: int, session_id: str):
+    """Explicitly stops a transcode session and prunes its scratch directory."""
+    from aarkib.services.transcoder import transcode_supervisor
+
+    transcode_supervisor.stop_session(session_id)
+    return jsonify({"status": "stopped", "session_id": session_id})
+
+
+@api_bp.route("/stream/<int:book_id>/subtitles", methods=["GET"])
+@api_bp.route("/books/<int:book_id>/stream/subtitles", methods=["GET"])
+def list_subtitles(book_id: int):
+    """Returns list of embedded subtitle tracks for a media item."""
+    book = db.session.get(Book, book_id)
+    if not book:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(book.original_file_path)
+    if not file_path.exists():
+        return api_error("File missing from storage", 404)
+
+    from aarkib.services.transcoder import probe_media_streams
+
+    streams = probe_media_streams(file_path)
+    return jsonify({
+        "id": book.id,
+        "subtitles": streams.get("subtitles", []),
+    })
+
+
+@api_bp.route("/stream/<int:book_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
+@api_bp.route(
+    "/books/<int:book_id>/stream/subtitles/<int:track_index>.vtt", methods=["GET"]
+)
+def get_subtitle_vtt(book_id: int, track_index: int):
+    """Extracts and converts the requested embedded subtitle track to WebVTT."""
+    book = db.session.get(Book, book_id)
+    if not book:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(book.original_file_path)
+    if not file_path.exists():
+        return api_error("File missing from storage", 404)
+
+    from aarkib.services.transcoder import generate_vtt_subtitles
+
+    vtt_bytes = generate_vtt_subtitles(file_path, track_index)
+    return Response(
+        vtt_bytes,
+        mimetype="text/vtt",
+        headers={"Content-Type": "text/vtt; charset=utf-8"},
+    )
 
 
 @api_bp.route("/books/<int:book_id>/download", methods=["GET"])

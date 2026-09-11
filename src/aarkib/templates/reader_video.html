@@ -6,6 +6,7 @@
   <title>{{ book.title }}{% if book.episode_code %} ({{ book.episode_code }}){% endif %} - Aarkib Video Player</title>
   
   <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <style>
     body, html {
       margin: 0;
@@ -212,6 +213,19 @@
         </a>
       {% endif %}
 
+      <select id="subtitle-select" class="header-btn" style="padding: 0.3rem 0.5rem;" title="Subtitles">
+        <option value="off">💬 Subs: Off</option>
+      </select>
+
+      <select id="stream-mode-select" class="header-btn" style="padding: 0.3rem 0.5rem;" title="Stream Quality & Mode">
+        <option value="auto" selected>⚡ Auto</option>
+        <option value="direct">Direct Play</option>
+        <option value="remux">Direct Remux</option>
+        <option value="1080p">Transcode 1080p</option>
+        <option value="720p">Transcode 720p</option>
+        <option value="480p">Transcode 480p</option>
+      </select>
+
       <select id="speed-select" class="header-btn" style="padding: 0.3rem 0.5rem;" title="Playback Speed">
         <option value="0.75">0.75x</option>
         <option value="1.0" selected>1.0x</option>
@@ -277,10 +291,16 @@
   const resumePill = document.getElementById("resume-pill");
   const nextOverlay = document.getElementById("next-episode-overlay");
 
+  const subtitleSelect = document.getElementById("subtitle-select");
+  const streamModeSelect = document.getElementById("stream-mode-select");
+
   let controlsTimer = null;
   let syncTimer = null;
   let nextCountdownInterval = null;
   let hasResumed = false;
+  let hlsInstance = null;
+  let activeHlsSessionId = null;
+  let heartbeatTimer = null;
 
   function formatTime(seconds) {
     const s = Math.floor(seconds);
@@ -293,6 +313,147 @@
     }
     return `${remM}:${remS.toString().padStart(2, '0')}`;
   }
+
+  // Subtitle track dynamic loader
+  async function loadSubtitles() {
+    try {
+      const res = await fetch(`/api/stream/${BOOK_ID}/subtitles`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const subs = data.subtitles || [];
+      if (subs.length === 0) return;
+
+      subs.forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = s.index;
+        opt.textContent = `💬 ${s.language.toUpperCase()} - ${s.title}`;
+        subtitleSelect.appendChild(opt);
+      });
+
+      subtitleSelect.addEventListener("change", (e) => {
+        const oldTracks = video.querySelectorAll("track");
+        oldTracks.forEach(t => t.remove());
+
+        const idx = e.target.value;
+        if (idx !== "off") {
+          const track = document.createElement("track");
+          track.kind = "subtitles";
+          track.src = `/api/stream/${BOOK_ID}/subtitles/${idx}.vtt`;
+          track.srclang = "en";
+          track.label = e.target.options[e.target.selectedIndex].text;
+          track.default = true;
+          video.appendChild(track);
+          if (video.textTracks && video.textTracks.length > 0) {
+            video.textTracks[0].mode = "showing";
+          }
+        }
+      });
+    } catch (e) {
+      console.debug("Failed loading subtitles:", e);
+    }
+  }
+
+  function stopHlsHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    if (activeHlsSessionId) {
+      try {
+        navigator.sendBeacon(`/api/stream/${BOOK_ID}/hls/${activeHlsSessionId}/stop`);
+      } catch (_) {}
+      activeHlsSessionId = null;
+    }
+    if (hlsInstance) {
+      hlsInstance.destroy();
+      hlsInstance = null;
+    }
+  }
+
+  function loadDirect(time) {
+    stopHlsHeartbeat();
+    video.src = `/api/books/${BOOK_ID}/file`;
+    if (time > 0) video.currentTime = time;
+    video.play().catch(() => {});
+  }
+
+  function loadRemux(time) {
+    stopHlsHeartbeat();
+    video.src = `/api/stream/${BOOK_ID}/remux?start=${(time || 0).toFixed(1)}`;
+    video.play().catch(() => {});
+  }
+
+  function loadHls(resolution, time) {
+    stopHlsHeartbeat();
+    const masterUrl = `/api/stream/${BOOK_ID}/hls/master.m3u8?resolution=${resolution}&start=${(time || 0).toFixed(1)}`;
+
+    if (window.Hls && Hls.isSupported()) {
+      hlsInstance = new Hls({
+        startPosition: time || 0,
+        enableWorker: true,
+      });
+      hlsInstance.loadSource(masterUrl);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+      hlsInstance.on(Hls.Events.LEVEL_LOADED, (evt, data) => {
+        const details = data.details;
+        if (details && details.url) {
+          const match = details.url.match(/hls\/([^\/]+)\//);
+          if (match) {
+            activeHlsSessionId = match[1];
+          }
+        }
+      });
+
+      heartbeatTimer = setInterval(() => {
+        if (activeHlsSessionId && !video.paused) {
+          fetch(`/api/stream/${BOOK_ID}/hls/${activeHlsSessionId}/heartbeat`, { method: "POST" }).catch(() => {});
+        }
+      }, 25000);
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = masterUrl;
+      if (time > 0) video.currentTime = time;
+      video.play().catch(() => {});
+    } else {
+      loadDirect(time);
+    }
+  }
+
+  async function switchStreamMode(mode, targetTime) {
+    const curTime = targetTime !== undefined ? targetTime : (video.currentTime || 0);
+    if (mode === "direct") {
+      loadDirect(curTime);
+    } else if (mode === "remux") {
+      loadRemux(curTime);
+    } else if (mode === "1080p" || mode === "720p" || mode === "480p") {
+      loadHls(mode, curTime);
+    } else {
+      try {
+        const res = await fetch(`/api/stream/${BOOK_ID}/info`);
+        if (res.ok) {
+          const info = await res.json();
+          const strat = info.evaluation ? info.evaluation.strategy : "direct_play";
+          if (strat === "direct_remux") {
+            loadRemux(curTime);
+          } else if (strat === "full_transcode" || strat === "audio_transcode") {
+            loadHls("original", curTime);
+          } else {
+            loadDirect(curTime);
+          }
+          return;
+        }
+      } catch (e) {
+        console.debug("Stream info check failed:", e);
+      }
+      loadDirect(curTime);
+    }
+  }
+
+  streamModeSelect.addEventListener("change", (e) => {
+    switchStreamMode(e.target.value);
+  });
 
   // Restore initial progress position
   video.addEventListener("loadedmetadata", () => {
@@ -343,6 +504,7 @@
 
   window.addEventListener("beforeunload", () => {
     saveProgress(true);
+    stopHlsHeartbeat();
   });
 
   // Handle Video Ended
@@ -438,6 +600,14 @@
   video.addEventListener("play", () => {
     controlsTimer = setTimeout(() => header.classList.add("hidden"), 2500);
   });
+
+  // Initialize subtitles and format auto-switch
+  loadSubtitles();
+  const fileFmt = "{{ book.file_format|lower }}";
+  if (["mkv", "avi", "mov", "m4v"].includes(fileFmt)) {
+    // Automatically evaluate playback strategy for non-standard browser containers
+    switchStreamMode("auto", INITIAL_TIME);
+  }
 </script>
 
 </body>

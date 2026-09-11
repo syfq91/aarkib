@@ -590,12 +590,12 @@ gantt
     Multi-Media Models & Video/Audio MVP :done, p2, 2026-08, 2026-09
     section Phase 3 (Completed)
     Background Job Manager & library_id  :done, p3, 2026-09, 2026-10
-    section Phase 4 (Next)
-    FFmpeg Remuxing, HLS & VAAPI Accel   :active, p4, 2026-10, 2026-11
+    section Phase 4 (Completed)
+    FFmpeg Remuxing, HLS & VAAPI Accel   :done, p4, 2026-10, 2026-11
     section Phase 5 (Completed)
     Audiobooks (M4B Chapters) & Playlists:done, p5, 2026-11, 2026-12
-    section Phase 6
-    TMDB & MusicBrainz Metadata Providers:p6, 2026-12, 2027-01
+    section Phase 6 (Next)
+    TMDB & MusicBrainz Metadata Providers:active, p6, 2026-12, 2027-01
     section Phase 7
     SQLite FTS5 Unified Grouped Search   :p7, 2027-01, 2027-02
     section Phase 8
@@ -629,13 +629,13 @@ gantt
 - [x] Enforce worker-local SQLAlchemy sessions (`SessionLocal`) across background jobs to prevent concurrency locks in SQLite WAL mode.
 - [x] Implement `job_history` database table to decouple ephemeral execution state from durable job logs surviving server restarts.
 
-### Phase 4: FFmpeg Direct Remuxing, HLS & Hardware Acceleration `[PLANNED]`
-- [ ] Build `services/transcoder.py`: Transcode session supervisor tracking active FFmpeg processes, client heartbeats, and session segment directories.
-- [ ] Implement stream-level capability detection (probing video codec, profile, bit depth, and audio layout rather than container extension) to choose Direct Play, Direct Remux (`-c copy`), Audio-Only Transcode, or Full Transcode.
-- [ ] Dynamically detect Linux VAAPI render nodes (`/dev/dri/renderD*` permissions and capability probe) rather than assuming `/dev/dri/renderD128`, with graceful fallback to CPU software encoding (`libx264`).
-- [ ] Implement HLS packaging endpoint (`/api/stream/<id>/master.m3u8` and `/api/stream/<id>/segment_<n>.m4s`) using `-hls_list_size 0` for bidirectional seeking, resolving the `delete_segments` conflict by delegating segment pruning to session directory teardown.
-- [ ] Implement format-aware subtitle conversion: sanitize and convert stylized ASS/SSA subtitles to WebVTT, deliver raw ASS for client WebAssembly rendering (`libass`), and support server-side burning for PGS/VobSub bitmap subtitles.
-- [ ] Integrate HLS.js fallback into `reader_video.html` for incompatible video/audio streams.
+### Phase 4: FFmpeg Direct Remuxing, HLS & Hardware Acceleration `[COMPLETED]`
+- [x] Build `services/transcoder.py`: Transcode session supervisor tracking active FFmpeg processes, client heartbeats, and session segment directories.
+- [x] Implement stream-level capability detection (probing video codec, profile, bit depth, and audio layout rather than container extension) to choose Direct Play, Direct Remux (`-c copy`), Audio-Only Transcode, or Full Transcode.
+- [x] Dynamically detect Linux VAAPI render nodes (`/dev/dri/renderD*` permissions and capability probe) rather than assuming `/dev/dri/renderD128`, with graceful fallback to CPU software encoding (`libx264`).
+- [x] Implement HLS packaging endpoint (`/api/stream/<id>/master.m3u8` and `/api/stream/<id>/segment_<n>.m4s`) using `-hls_list_size 0` for bidirectional seeking, resolving the `delete_segments` conflict by delegating segment pruning to session directory teardown.
+- [x] Implement format-aware subtitle conversion: sanitize and convert stylized ASS/SSA subtitles to WebVTT, deliver raw ASS for client WebAssembly rendering (`libass`), and support server-side burning for PGS/VobSub bitmap subtitles.
+- [x] Integrate HLS.js fallback into `reader_video.html` for incompatible video/audio streams.
 
 ### Phase 5: Dedicated Audiobooks (M4B Chapters) & User Playlists `[COMPLETED]`
 - [x] Formalize media taxonomy by splitting `audio` into distinct `audiobook` and `music` types in `MediaType` enum to prevent audiobooks from inheriting song/album semantics.

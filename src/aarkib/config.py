@@ -222,6 +222,13 @@ class Config:
             os.getenv("BUUKUU_OPTIMIZED_DIR", DATA_DIR / "optimized"),
         )
     )
+    TRANSCODE_DIR: Path = Path(
+        os.getenv(
+            "AARKIB_TRANSCODE_DIR",
+            os.getenv("BUUKUU_TRANSCODE_DIR", DATA_DIR / "transcode"),
+        )
+    )
+    VAAPI_DEVICE: str | None = os.getenv("AARKIB_VAAPI_DEVICE")
 
     # Database
     SQLALCHEMY_DATABASE_URI: str = os.getenv(
