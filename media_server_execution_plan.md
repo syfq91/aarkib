@@ -620,14 +620,14 @@ gantt
 - [x] In-browser HTML5 video player with episode navigation and progress resume (`/reader/video/<id>`).
 - [x] Dedicated HTML5 audio player interface with album art and scrubber (`/reader/audio/<id>`).
 
-### Phase 3: Background Job Manager & Relational Refinements `[COMPLETED / REFINING]`
+### Phase 3: Background Job Manager & Relational Refinements `[COMPLETED]`
 - [x] Build `services/job_manager.py`: In-process background job supervisor using `concurrent.futures.ThreadPoolExecutor`.
 - [x] Convert `POST /api/libraries/scan` and `POST /api/libraries/<id>/scan` to return `202 Accepted` with `job_id`.
 - [x] Create `GET /api/jobs/<job_id>` status and progress endpoint.
 - [x] Add non-blocking progress spinner / toast notifications in `library.html` and `settings.html`.
 - [x] Establish indexed `library_id` FK on `MediaItem` as authoritative library identity, deprecating filesystem path-prefix heuristics.
 - [x] Enforce worker-local SQLAlchemy sessions (`SessionLocal`) across background jobs to prevent concurrency locks in SQLite WAL mode.
-- [ ] Implement `job_history` database table to decouple ephemeral execution state from durable job logs surviving server restarts.
+- [x] Implement `job_history` database table to decouple ephemeral execution state from durable job logs surviving server restarts.
 
 ### Phase 4: FFmpeg Direct Remuxing, HLS & Hardware Acceleration `[PLANNED]`
 - [ ] Build `services/transcoder.py`: Transcode session supervisor tracking active FFmpeg processes, client heartbeats, and session segment directories.

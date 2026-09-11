@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -7,9 +8,14 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import delete, select, update
+
+from aarkib.extensions import db
+from aarkib.models.job import JobRecord
 
 if TYPE_CHECKING:
     from flask import Flask
@@ -25,6 +31,7 @@ class JobStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass
@@ -52,17 +59,27 @@ class Job:
         elapsed = None
         if self.started_at:
             end_time = self.finished_at or datetime.now(UTC)
-            elapsed = round((end_time - self.started_at).total_seconds(), 2)
+            start = self.started_at
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=UTC)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=UTC)
+            elapsed = round((end_time - start).total_seconds(), 2)
+
+        created_iso = self.created_at.isoformat() if self.created_at else None
+        started_iso = self.started_at.isoformat() if self.started_at else None
+        finished_iso = self.finished_at.isoformat() if self.finished_at else None
+
         return {
             "id": self.id,
             "job_type": self.job_type,
             "status": self.status.value,
             "progress": round(self.progress, 1),
             "progress_message": self.progress_message,
-            "created_at": self.created_at.isoformat(),
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
-            "completed_at": self.finished_at.isoformat() if self.finished_at else None,
+            "created_at": created_iso,
+            "started_at": started_iso,
+            "finished_at": finished_iso,
+            "completed_at": finished_iso,
             "elapsed_seconds": elapsed,
             "result": self.result,
             "error": self.error,
@@ -70,7 +87,7 @@ class Job:
 
 
 class JobManager:
-    """In-process thread-pool supervisor for non-blocking media tasks."""
+    """In-process thread-pool supervisor for non-blocking media tasks with durable history."""
 
     def __init__(self, max_workers: int = 2, max_history: int = 100) -> None:
         self._executor = ThreadPoolExecutor(
@@ -79,6 +96,95 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
         self._max_history = max_history
+
+    def _persist_job_created(self, job: Job, app: Flask | None) -> None:
+        if app is None:
+            return
+        try:
+            with app.app_context():
+                lib_id = getattr(job, "_target_library_id", None)
+                if isinstance(lib_id, str) and lib_id.isdigit():
+                    lib_id = int(lib_id)
+                elif not isinstance(lib_id, int):
+                    lib_id = None
+                rec = JobRecord(
+                    id=job.id,
+                    job_type=job.job_type,
+                    library_id=lib_id,
+                    status=job.status.value,
+                    progress=job.progress,
+                    progress_message=job.progress_message,
+                    created_at=job.created_at,
+                )
+                db.session.add(rec)
+                db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job creation for %s: %s", job.id, e)
+
+    def _persist_job_started(self, job: Job, app: Flask | None) -> None:
+        if app is None:
+            return
+        try:
+            with app.app_context():
+                rec = db.session.get(JobRecord, job.id)
+                if rec:
+                    rec.status = JobStatus.RUNNING.value
+                    rec.started_at = job.started_at
+                    rec.progress = job.progress
+                    rec.progress_message = job.progress_message
+                    db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job start for %s: %s", job.id, e)
+
+    def _persist_job_progress(self, job: Job, app: Flask | None) -> None:
+        if app is None:
+            return
+        try:
+            with app.app_context():
+                rec = db.session.get(JobRecord, job.id)
+                if rec and rec.status == JobStatus.RUNNING.value:
+                    rec.progress = job.progress
+                    rec.progress_message = job.progress_message
+                    db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job progress for %s: %s", job.id, e)
+
+    def _persist_job_completed(self, job: Job, app: Flask | None) -> None:
+        if app is None:
+            return
+        try:
+            payload = None
+            if job.result is not None:
+                try:
+                    payload = json.dumps(job.result, default=str)
+                except Exception:
+                    payload = str(job.result)
+            with app.app_context():
+                rec = db.session.get(JobRecord, job.id)
+                if rec:
+                    rec.status = JobStatus.COMPLETED.value
+                    rec.progress = 100.0
+                    rec.finished_at = job.finished_at
+                    rec.progress_message = job.progress_message
+                    rec.result_payload = payload
+                    db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job completion for %s: %s", job.id, e)
+
+    def _persist_job_failed(self, job: Job, app: Flask | None) -> None:
+        if app is None:
+            return
+        try:
+            with app.app_context():
+                rec = db.session.get(JobRecord, job.id)
+                if rec:
+                    rec.status = JobStatus.FAILED.value
+                    rec.finished_at = job.finished_at
+                    rec.progress_message = job.progress_message
+                    rec.error_message = job.error
+                    db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job failure for %s: %s", job.id, e)
 
     def submit_job(
         self,
@@ -112,11 +218,27 @@ class JobManager:
             job._target_library_id = kwargs.get("library_id")
             self._jobs[job_id] = job
 
+        # Persist initial record in database if app is provided
+        self._persist_job_created(job, app)
+
+        last_sync_time = [time.time()]
+        last_sync_progress = [-1.0]
+
         def progress_callback(percentage: float, message: str = "") -> None:
+            val = max(0.0, min(100.0, float(percentage)))
             with self._lock:
-                job.progress = max(0.0, min(100.0, float(percentage)))
+                job.progress = val
                 if message:
                     job.progress_message = str(message)
+
+            now_ts = time.time()
+            if app is not None and (
+                now_ts - last_sync_time[0] >= 2.0
+                or abs(val - last_sync_progress[0]) >= 10.0
+            ):
+                last_sync_time[0] = now_ts
+                last_sync_progress[0] = val
+                self._persist_job_progress(job, app)
 
         kwargs["progress_callback"] = progress_callback
 
@@ -126,6 +248,8 @@ class JobManager:
                 job.started_at = datetime.now(UTC)
                 job.progress = 0.0
                 job.progress_message = "Starting task..."
+            self._persist_job_started(job, app)
+
             try:
                 if app is not None:
                     with app.app_context():
@@ -138,6 +262,7 @@ class JobManager:
                     job.finished_at = datetime.now(UTC)
                     job.progress_message = "Completed"
                     job.result = res if isinstance(res, dict) else {"result": res}
+                self._persist_job_completed(job, app)
             except Exception as e:
                 logger.error(
                     "Job %s (%s) failed: %s", job.id, job.job_type, e, exc_info=True
@@ -147,23 +272,152 @@ class JobManager:
                     job.finished_at = datetime.now(UTC)
                     job.progress_message = f"Failed: {e}"
                     job.error = str(e)
+                self._persist_job_failed(job, app)
 
         job._future = self._executor.submit(_worker)
         return job
 
-    def get_job(self, job_id: str) -> Job | None:
-        """Retrieves a job by its unique identifier."""
+    def get_job(self, job_id: str, app: Flask | None = None) -> Job | None:
+        """Retrieves a job by its unique identifier, checking memory first and falling back to database."""
         with self._lock:
-            return self._jobs.get(job_id)
+            job = self._jobs.get(job_id)
+            if job is not None:
+                return job
 
-    def list_jobs(self, limit: int = 20) -> list[Job]:
-        """Returns the most recent jobs ordered newest first."""
+        target_app = app
+        if target_app is None:
+            try:
+                from flask import current_app, has_app_context
+
+                if has_app_context():
+                    target_app = current_app
+            except Exception:
+                target_app = None
+
+        if target_app is not None:
+            try:
+                with target_app.app_context():
+                    rec = db.session.get(JobRecord, job_id)
+                    if rec is not None:
+                        result_data = None
+                        if rec.result_payload:
+                            try:
+                                result_data = json.loads(rec.result_payload)
+                            except Exception:
+                                result_data = {"raw": rec.result_payload}
+                        try:
+                            status = JobStatus(rec.status)
+                        except ValueError:
+                            status = JobStatus.FAILED
+
+                        created_at = rec.created_at
+                        if created_at and created_at.tzinfo is None:
+                            created_at = created_at.replace(tzinfo=UTC)
+                        started_at = rec.started_at
+                        if started_at and started_at.tzinfo is None:
+                            started_at = started_at.replace(tzinfo=UTC)
+                        finished_at = rec.finished_at
+                        if finished_at and finished_at.tzinfo is None:
+                            finished_at = finished_at.replace(tzinfo=UTC)
+
+                        restored = Job(
+                            id=rec.id,
+                            job_type=rec.job_type,
+                            status=status,
+                            progress=rec.progress,
+                            progress_message=rec.progress_message or "",
+                            created_at=created_at,
+                            started_at=started_at,
+                            finished_at=finished_at,
+                            result=result_data,
+                            error=rec.error_message,
+                        )
+                        restored._target_library_id = rec.library_id
+                        return restored
+            except Exception as e:
+                logger.debug("Database get_job lookup error for %s: %s", job_id, e)
+
+        return None
+
+    def list_jobs(self, limit: int = 20, app: Flask | None = None) -> list[Job]:
+        """Returns the most recent jobs ordered newest first, overlaying in-memory state on persisted history."""
+        target_app = app
+        if target_app is None:
+            try:
+                from flask import current_app, has_app_context
+
+                if has_app_context():
+                    target_app = current_app
+            except Exception:
+                target_app = None
+
+        if target_app is not None:
+            try:
+                with target_app.app_context():
+                    stmt = (
+                        select(JobRecord)
+                        .order_by(JobRecord.created_at.desc())
+                        .limit(limit)
+                    )
+                    records = db.session.scalars(stmt).all()
+                    if records:
+                        results: list[Job] = []
+                        with self._lock:
+                            for rec in records:
+                                if rec.id in self._jobs:
+                                    results.append(self._jobs[rec.id])
+                                else:
+                                    result_data = None
+                                    if rec.result_payload:
+                                        try:
+                                            result_data = json.loads(rec.result_payload)
+                                        except Exception:
+                                            result_data = {"raw": rec.result_payload}
+                                    try:
+                                        status = JobStatus(rec.status)
+                                    except ValueError:
+                                        status = JobStatus.FAILED
+
+                                    created_at = rec.created_at
+                                    if created_at and created_at.tzinfo is None:
+                                        created_at = created_at.replace(tzinfo=UTC)
+                                    started_at = rec.started_at
+                                    if started_at and started_at.tzinfo is None:
+                                        started_at = started_at.replace(tzinfo=UTC)
+                                    finished_at = rec.finished_at
+                                    if finished_at and finished_at.tzinfo is None:
+                                        finished_at = finished_at.replace(tzinfo=UTC)
+
+                                    restored = Job(
+                                        id=rec.id,
+                                        job_type=rec.job_type,
+                                        status=status,
+                                        progress=rec.progress,
+                                        progress_message=rec.progress_message or "",
+                                        created_at=created_at,
+                                        started_at=started_at,
+                                        finished_at=finished_at,
+                                        result=result_data,
+                                        error=rec.error_message,
+                                    )
+                                    restored._target_library_id = rec.library_id
+                                    results.append(restored)
+                        return results
+            except Exception as e:
+                logger.debug("Database list_jobs lookup error: %s", e)
+
+        # Fallback to in-memory list
         with self._lock:
             jobs = sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
             return jobs[:limit]
 
-    def cleanup_old_jobs(self, max_age_seconds: int = 3600) -> int:
-        """Removes finished jobs older than max_age_seconds."""
+    def cleanup_old_jobs(
+        self,
+        max_age_seconds: int = 3600,
+        app: Flask | None = None,
+        delete_db: bool = False,
+    ) -> int:
+        """Removes finished jobs older than max_age_seconds from memory (and optionally from DB)."""
         now = datetime.now(UTC)
         removed = 0
         with self._lock:
@@ -173,23 +427,91 @@ class JobManager:
                     JobStatus.COMPLETED,
                     JobStatus.FAILED,
                     JobStatus.CANCELLED,
+                    JobStatus.INTERRUPTED,
                 ):
                     end_time = j.finished_at or j.created_at
+                    if end_time.tzinfo is None:
+                        end_time = end_time.replace(tzinfo=UTC)
                     if (now - end_time).total_seconds() >= max_age_seconds:
                         to_delete.append(j_id)
             for j_id in to_delete:
                 self._jobs.pop(j_id, None)
                 removed += 1
+
+        if delete_db:
+            target_app = app
+            if target_app is None:
+                try:
+                    from flask import current_app, has_app_context
+
+                    if has_app_context():
+                        target_app = current_app
+                except Exception:
+                    target_app = None
+
+            if target_app is not None:
+                try:
+                    with target_app.app_context():
+                        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+                        stmt = delete(JobRecord).where(
+                            JobRecord.status.in_(
+                                [
+                                    JobStatus.COMPLETED.value,
+                                    JobStatus.FAILED.value,
+                                    JobStatus.CANCELLED.value,
+                                    JobStatus.INTERRUPTED.value,
+                                ]
+                            ),
+                            JobRecord.finished_at <= cutoff,
+                        )
+                        db.session.execute(stmt)
+                        db.session.commit()
+                except Exception as e:
+                    logger.debug("Database cleanup_old_jobs error: %s", e)
+
         return removed
 
+    def reconcile_on_startup(self, app: Flask) -> int:
+        """Reconciles dangling queued or running jobs on application startup."""
+        count = 0
+        try:
+            with app.app_context():
+                stmt = (
+                    update(JobRecord)
+                    .where(
+                        JobRecord.status.in_(
+                            [JobStatus.QUEUED.value, JobStatus.RUNNING.value]
+                        )
+                    )
+                    .values(
+                        status=JobStatus.INTERRUPTED.value,
+                        finished_at=datetime.now(UTC),
+                        progress_message="Interrupted by server restart",
+                        error_message="Job interrupted by server restart",
+                    )
+                )
+                res = db.session.execute(stmt)
+                db.session.commit()
+                count = res.rowcount
+                if count > 0:
+                    logger.info("Reconciled %d interrupted jobs on startup", count)
+        except Exception as e:
+            logger.warning("Failed to reconcile jobs on startup: %s", e)
+        return count
+
     def _prune_history_locked(self) -> None:
-        """Prunes oldest terminal jobs if history limit exceeded."""
+        """Prunes oldest terminal jobs if in-memory history limit exceeded."""
         if len(self._jobs) >= self._max_history:
             terminal = [
                 j
                 for j in self._jobs.values()
                 if j.status
-                in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+                in (
+                    JobStatus.COMPLETED,
+                    JobStatus.FAILED,
+                    JobStatus.CANCELLED,
+                    JobStatus.INTERRUPTED,
+                )
             ]
             terminal.sort(key=lambda j: j.created_at)
             excess = len(self._jobs) - self._max_history + 1

@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from aarkib.extensions import db
-from aarkib.models import Book, Library, User
+from aarkib.models import Book, JobRecord, Library, User
 from aarkib.services.enricher import EnrichedMetadata
 from aarkib.services.job_manager import JobManager, JobStatus
 from aarkib.services.scanner import index_single_book, scan_library
@@ -267,3 +267,139 @@ def test_media_item_library_foreign_key_and_relationships(app, tmp_path, sample_
         assert reloaded_lib.media_items[0].id == book.id
         assert len(reloaded_lib.books) == 1
         assert reloaded_lib.books[0].id == book.id
+
+
+def test_job_persistence_lifecycle(app):
+    jm = JobManager(max_workers=2)
+
+    def sample_worker(app, progress_callback=None):
+        if progress_callback:
+            progress_callback(50.0, "Halfway done")
+        return {"items": 10, "status": "ok"}
+
+    job = jm.submit_job("test_persist", sample_worker, app=app)
+    job_id = job.id
+
+    timeout = 3.0
+    start = time.time()
+    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+        time.sleep(0.02)
+
+    assert job.status == JobStatus.COMPLETED
+
+    with app.app_context():
+        rec = db.session.get(JobRecord, job_id)
+        assert rec is not None
+        assert rec.job_type == "test_persist"
+        assert rec.status == JobStatus.COMPLETED.value
+        assert rec.progress == 100.0
+        assert rec.finished_at is not None
+        d = rec.to_dict()
+        assert d["id"] == job_id
+        assert d["result"] == {"items": 10, "status": "ok"}
+
+    jm.shutdown(wait=True)
+
+
+def test_job_retrieval_after_memory_cleared(app):
+    jm = JobManager(max_workers=2)
+
+    def quick_fn(app, progress_callback=None):
+        return {"done": True}
+
+    job = jm.submit_job("restore_test", quick_fn, app=app)
+    job_id = job.id
+
+    timeout = 3.0
+    start = time.time()
+    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+        time.sleep(0.02)
+
+    # Wipe in-memory dictionary to simulate server restart or cache eviction
+    with jm._lock:
+        jm._jobs.clear()
+
+    # Query get_job - should fetch from SQLite job_history
+    restored = jm.get_job(job_id, app=app)
+    assert restored is not None
+    assert restored.id == job_id
+    assert restored.job_type == "restore_test"
+    assert restored.status == JobStatus.COMPLETED
+    assert restored.result == {"done": True}
+    assert restored.progress == 100.0
+
+    # Query list_jobs - should fetch from SQLite job_history
+    job_list = jm.list_jobs(app=app)
+    assert any(j.id == job_id for j in job_list)
+
+    jm.shutdown(wait=True)
+
+
+def test_job_reconciliation_on_startup(app):
+    from datetime import UTC, datetime
+
+    with app.app_context():
+        dangling_run = JobRecord(
+            id="job_dangling_running",
+            job_type="scan_library",
+            status="running",
+            progress=45.0,
+            progress_message="Scanning...",
+            created_at=datetime.now(UTC),
+            started_at=datetime.now(UTC),
+        )
+        dangling_queued = JobRecord(
+            id="job_dangling_queued",
+            job_type="scan_library",
+            status="queued",
+            progress=0.0,
+            created_at=datetime.now(UTC),
+        )
+        completed_job = JobRecord(
+            id="job_already_done",
+            job_type="scan_library",
+            status="completed",
+            progress=100.0,
+            created_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
+        )
+        db.session.add_all([dangling_run, dangling_queued, completed_job])
+        db.session.commit()
+
+    jm = JobManager(max_workers=1)
+    reconciled_count = jm.reconcile_on_startup(app)
+    assert reconciled_count == 2
+
+    with app.app_context():
+        rec1 = db.session.get(JobRecord, "job_dangling_running")
+        assert rec1.status == JobStatus.INTERRUPTED.value
+        assert "server restart" in rec1.error_message
+        assert rec1.finished_at is not None
+
+        rec2 = db.session.get(JobRecord, "job_dangling_queued")
+        assert rec2.status == JobStatus.INTERRUPTED.value
+        assert "server restart" in rec2.error_message
+
+        rec3 = db.session.get(JobRecord, "job_already_done")
+        assert rec3.status == JobStatus.COMPLETED.value
+
+
+def test_job_cleanup_db(app):
+    jm = JobManager(max_workers=1)
+
+    def simple_worker(app, progress_callback=None):
+        return 1
+
+    job = jm.submit_job("cleanup_test", simple_worker, app=app)
+    timeout = 3.0
+    start = time.time()
+    while job.status != JobStatus.COMPLETED and time.time() - start < timeout:
+        time.sleep(0.02)
+
+    jm.cleanup_old_jobs(max_age_seconds=0, app=app, delete_db=True)
+    assert jm.get_job(job.id, app=app) is None
+
+    with app.app_context():
+        assert db.session.get(JobRecord, job.id) is None
+
+    jm.shutdown(wait=True)

@@ -182,7 +182,17 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
 
     with app.app_context():
         migrate_database()
+        from aarkib.services.job_manager import job_manager
         from aarkib.services.scanner import sync_and_get_libraries
+
+        try:
+            reconciled = job_manager.reconcile_on_startup(app)
+            if reconciled > 0:
+                logger.info(
+                    "Reconciled %d interrupted background jobs on startup", reconciled
+                )
+        except Exception as e:
+            logger.debug("Startup job reconciliation skipped: %s", e)
 
         try:
             sync_and_get_libraries(app)

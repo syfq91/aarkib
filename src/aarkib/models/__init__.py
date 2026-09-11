@@ -1,5 +1,6 @@
 from aarkib.models.collection import Collection, Series
 from aarkib.models.creator import Author, Creator, book_authors, media_creators
+from aarkib.models.job import JobRecord
 from aarkib.models.library import Library
 from aarkib.models.media import (
     AudioTrackMixin,
@@ -26,6 +27,7 @@ __all__ = [
     "Tag",
     "UserProgress",
     "Bookmark",
+    "JobRecord",
     "MediaType",
     "MediaItemMixin",
     "PlayableItemMixin",
