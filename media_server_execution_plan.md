@@ -91,6 +91,7 @@ graph TD
    * **HTTP 206 Partial Content** for native video/audio range streaming and seeking.
 5. **Universal Consumption Model**: A single unified progress schema tracks reading, watching, and listening states with resume positions, percentage completion, and timestamps across all media formats.
 6. **Plugin-Driven Multi-Media**: Decoupled metadata extraction, cover parsing, and player routing via an extensible [`MediaPlugin`](file:///home/syafiq/code/aarkib/src/aarkib/plugins/base.py#L15) interface and swappable [`MetadataProvider`](file:///home/syafiq/code/aarkib/src/aarkib/services/enricher.py) backends.
+7. **Local-Only Media Storage & Playback**: Aarkib is strictly a self-hosted personal media server that **only plays media files stored locally on disk** (within configured library folders). External internet connections are restricted **exclusively to fetching metadata and artwork** (book summaries, movie overviews, episode titles, album/artist details, and cover art/posters from providers like Open Library, Google Books, TMDB, and MusicBrainz). The server never proxies remote third-party media streams or downloads external media files.
 
 ---
 
@@ -103,7 +104,7 @@ graph TD
 | **Video** (Movies & TV Shows) | `mp4`, `mkv`, `webm`, `avi`, `mov`, `m4v` | Pure-Python MP4 box parser (`mvhd`/`tkhd`), `ffprobe` fallback, smart TV (`S01E02`) & movie regex, TMDB provider | Direct HTTP 206 Range streaming, HTML5 video player with episode skip; on-the-fly FFmpeg remuxing & HLS transcoding fallback | Duration, resolution (width×height), video codec, season, episode | **MVP Implemented** (Remux & TMDB Next) |
 | **Audiobooks** | `m4b`, `mp3`, `m4a`, `flac` | QuickTime atom chapter parser, ID3v2 `CHAP` frames, filename heuristics, Open Library / Google Books | Dedicated audio player, chapter selection dropdown, variable playback speed ($0.75\times$ to $2.0\times$), persistent resume | Narrator, author, chapters list, duration, bitrate | **Planned / Next** |
 | **Music** | `mp3`, `flac`, `m4a`, `ogg`, `opus`, `wav`, `aac` | Pure-Python ID3v2, FLAC, WAV parsers, MusicBrainz & Cover Art Archive | In-browser audio player, persistent bottom player bar, custom user playlists, track queues | Artist, album, track number, disc number, duration, bitrate | **Foundation Ready** (Playlists Next) |
-| **Podcasts** | RSS feeds, local cached `mp3`/`m4a` | `feedparser` RSS poller, episode enclosure extractors | Remote stream proxy or local cache playback, episode bookmarking, auto-poll background worker | Show/channel title, episode number, feed URL, published date | **Planned** |
+| **Podcasts** | Local `mp3`, `m4a` files | Pure-Python ID3v2 / MP4 tags, OPML / folder heuristics, PodcastIndex metadata | Dedicated audio player, episode progression, persistent resume | Show/channel title, episode number, duration, release date | **Planned** |
 
 ---
 
@@ -456,7 +457,7 @@ gantt
     section Phase 7
     SQLite FTS5 Unified Grouped Search   :p7, 2027-01, 2027-02
     section Phase 8
-    Podcasts & Remote Scrapers           :p8, 2027-02, 2027-03
+    Local Podcasts & Audio Shows         :p8, 2027-02, 2027-03
     section Phase 9
     Production Packaging & Third-Party API:p9, 2027-03, 2027-04
 ```
@@ -510,10 +511,11 @@ gantt
 - [ ] Update `/api/media?q=` to query FTS5 index with sub-millisecond latency.
 - [ ] Categorize search results in WebUI by media type (Movies, TV, Books, Audiobooks, Music, Comics).
 
-### Phase 8: Podcasts & Remote RSS Scrapers `[PLANNED]`
-- [ ] Create `PodcastMediaPlugin` and SQLite tables for podcast RSS feeds and channel metadata.
-- [ ] Background polling worker using `feedparser` to discover new podcast episodes.
-- [ ] Implement episode streaming and optional local download caching.
+### Phase 8: Local Podcasts & Audio Shows `[PLANNED]`
+- [ ] Create `PodcastMediaPlugin` to index locally stored podcast audio files (`.mp3`, `.m4a`).
+- [ ] Support OPML file import for organizing locally archived shows, seasons, and channels.
+- [ ] Parse embedded episode metadata and fetch show metadata/cover art from PodcastIndex.
+- [ ] Dedicated audio show player with episode ordering and progress tracking.
 
 ### Phase 9: Multi-Arch Production Packaging & Third-Party APIs `[PLANNED]`
 - [ ] Update `Dockerfile` to include `ffmpeg`, `libva-drm2`, and VAAPI drivers for `linux/amd64` and `linux/arm64`.
