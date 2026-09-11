@@ -77,7 +77,12 @@ def test_evaluate_playback_strategy_full_transcode_hevc(tmp_path):
     mp4_file = tmp_path / "4k_hevc.mp4"
     streams = {
         "container": ".mp4",
-        "video": {"codec": "hevc", "width": 3840, "height": 2160, "pix_fmt": "yuv420p10le"},
+        "video": {
+            "codec": "hevc",
+            "width": 3840,
+            "height": 2160,
+            "pix_fmt": "yuv420p10le",
+        },
         "audio": [{"codec": "aac", "channels": 2}],
         "subtitles": [],
     }
@@ -93,7 +98,10 @@ def test_detect_vaapi_device_override():
 
 def test_detect_vaapi_device_fallback_when_absent():
     reset_vaapi_cache()
-    with patch("os.getenv", return_value=None), patch("pathlib.Path.is_dir", return_value=False):
+    with (
+        patch("os.getenv", return_value=None),
+        patch("pathlib.Path.is_dir", return_value=False),
+    ):
         dev = detect_vaapi_device()
         assert dev is None
     reset_vaapi_cache()
@@ -171,7 +179,11 @@ def test_transcode_supervisor_reaper_cleans_expired(tmp_path):
         supervisor._reaper_loop_tick = lambda: None
         now = time.time()
         with supervisor._lock:
-            expired = [s for s, obj in supervisor._sessions.items() if now - obj.last_activity > 0.2]
+            expired = [
+                s
+                for s, obj in supervisor._sessions.items()
+                if now - obj.last_activity > 0.2
+            ]
         for s in expired:
             supervisor.stop_session(s)
 
@@ -267,7 +279,9 @@ def test_stream_api_endpoints(client, app, tmp_path):
 
         # Extract session_id from master playlist
         playlist_line = [
-            line for line in res_hls.data.decode().splitlines() if "playlist.m3u8" in line
+            line
+            for line in res_hls.data.decode().splitlines()
+            if "playlist.m3u8" in line
         ][0]
         session_id = playlist_line.split("/hls/")[1].split("/playlist.m3u8")[0]
 
@@ -275,16 +289,22 @@ def test_stream_api_endpoints(client, app, tmp_path):
         assert session is not None
 
         # Create dummy playlist and segment files inside session directory
-        (session.output_dir / "playlist.m3u8").write_text("#EXTM3U\n#EXT-X-TARGETDURATION:6\n")
+        (session.output_dir / "playlist.m3u8").write_text(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:6\n"
+        )
         (session.output_dir / "segment_00000.m4s").write_bytes(b"segment bytes")
 
         # 5. GET /api/stream/<id>/hls/<session_id>/playlist.m3u8
-        res_sess_m3u8 = client.get(f"/api/stream/{item_id}/hls/{session_id}/playlist.m3u8")
+        res_sess_m3u8 = client.get(
+            f"/api/stream/{item_id}/hls/{session_id}/playlist.m3u8"
+        )
         assert res_sess_m3u8.status_code == 200
         assert b"#EXT-X-TARGETDURATION:6" in res_sess_m3u8.data
 
         # 6. GET /api/stream/<id>/hls/<session_id>/segment_00000.m4s
-        res_seg = client.get(f"/api/stream/{item_id}/hls/{session_id}/segment_00000.m4s")
+        res_seg = client.get(
+            f"/api/stream/{item_id}/hls/{session_id}/segment_00000.m4s"
+        )
         assert res_seg.status_code == 200
         assert res_seg.data == b"segment bytes"
 

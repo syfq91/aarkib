@@ -594,10 +594,10 @@ gantt
     FFmpeg Remuxing, HLS & VAAPI Accel   :done, p4, 2026-10, 2026-11
     section Phase 5 (Completed)
     Audiobooks (M4B Chapters) & Playlists:done, p5, 2026-11, 2026-12
-    section Phase 6 (Next)
-    TMDB & MusicBrainz Metadata Providers:active, p6, 2026-12, 2027-01
-    section Phase 7
-    SQLite FTS5 Unified Grouped Search   :p7, 2027-01, 2027-02
+    section Phase 6 (Completed)
+    TMDB & MusicBrainz Metadata Providers:done, p6, 2026-12, 2027-01
+    section Phase 7 (Next)
+    SQLite FTS5 Unified Grouped Search   :active, p7, 2027-01, 2027-02
     section Phase 8
     Local Podcasts & Audio Shows         :p8, 2027-02, 2027-03
     section Phase 9
@@ -645,14 +645,14 @@ gantt
 - [x] Build dedicated audiobook web player with chapter selection dropdown, variable speed selector ($0.75\times$ to $2.0\times$), sleep timer, and persistent resume.
 - [x] Implement `UserFavorite` table and `Playlist` / `PlaylistItem` models with UI playlist manager and bottom music bar.
 
-### Phase 6: External Metadata Providers (TMDB & MusicBrainz) `[PLANNED]`
-- [ ] Create pluggable `MetadataProvider` abstract base class and provider registry in `services/metadata/`.
-- [ ] Implement provider rate limiting (strict 1 req/sec for MusicBrainz, burst limits for TMDB) via token-bucket dispatchers.
-- [ ] Implement persistent local HTTP response caching (SQLite/disk with TTL) to prevent duplicate lookups on re-scans.
-- [ ] Implement resilient retries with exponential backoff and jitter for transient errors and HTTP 429/503 responses.
-- [ ] Establish configurable provider priority waterfalls per media type (e.g. Local NFO $\to$ TMDB; Local ID3 $\to$ MusicBrainz $\to$ Cover Art Archive).
-- [ ] Implement `TMDBProvider` for Movies & TV Shows and `MusicBrainzProvider` for music albums and tracks.
-- [ ] Build UI "Fix Match / Enrich" modal supporting candidate search, match confidence scoring, and field-level locking (`locked_fields`) to prevent automated overwrites.
+### Phase 6: External Metadata Providers (TMDB & MusicBrainz) `[COMPLETED]`
+- [x] Create pluggable `MetadataProvider` abstract base class and provider registry in `services/metadata/`.
+- [x] Implement provider rate limiting (strict 1 req/sec for MusicBrainz, burst limits for TMDB) via token-bucket dispatchers.
+- [x] Implement persistent local HTTP response caching (SQLite/disk with TTL) to prevent duplicate lookups on re-scans.
+- [x] Implement resilient retries with exponential backoff and jitter for transient errors and HTTP 429/503 responses.
+- [x] Establish configurable provider priority waterfalls per media type (e.g. Local NFO $\to$ TMDB; Local ID3 $\to$ MusicBrainz $\to$ Cover Art Archive).
+- [x] Implement `TMDBProvider` for Movies & TV Shows and `MusicBrainzProvider` for music albums and tracks.
+- [x] Build UI "Fix Match / Enrich" modal supporting candidate search, match confidence scoring, and field-level locking (`locked_fields`) to prevent automated overwrites.
 
 ### Phase 7: SQLite FTS5 Unified Grouped Search `[PLANNED]`
 - [ ] Implement SQLite FTS5 external-content virtual table `media_items_fts` (`content='media_items'`).

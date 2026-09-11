@@ -187,6 +187,16 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         except ValueError, TypeError:
             pass
 
+    # Field locking
+    if "locked_fields" in data:
+        raw_locks = data["locked_fields"]
+        if isinstance(raw_locks, list):
+            item.set_locked_fields(raw_locks)
+        elif isinstance(raw_locks, str):
+            item.set_locked_fields(
+                [x.strip() for x in raw_locks.split(",") if x.strip()]
+            )
+
     return item
 
 

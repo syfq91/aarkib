@@ -82,16 +82,23 @@
         ✏️ Edit Metadata
       </button>
 
-      {% if book.is_book %}
       <button id="enrich-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="enrichCurrentBook()">
         ✨ Fetch Metadata Online
       </button>
-      {% endif %}
+
+      <button id="fix-match-btn" class="btn btn-secondary" style="font-size: 0.9rem;" onclick="openFixMatchModal()">
+        🔍 Fix Match
+      </button>
     </div>
   </div>
 
   <div>
-    <h1 style="font-size: 1.85rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem;">{{ book.title }}</h1>
+    <h1 style="font-size: 1.85rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem;">
+      {{ book.title }}
+      {% if book.is_field_locked('title') %}
+      <span title="Title locked from scanner overwrites" style="font-size: 0.9rem; cursor: help;">🔒</span>
+      {% endif %}
+    </h1>
     <h3 style="color: var(--text-secondary); font-weight: 500; font-size: 1.1rem; margin-bottom: 1.5rem;">
       by
       {% for author in book.authors %}
@@ -99,6 +106,9 @@
       {% else %}
         <span>Unknown Creator</span>
       {% endfor %}
+      {% if book.is_field_locked('creators') or book.is_field_locked('authors') %}
+      <span title="Creators locked from scanner overwrites" style="font-size: 0.8rem; cursor: help;">🔒</span>
+      {% endif %}
     </h3>
 
     <div style="background-color: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
@@ -269,11 +279,74 @@
         <textarea id="edit-description" class="input-text" rows="4" style="resize: vertical;">{{ book.description or '' }}</textarea>
       </div>
 
+      <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.4rem;">🔒 Lock Fields from Automated Scanner Overwrites</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem;">
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-title" {% if book.is_field_locked('title') %}checked{% endif %}> Title
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-creators" {% if book.is_field_locked('creators') or book.is_field_locked('authors') %}checked{% endif %}> Creators / Authors
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-description" {% if book.is_field_locked('description') %}checked{% endif %}> Synopsis / Description
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-cover_image" {% if book.is_field_locked('cover_image') %}checked{% endif %}> Cover / Poster Art
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-tags" {% if book.is_field_locked('tags') %}checked{% endif %}> Tags / Genres
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="lock-series" {% if book.is_field_locked('series') %}checked{% endif %}> Series / Collection
+          </label>
+        </div>
+      </div>
+
       <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
         <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Cancel</button>
         <button type="submit" id="save-metadata-btn" class="btn btn-primary">💾 Save Changes</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Fix Match / Enrich Modal -->
+<div id="fix-match-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 1.5rem; box-shadow: var(--shadow-lg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+      <h3 style="font-size: 1.25rem; font-weight: 700;">🔍 Fix Match & Metadata Enrichment</h3>
+      <button onclick="closeFixMatchModal()" class="btn btn-icon" style="font-size: 1.2rem;">✕</button>
+    </div>
+
+    <!-- Search Form -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 0.5rem; margin-bottom: 1.25rem;">
+      <input type="text" id="fix-match-query" class="input-text" placeholder="Title or Keywords..." value="{{ book.title }}">
+      <input type="text" id="fix-match-year" class="input-text" placeholder="Year" value="{{ (book.publication_date or '')[:4] }}">
+      <button type="button" id="fix-match-search-btn" class="btn btn-primary" onclick="searchFixMatchCandidates()">Search</button>
+    </div>
+
+    <!-- Candidate Results Area -->
+    <div id="fix-match-candidates-container" style="min-height: 120px; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div id="fix-match-empty-state" style="text-align: center; color: var(--text-secondary); padding: 2rem 1rem; font-size: 0.9rem;">
+        Click Search to discover candidate matches across TMDB, MusicBrainz, Google Books, and Open Library.
+      </div>
+    </div>
+
+    <!-- Match Application & Locking Options (shown when candidate selected) -->
+    <div id="fix-match-apply-section" style="display: none; margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md);">
+      <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem;">Lock Curated Fields Against Scanner Overwrites</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem; margin-bottom: 1rem;">
+        <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;"><input type="checkbox" id="apply-lock-title" checked> 🔒 Lock Title</label>
+        <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;"><input type="checkbox" id="apply-lock-creators" checked> 🔒 Lock Creators</label>
+        <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;"><input type="checkbox" id="apply-lock-desc" checked> 🔒 Lock Synopsis</label>
+        <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;"><input type="checkbox" id="apply-lock-cover" checked> 🔒 Lock Cover Art</label>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-secondary" onclick="resetFixMatchSelection()">Back to Results</button>
+        <button type="button" id="confirm-apply-btn" class="btn btn-primary" onclick="confirmApplySelectedCandidate()">✓ Apply Selected Match</button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -290,11 +363,154 @@ function closeEditModal() {
   modal.style.display = "none";
 }
 
+let selectedCandidate = null;
+
+function openFixMatchModal() {
+  const modal = document.getElementById("fix-match-modal");
+  modal.style.display = "flex";
+  searchFixMatchCandidates();
+}
+
+function closeFixMatchModal() {
+  const modal = document.getElementById("fix-match-modal");
+  modal.style.display = "none";
+  resetFixMatchSelection();
+}
+
+function resetFixMatchSelection() {
+  selectedCandidate = null;
+  document.getElementById("fix-match-apply-section").style.display = "none";
+  const cards = document.querySelectorAll(".candidate-card");
+  cards.forEach(c => c.style.borderColor = "var(--border)");
+}
+
+async function searchFixMatchCandidates() {
+  const query = document.getElementById("fix-match-query").value.trim();
+  const year = document.getElementById("fix-match-year").value.trim();
+  const btn = document.getElementById("fix-match-search-btn");
+  const container = document.getElementById("fix-match-candidates-container");
+
+  btn.disabled = true;
+  btn.innerText = "Searching...";
+  container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 2rem;">⏳ Querying metadata providers...</div>`;
+
+  try {
+    const params = new URLSearchParams();
+    if (query) params.append("q", query);
+    if (year) params.append("year", year);
+
+    const res = await fetch(`/api/media/{{ book.id }}/metadata/search?${params.toString()}`);
+    const data = await res.json();
+
+    if (data.status === "success" && data.candidates && data.candidates.length > 0) {
+      container.innerHTML = "";
+      data.candidates.forEach((cand, idx) => {
+        const card = document.createElement("div");
+        card.className = "candidate-card";
+        card.style = "display: flex; gap: 0.85rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-primary); cursor: pointer; transition: border-color 0.2s;";
+        
+        const posterImg = cand.poster_url 
+          ? `<img src="${cand.poster_url}" style="width: 55px; height: 80px; object-fit: cover; border-radius: var(--radius-sm); flex-shrink: 0;" onerror="this.style.display='none'">` 
+          : `<div style="width: 55px; height: 80px; background: var(--bg-tertiary); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;">🎬</div>`;
+
+        const scorePct = Math.round(cand.score * 100);
+        const scoreBadgeColor = scorePct >= 80 ? "var(--success)" : (scorePct >= 50 ? "var(--accent)" : "var(--text-secondary)");
+
+        card.innerHTML = `
+          ${posterImg}
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.25rem;">
+              <h4 style="font-size: 0.95rem; font-weight: 600; line-height: 1.2;">${cand.title} ${cand.year ? `<span style="font-weight: 400; color: var(--text-secondary);">(${cand.year})</span>` : ''}</h4>
+              <span style="font-size: 0.75rem; font-weight: 700; color: ${scoreBadgeColor}; background: var(--bg-tertiary); padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); white-space: nowrap;">${scorePct}% match</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+              <strong>${cand.provider.toUpperCase()}</strong> ${cand.creators && cand.creators.length ? `• by ${cand.creators.join(', ')}` : ''}
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35;">
+              ${cand.overview || 'No description provided.'}
+            </div>
+          </div>
+        `;
+
+        card.onclick = () => {
+          selectedCandidate = cand;
+          document.querySelectorAll(".candidate-card").forEach(c => c.style.borderColor = "var(--border)");
+          card.style.borderColor = "var(--accent)";
+          document.getElementById("fix-match-apply-section").style.display = "block";
+          document.getElementById("confirm-apply-btn").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        };
+
+        container.appendChild(card);
+      });
+    } else {
+      container.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 2rem;">No matching metadata candidates found. Try adjusting title keywords or year.</div>`;
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 2rem;">Error searching metadata providers. Please check server logs.</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "Search";
+  }
+}
+
+async function confirmApplySelectedCandidate() {
+  if (!selectedCandidate) return;
+
+  const btn = document.getElementById("confirm-apply-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Applying Metadata...";
+
+  const lockedFields = [];
+  if (document.getElementById("apply-lock-title").checked) lockedFields.push("title");
+  if (document.getElementById("apply-lock-creators").checked) {
+    lockedFields.push("creators");
+    lockedFields.push("authors");
+  }
+  if (document.getElementById("apply-lock-desc").checked) lockedFields.push("description");
+  if (document.getElementById("apply-lock-cover").checked) lockedFields.push("cover_image");
+
+  try {
+    const res = await fetch(`/api/media/{{ book.id }}/metadata/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: selectedCandidate.provider,
+        external_id: selectedCandidate.id,
+        lock_fields: lockedFields
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("Metadata and artwork updated successfully!", "success");
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(data.message || "Failed to apply metadata match", "error");
+    }
+  } catch (err) {
+    showToast("Network error applying metadata", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "✓ Apply Selected Match";
+  }
+}
+
 async function saveMetadata(e) {
   e.preventDefault();
   const btn = document.getElementById("save-metadata-btn");
   btn.disabled = true;
   btn.innerText = "⏳ Saving...";
+
+  const lockedFields = [];
+  if (document.getElementById("lock-title").checked) lockedFields.push("title");
+  if (document.getElementById("lock-creators").checked) {
+    lockedFields.push("creators");
+    lockedFields.push("authors");
+  }
+  if (document.getElementById("lock-description").checked) lockedFields.push("description");
+  if (document.getElementById("lock-cover_image").checked) lockedFields.push("cover_image");
+  if (document.getElementById("lock-tags").checked) lockedFields.push("tags");
+  if (document.getElementById("lock-series").checked) lockedFields.push("series");
 
   const payload = {
     title: document.getElementById("edit-title").value.trim(),
@@ -305,7 +521,8 @@ async function saveMetadata(e) {
     publisher: document.getElementById("edit-publisher").value.trim(),
     publication_date: document.getElementById("edit-publication-date").value.trim(),
     isbn: document.getElementById("edit-isbn").value.trim(),
-    description: document.getElementById("edit-description").value.trim()
+    description: document.getElementById("edit-description").value.trim(),
+    locked_fields: lockedFields
   };
 
   try {
@@ -334,7 +551,7 @@ async function enrichCurrentBook() {
   btn.disabled = true;
   btn.innerText = "⏳ Fetching metadata...";
   try {
-    const res = await fetch("/api/books/{{ book.id }}/enrich", {
+    const res = await fetch("/api/media/{{ book.id }}/enrich", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ overwrite: true })
@@ -344,7 +561,7 @@ async function enrichCurrentBook() {
       showToast(`Updated: ${data.changes.join(", ")}`, "success");
       setTimeout(() => location.reload(), 1200);
     } else if (data.status === "not_found") {
-      showToast("No matching online metadata found.", "error");
+      showToast("No matching online metadata found. Use Fix Match to search manually.", "error");
     } else {
       showToast("No new metadata changes found.", "info");
     }

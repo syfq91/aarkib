@@ -737,17 +737,19 @@ def get_stream_info(book_id: int):
     streams = probe_media_streams(file_path)
     eval_res = evaluate_playback_strategy(file_path, streams)
 
-    return jsonify({
-        "id": book.id,
-        "title": book.title,
-        "file_format": book.file_format,
-        "original_file_path": str(file_path),
-        "streams": streams,
-        "evaluation": eval_res,
-        "direct_url": f"/api/books/{book.id}/file",
-        "remux_url": f"/api/stream/{book.id}/remux",
-        "hls_url": f"/api/stream/{book.id}/hls/master.m3u8",
-    })
+    return jsonify(
+        {
+            "id": book.id,
+            "title": book.title,
+            "file_format": book.file_format,
+            "original_file_path": str(file_path),
+            "streams": streams,
+            "evaluation": eval_res,
+            "direct_url": f"/api/books/{book.id}/file",
+            "remux_url": f"/api/stream/{book.id}/remux",
+            "hls_url": f"/api/stream/{book.id}/hls/master.m3u8",
+        }
+    )
 
 
 @api_bp.route("/stream/<int:book_id>/remux", methods=["GET"])
@@ -921,10 +923,12 @@ def list_subtitles(book_id: int):
     from aarkib.services.transcoder import probe_media_streams
 
     streams = probe_media_streams(file_path)
-    return jsonify({
-        "id": book.id,
-        "subtitles": streams.get("subtitles", []),
-    })
+    return jsonify(
+        {
+            "id": book.id,
+            "subtitles": streams.get("subtitles", []),
+        }
+    )
 
 
 @api_bp.route("/stream/<int:book_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
@@ -1322,12 +1326,14 @@ def trigger_scan():
 
 
 @api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
+@api_bp.route("/items/<int:book_id>/enrich", methods=["POST"])
+@api_bp.route("/media/<int:book_id>/enrich", methods=["POST"])
 @api_admin_required
 def enrich_single_book(book_id: int):
-    """Fetch online metadata (Google Books / Open Library) for a single book."""
-    book = db.session.get(Book, book_id)
-    if not book:
-        return api_error("Book not found", 404)
+    """Fetch online metadata for a single media item (books, video, music)."""
+    item = db.session.get(MediaItem, book_id)
+    if not item:
+        return api_error("Media item not found", 404)
 
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
@@ -1336,39 +1342,179 @@ def enrich_single_book(book_id: int):
     )
 
     covers_dir = Path(current_app.config["COVERS_DIR"])
-    from aarkib.services.enricher import enrich_book
+    from aarkib.services.enricher import enrich_media_item
 
-    result = enrich_book(book, covers_dir, overwrite=overwrite, provider=provider)
+    result = enrich_media_item(item, covers_dir, overwrite=overwrite, provider=provider)
     return jsonify(result)
+
+
+@api_bp.route("/books/<int:item_id>/metadata/search", methods=["GET"])
+@api_bp.route("/items/<int:item_id>/metadata/search", methods=["GET"])
+@api_bp.route("/media/<int:item_id>/metadata/search", methods=["GET"])
+@api_admin_required
+def search_metadata_candidates(item_id: int):
+    """Search external metadata providers for candidate matches with confidence scores."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    query = request.args.get("q") or item.title or ""
+    year = (
+        request.args.get("year")
+        or item.publication_date
+        or getattr(item, "release_year", None)
+    )
+    provider_name = request.args.get("provider")
+
+    from aarkib.services.metadata import metadata_registry
+
+    candidates = metadata_registry.search(
+        media_type=item.media_type or "all",
+        query=query,
+        year=str(year)[:4] if year else None,
+        provider_name=provider_name,
+    )
+
+    return jsonify(
+        {
+            "status": "success",
+            "media_id": item.id,
+            "media_type": item.media_type,
+            "query": query,
+            "count": len(candidates),
+            "candidates": [c.to_dict() for c in candidates],
+        }
+    )
+
+
+@api_bp.route("/books/<int:item_id>/metadata/apply", methods=["POST"])
+@api_bp.route("/items/<int:item_id>/metadata/apply", methods=["POST"])
+@api_bp.route("/media/<int:item_id>/metadata/apply", methods=["POST"])
+@api_admin_required
+def apply_metadata_candidate(item_id: int):
+    """Apply a selected metadata candidate to the media item and optionally update field locks."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    data = request.get_json(silent=True) or {}
+    provider = data.get("provider")
+    external_id = data.get("external_id")
+    lock_fields = data.get("lock_fields")
+
+    if not provider or not external_id:
+        return api_error("Both 'provider' and 'external_id' are required", 400)
+
+    covers_dir = Path(current_app.config["COVERS_DIR"])
+    from aarkib.services.enricher import enrich_media_item
+
+    result = enrich_media_item(
+        item,
+        covers_dir=covers_dir,
+        overwrite=True,
+        candidate_external_id=str(external_id),
+        candidate_provider=str(provider),
+    )
+
+    if result.get("status") == "not_found":
+        return api_error("Failed to fetch details for candidate from provider", 404)
+
+    # If lock_fields specified, set them on the item after applying metadata
+    if lock_fields is not None:
+        if isinstance(lock_fields, list):
+            item.set_locked_fields(lock_fields)
+        elif isinstance(lock_fields, str):
+            item.set_locked_fields(
+                [f.strip() for f in lock_fields.split(",") if f.strip()]
+            )
+        db.session.commit()
+
+    return jsonify(
+        {
+            "status": "success",
+            "message": "Metadata applied successfully",
+            "media_id": item.id,
+            "changes": result.get("changes", []),
+            "locked_fields": item.get_locked_fields(),
+            "item": {
+                "id": item.id,
+                "title": item.title,
+                "authors": [a.name for a in item.authors],
+                "description": item.description,
+                "cover_image_path": item.cover_image_path,
+                "external_id": item.external_id,
+            },
+        }
+    )
+
+
+@api_bp.route("/books/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
+@api_bp.route("/items/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
+@api_bp.route("/media/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
+@api_admin_required
+def manage_locked_fields(item_id: int):
+    """Inspect or update the locked fields configuration for a media item."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    if request.method == "GET":
+        return jsonify(
+            {
+                "status": "success",
+                "media_id": item.id,
+                "locked_fields": item.get_locked_fields(),
+            }
+        )
+
+    data = request.get_json(silent=True) or {}
+    raw_locks = data.get("locked_fields", [])
+    if isinstance(raw_locks, list):
+        item.set_locked_fields(raw_locks)
+    elif isinstance(raw_locks, str):
+        item.set_locked_fields([f.strip() for f in raw_locks.split(",") if f.strip()])
+    db.session.commit()
+
+    return jsonify(
+        {
+            "status": "success",
+            "message": "Locked fields updated",
+            "media_id": item.id,
+            "locked_fields": item.get_locked_fields(),
+        }
+    )
 
 
 @api_bp.route("/library/enrich", methods=["POST"])
 @api_bp.route("/libraries/enrich", methods=["POST"])
 @api_admin_required
 def enrich_library():
-    """Fetch online metadata for all indexed books across every library."""
+    """Fetch online metadata for indexed media items across every library."""
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
     provider = str(
         data.get("provider", current_app.config.get("METADATA_PROVIDER", "all"))
     )
+    media_type = str(data.get("media_type", "all"))
     sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
 
-    from aarkib.services.enricher import enrich_all_books
+    from aarkib.services.enricher import enrich_all_media
 
     if sync_mode:
-        result = enrich_all_books(
+        result = enrich_all_media(
             current_app,
             overwrite=overwrite,
             provider=provider,
+            media_type=media_type,
         )
         return jsonify({"status": "success", "result": result})
 
     def run_enrichment(app, **kwargs):
-        return enrich_all_books(
+        return enrich_all_media(
             app,
             overwrite=kwargs.get("overwrite", False),
             provider=kwargs.get("provider", "all"),
+            media_type=kwargs.get("media_type", "all"),
         )
 
     job = job_manager.submit_job(
@@ -1377,6 +1523,7 @@ def enrich_library():
         current_app._get_current_object(),
         overwrite=overwrite,
         provider=provider,
+        media_type=media_type,
     )
     return (
         jsonify(
@@ -1420,6 +1567,7 @@ def edit_book_metadata(book_id: int):
                 "series_index": book.series_index,
                 "authors": [a.name for a in book.authors],
                 "tags": [t.name for t in book.tags],
+                "locked_fields": book.get_locked_fields(),
             },
         }
     )

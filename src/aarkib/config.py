@@ -276,6 +276,15 @@ class Config:
     METADATA_PROVIDER: str = os.getenv(
         "AARKIB_METADATA_PROVIDER", os.getenv("BUUKUU_METADATA_PROVIDER", "all")
     )
+    TMDB_API_KEY: str | None = os.getenv(
+        "AARKIB_TMDB_API_KEY", os.getenv("TMDB_API_KEY")
+    )
+    METADATA_CACHE_TTL_DAYS: int = int(
+        os.getenv("AARKIB_METADATA_CACHE_TTL_DAYS", "30")
+    )
+    MUSICBRAINZ_RATE_LIMIT: float = float(
+        os.getenv("AARKIB_MUSICBRAINZ_RATE_LIMIT", "1.0")
+    )
     PAGE_SIZE: int = int(
         os.getenv("AARKIB_PAGE_SIZE", os.getenv("BUUKUU_PAGE_SIZE", "24"))
     )

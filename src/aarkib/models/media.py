@@ -54,6 +54,12 @@ class MediaItemMixin:
     )
     publication_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # External metadata & field locking
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    locked_fields: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
@@ -135,6 +141,37 @@ class MediaItemMixin:
                 return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
             size /= 1024.0
         return f"{self.file_size} B"
+
+    def get_locked_fields(self) -> list[str]:
+        """Returns list of locked field names."""
+        if not self.locked_fields:
+            return []
+        try:
+            val = json.loads(self.locked_fields)
+            return [str(item) for item in val] if isinstance(val, list) else []
+        except Exception:
+            return [f.strip() for f in self.locked_fields.split(",") if f.strip()]
+
+    def set_locked_fields(self, fields: list[str]) -> None:
+        """Sets list of locked field names."""
+        cleaned = sorted(list({str(f).strip() for f in fields if f and str(f).strip()}))
+        self.locked_fields = json.dumps(cleaned) if cleaned else None
+
+    def is_field_locked(self, field_name: str) -> bool:
+        """Checks if a field is locked from automatic updates."""
+        return field_name in self.get_locked_fields()
+
+    def lock_field(self, field_name: str) -> None:
+        """Locks a specific field name."""
+        current = set(self.get_locked_fields())
+        current.add(field_name)
+        self.set_locked_fields(list(current))
+
+    def unlock_field(self, field_name: str) -> None:
+        """Unlocks a specific field name."""
+        current = set(self.get_locked_fields())
+        current.discard(field_name)
+        self.set_locked_fields(list(current))
 
 
 class PlayableItemMixin:

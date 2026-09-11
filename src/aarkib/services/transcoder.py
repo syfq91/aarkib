@@ -106,7 +106,9 @@ def detect_vaapi_device(device_override: str | None = None) -> str | None:
             if not os.path.exists(node):
                 continue
             if not os.access(node, os.R_OK | os.W_OK):
-                logger.debug("Skipping VAAPI node %s: insufficient read/write permissions", node)
+                logger.debug(
+                    "Skipping VAAPI node %s: insufficient read/write permissions", node
+                )
                 continue
 
             try:
@@ -133,16 +135,25 @@ def detect_vaapi_device(device_override: str | None = None) -> str | None:
                 ]
                 res = subprocess.run(probe_cmd, capture_output=True, timeout=5)
                 if res.returncode == 0:
-                    logger.info("Successfully validated VAAPI hardware encoder on device: %s", node)
+                    logger.info(
+                        "Successfully validated VAAPI hardware encoder on device: %s",
+                        node,
+                    )
                     _CACHED_VAAPI_DEVICE = node
                     _VAAPI_CHECKED = True
                     return _CACHED_VAAPI_DEVICE
                 else:
-                    logger.debug("VAAPI probe failed on device %s (exit code %d)", node, res.returncode)
+                    logger.debug(
+                        "VAAPI probe failed on device %s (exit code %d)",
+                        node,
+                        res.returncode,
+                    )
             except Exception as e:
                 logger.debug("VAAPI probe exception on device %s: %s", node, e)
 
-        logger.info("No usable VAAPI hardware acceleration device found; defaulting to CPU software encoding.")
+        logger.info(
+            "No usable VAAPI hardware acceleration device found; defaulting to CPU software encoding."
+        )
         _CACHED_VAAPI_DEVICE = None
         _VAAPI_CHECKED = True
         return None
@@ -204,7 +215,7 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
         if "duration" in fmt:
             try:
                 result["duration"] = round(float(fmt["duration"]), 2)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
 
         audio_idx = 0
@@ -225,32 +236,46 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
                     "height": int(v_height) if v_height else None,
                     "bitrate": int(v_bitrate) if v_bitrate else None,
                     "pix_fmt": stream.get("pix_fmt"),
-                    "duration": float(stream["duration"]) if "duration" in stream else result["duration"],
+                    "duration": float(stream["duration"])
+                    if "duration" in stream
+                    else result["duration"],
                 }
             elif stype == "audio":
                 a_channels = stream.get("channels")
-                result["audio"].append({
-                    "index": audio_idx,
-                    "stream_index": stream.get("index"),
-                    "codec": codec,
-                    "channels": int(a_channels) if a_channels else None,
-                    "channel_layout": stream.get("channel_layout"),
-                    "sample_rate": stream.get("sample_rate"),
-                    "language": tags.get("language") or tags.get("LANGUAGE") or "und",
-                    "title": tags.get("title") or tags.get("TITLE") or f"Audio Track {audio_idx + 1}",
-                })
+                result["audio"].append(
+                    {
+                        "index": audio_idx,
+                        "stream_index": stream.get("index"),
+                        "codec": codec,
+                        "channels": int(a_channels) if a_channels else None,
+                        "channel_layout": stream.get("channel_layout"),
+                        "sample_rate": stream.get("sample_rate"),
+                        "language": tags.get("language")
+                        or tags.get("LANGUAGE")
+                        or "und",
+                        "title": tags.get("title")
+                        or tags.get("TITLE")
+                        or f"Audio Track {audio_idx + 1}",
+                    }
+                )
                 audio_idx += 1
             elif stype == "subtitle":
                 disp = stream.get("disposition") or {}
-                result["subtitles"].append({
-                    "index": sub_idx,
-                    "stream_index": stream.get("index"),
-                    "codec": codec,
-                    "language": tags.get("language") or tags.get("LANGUAGE") or "und",
-                    "title": tags.get("title") or tags.get("TITLE") or f"Subtitle {sub_idx + 1}",
-                    "is_default": bool(disp.get("default")),
-                    "is_forced": bool(disp.get("forced")),
-                })
+                result["subtitles"].append(
+                    {
+                        "index": sub_idx,
+                        "stream_index": stream.get("index"),
+                        "codec": codec,
+                        "language": tags.get("language")
+                        or tags.get("LANGUAGE")
+                        or "und",
+                        "title": tags.get("title")
+                        or tags.get("TITLE")
+                        or f"Subtitle {sub_idx + 1}",
+                        "is_default": bool(disp.get("default")),
+                        "is_forced": bool(disp.get("forced")),
+                    }
+                )
                 sub_idx += 1
 
     except Exception as e:
@@ -300,7 +325,9 @@ def evaluate_playback_strategy(
         if is_10bit:
             reasons.append(f"10-bit color ({pix_fmt}) requires transcoding")
         else:
-            reasons.append(f"Video codec '{v_codec}' is not natively supported by browser")
+            reasons.append(
+                f"Video codec '{v_codec}' is not natively supported by browser"
+            )
 
     # Check audio codecs compatibility
     audio_list = streams_info.get("audio", [])
@@ -315,14 +342,20 @@ def evaluate_playback_strategy(
         strategy = PlaybackStrategy.DIRECT_PLAY
     elif ext in REMUXABLE_CONTAINERS and video_native and audio_native:
         strategy = PlaybackStrategy.DIRECT_REMUX
-        reasons.append(f"Container '{ext}' can be remuxed to MP4 on-the-fly with zero re-encoding")
+        reasons.append(
+            f"Container '{ext}' can be remuxed to MP4 on-the-fly with zero re-encoding"
+        )
     elif video_native and not audio_native:
         strategy = PlaybackStrategy.AUDIO_TRANSCODE
-        reasons.append("Video stream can be copied directly while audio is transcoded to AAC")
+        reasons.append(
+            "Video stream can be copied directly while audio is transcoded to AAC"
+        )
     else:
         strategy = PlaybackStrategy.FULL_TRANSCODE
         if not reasons:
-            reasons.append("Transcoding required for optimal browser playback compatibility")
+            reasons.append(
+                "Transcoding required for optimal browser playback compatibility"
+            )
 
     return {
         "strategy": strategy.value,
@@ -368,7 +401,12 @@ def generate_vtt_subtitles(file_path: Path, subtitle_index: int = 0) -> bytes:
         if res.returncode == 0 and res.stdout.startswith(b"WEBVTT"):
             return res.stdout
     except Exception as e:
-        logger.debug("Failed extracting subtitle index %d from %s: %s", subtitle_index, file_path, e)
+        logger.debug(
+            "Failed extracting subtitle index %d from %s: %s",
+            subtitle_index,
+            file_path,
+            e,
+        )
 
     return b"WEBVTT\n\nNOTE Subtitle track not available as text WebVTT\n"
 
@@ -395,13 +433,15 @@ def stream_remux_pipe(
         # Zero-CPU direct copy of both video and audio
         cmd.extend(["-c", "copy"])
 
-    cmd.extend([
-        "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-        "-f",
-        "mp4",
-        "pipe:1",
-    ])
+    cmd.extend(
+        [
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "mp4",
+            "pipe:1",
+        ]
+    )
 
     proc: subprocess.Popen | None = None
     try:
@@ -495,7 +535,11 @@ class TranscodeSupervisor:
                         expired_ids.append(sid)
 
             for sid in expired_ids:
-                logger.info("Reaping idle transcode session %s (inactivity > %ds)", sid, self.idle_timeout)
+                logger.info(
+                    "Reaping idle transcode session %s (inactivity > %ds)",
+                    sid,
+                    self.idle_timeout,
+                )
                 self.stop_session(sid)
 
     def get_session(self, session_id: str) -> TranscodeSession | None:
@@ -548,12 +592,14 @@ class TranscodeSupervisor:
             cmd.extend(["-ss", str(seek_offset)])
 
         if detected_vaapi:
-            cmd.extend([
-                "-hwaccel",
-                "vaapi",
-                "-vaapi_device",
-                detected_vaapi,
-            ])
+            cmd.extend(
+                [
+                    "-hwaccel",
+                    "vaapi",
+                    "-vaapi_device",
+                    detected_vaapi,
+                ]
+            )
 
         cmd.extend(["-i", str(file_path)])
         cmd.extend(["-map", "0:v:0", "-map", f"0:a:{audio_track_index}?"])
@@ -569,36 +615,40 @@ class TranscodeSupervisor:
                 if target_w
                 else "format=nv12,hwupload"
             )
-            cmd.extend([
-                "-vf",
-                vf_scale,
-                "-c:v",
-                "h264_vaapi",
-                "-b:v",
-                f"{bitrate}k",
-                "-maxrate",
-                f"{int(bitrate * 1.25)}k",
-                "-bufsize",
-                f"{bitrate * 2}k",
-            ])
+            cmd.extend(
+                [
+                    "-vf",
+                    vf_scale,
+                    "-c:v",
+                    "h264_vaapi",
+                    "-b:v",
+                    f"{bitrate}k",
+                    "-maxrate",
+                    f"{int(bitrate * 1.25)}k",
+                    "-bufsize",
+                    f"{bitrate * 2}k",
+                ]
+            )
         else:
             vf_scale = f"scale=w='min({target_w},iw)':h=-2" if target_w else None
             if vf_scale:
                 cmd.extend(["-vf", vf_scale])
-            cmd.extend([
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-maxrate",
-                f"{int(bitrate * 1.25)}k",
-                "-bufsize",
-                f"{bitrate * 2}k",
-                "-pix_fmt",
-                "yuv420p",
-            ])
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-maxrate",
+                    f"{int(bitrate * 1.25)}k",
+                    "-bufsize",
+                    f"{bitrate * 2}k",
+                    "-pix_fmt",
+                    "yuv420p",
+                ]
+            )
 
         # Audio settings: AAC stereo
         cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
@@ -607,21 +657,23 @@ class TranscodeSupervisor:
         playlist_path = session_dir / "playlist.m3u8"
         segment_pattern = str(session_dir / "segment_%05d.m4s")
 
-        cmd.extend([
-            "-f",
-            "hls",
-            "-hls_time",
-            "6",
-            "-hls_list_size",
-            "0",
-            "-hls_segment_type",
-            "fmp4",
-            "-hls_flags",
-            "independent_segments",
-            "-hls_segment_filename",
-            segment_pattern,
-            str(playlist_path),
-        ])
+        cmd.extend(
+            [
+                "-f",
+                "hls",
+                "-hls_time",
+                "6",
+                "-hls_list_size",
+                "0",
+                "-hls_segment_type",
+                "fmp4",
+                "-hls_flags",
+                "independent_segments",
+                "-hls_segment_filename",
+                segment_pattern,
+                str(playlist_path),
+            ]
+        )
 
         proc: subprocess.Popen | None = None
         if shutil.which("ffmpeg"):
@@ -632,9 +684,15 @@ class TranscodeSupervisor:
                     stderr=subprocess.DEVNULL,
                     preexec_fn=os.setsid if hasattr(os, "setsid") else None,
                 )
-                logger.info("Launched HLS transcode process %d for session %s", proc.pid, session_id)
+                logger.info(
+                    "Launched HLS transcode process %d for session %s",
+                    proc.pid,
+                    session_id,
+                )
             except Exception as e:
-                logger.error("Failed to spawn FFmpeg process for session %s: %s", session_id, e)
+                logger.error(
+                    "Failed to spawn FFmpeg process for session %s: %s", session_id, e
+                )
 
         session = TranscodeSession(
             session_id=session_id,
@@ -692,7 +750,9 @@ class TranscodeSupervisor:
                 shutil.rmtree(session.output_dir, ignore_errors=True)
                 logger.debug("Pruned transcode directory for session %s", session_id)
         except Exception as e:
-            logger.debug("Error pruning transcode directory %s: %s", session.output_dir, e)
+            logger.debug(
+                "Error pruning transcode directory %s: %s", session.output_dir, e
+            )
 
     def cleanup_all(self) -> None:
         """Stops all active sessions and cleans all directories (called on shutdown)."""

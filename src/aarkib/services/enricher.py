@@ -277,6 +277,11 @@ def enrich_book(
     provider: str = "all",
 ) -> dict[str, Any]:
     """Enriches metadata for a single Book instance and saves changes to DB."""
+    if not book.is_book:
+        return enrich_media_item(
+            book, covers_dir, overwrite=overwrite, provider=provider
+        )
+
     first_author = book.authors[0].name if book.authors else None
     meta = fetch_external_metadata(
         isbn=book.isbn,
@@ -290,32 +295,52 @@ def enrich_book(
 
     changes: list[str] = []
 
-    if (not book.description or overwrite) and meta.description:
+    if (
+        not book.is_field_locked("description")
+        and (not book.description or overwrite)
+        and meta.description
+    ):
         book.description = meta.description
         changes.append("description")
 
-    if (not book.publisher or overwrite) and meta.publisher:
+    if (
+        not book.is_field_locked("publisher")
+        and (not book.publisher or overwrite)
+        and meta.publisher
+    ):
         book.publisher = meta.publisher
         changes.append("publisher")
 
-    if (not book.publication_date or overwrite) and meta.publication_date:
+    if (
+        not book.is_field_locked("publication_date")
+        and (not book.publication_date or overwrite)
+        and meta.publication_date
+    ):
         book.publication_date = str(meta.publication_date)[:10]
         changes.append("publication_date")
 
-    if (not book.language or overwrite) and meta.language:
+    if (
+        not book.is_field_locked("language")
+        and (not book.language or overwrite)
+        and meta.language
+    ):
         book.language = meta.language
         changes.append("language")
 
-    if (not book.page_count or overwrite) and meta.page_count:
+    if (
+        not book.is_field_locked("page_count")
+        and (not book.page_count or overwrite)
+        and meta.page_count
+    ):
         book.page_count = meta.page_count
         changes.append("page_count")
 
-    if (not book.isbn or overwrite) and meta.isbn:
+    if not book.is_field_locked("isbn") and (not book.isbn or overwrite) and meta.isbn:
         book.isbn = meta.isbn
         changes.append("isbn")
 
     # Update or attach tags
-    if meta.tags and (not book.tags or overwrite):
+    if not book.is_field_locked("tags") and meta.tags and (not book.tags or overwrite):
         existing_tags = {
             t.name.lower(): t for t in db.session.scalars(select(Tag)).all()
         }
@@ -335,7 +360,11 @@ def enrich_book(
         changes.append(f"tags ({len(tag_objs)})")
 
     # Cover image download & WebP conversion
-    if meta.cover_bytes and (not book.cover_image_path or overwrite):
+    if (
+        not book.is_field_locked("cover_image")
+        and meta.cover_bytes
+        and (not book.cover_image_path or overwrite)
+    ):
         cover_filename = f"{book.file_hash[:16]}.webp"
         cover_output_path = covers_dir / cover_filename
         if generate_cover_webp(meta.cover_bytes, cover_output_path):
@@ -353,6 +382,216 @@ def enrich_book(
         "book_id": book.id,
         "title": book.title,
         "source": meta.source,
+        "changes": changes,
+    }
+
+
+def enrich_media_item(
+    item: MediaItem,
+    covers_dir: Path,
+    overwrite: bool = False,
+    provider: str = "all",
+    candidate_external_id: str | None = None,
+    candidate_provider: str | None = None,
+) -> dict[str, Any]:
+    """Enriches metadata for any media item (book, video, music, audiobook)."""
+    from aarkib.services.media_service import (
+        resolve_or_create_authors,
+        resolve_or_create_tags,
+    )
+    from aarkib.services.metadata import metadata_registry
+
+    details = None
+    if candidate_external_id and candidate_provider:
+        details = metadata_registry.fetch_details(
+            candidate_provider,
+            candidate_external_id,
+            media_type=item.media_type or "all",
+        )
+    else:
+        # If it's a book and no explicit candidate requested, use fetch_external_metadata
+        if item.is_book:
+            first_author = item.authors[0].name if item.authors else None
+            legacy_meta = fetch_external_metadata(
+                isbn=item.isbn,
+                title=item.title,
+                author=first_author,
+                provider=provider,
+            )
+            if legacy_meta:
+                from aarkib.services.metadata.base import MediaMetadataDetails
+
+                details = MediaMetadataDetails(
+                    id=legacy_meta.isbn or legacy_meta.title or str(item.id),
+                    provider=legacy_meta.source,
+                    title=legacy_meta.title or item.title,
+                    creators=legacy_meta.authors,
+                    overview=legacy_meta.description,
+                    poster_url=legacy_meta.cover_url,
+                    poster_bytes=legacy_meta.cover_bytes,
+                    release_date=legacy_meta.publication_date,
+                    publisher=legacy_meta.publisher,
+                    genres=legacy_meta.tags,
+                    language=legacy_meta.language,
+                    page_count=legacy_meta.page_count,
+                    isbn=legacy_meta.isbn,
+                )
+        else:
+            # Query registry
+            search_query = item.title
+            candidates = metadata_registry.search(
+                media_type=item.media_type or "all",
+                query=search_query,
+                year=item.publication_date or getattr(item, "release_year", None),
+                provider_name=provider if provider != "all" else None,
+            )
+            if candidates and candidates[0].score >= 0.5:
+                top = candidates[0]
+                details = metadata_registry.fetch_details(
+                    top.provider, top.id, media_type=item.media_type or "all"
+                )
+
+    if not details:
+        return {"status": "not_found", "media_id": item.id, "changes": []}
+
+    changes: list[str] = []
+
+    # Title
+    if (
+        not item.is_field_locked("title")
+        and (not item.title or overwrite)
+        and details.title
+    ):
+        item.title = details.title
+        changes.append("title")
+
+    # Overview / Description
+    if (
+        not item.is_field_locked("description")
+        and (not item.description or overwrite)
+        and details.overview
+    ):
+        item.description = details.overview
+        changes.append("description")
+
+    # Creators / Authors / Directors
+    if (
+        not item.is_field_locked("creators")
+        and not item.is_field_locked("authors")
+        and (not item.authors or overwrite)
+        and details.creators
+    ):
+        item.authors = resolve_or_create_authors(details.creators)
+        changes.append("creators")
+
+    # Publisher
+    if (
+        not item.is_field_locked("publisher")
+        and (not item.publisher or overwrite)
+        and details.publisher
+    ):
+        item.publisher = details.publisher
+        changes.append("publisher")
+
+    # Release / Publication date
+    if (
+        not item.is_field_locked("publication_date")
+        and (not item.publication_date or overwrite)
+        and details.release_date
+    ):
+        item.publication_date = str(details.release_date)[:10]
+        changes.append("publication_date")
+
+    # Language
+    if (
+        not item.is_field_locked("language")
+        and (not item.language or overwrite)
+        and details.language
+    ):
+        item.language = details.language
+        changes.append("language")
+
+    # Genres / Tags
+    if (
+        not item.is_field_locked("tags")
+        and not item.is_field_locked("genres")
+        and (not item.tags or overwrite)
+        and details.genres
+    ):
+        item.tags = resolve_or_create_tags(details.genres)
+        changes.append(f"tags ({len(item.tags)})")
+
+    # Video specifics
+    if (
+        hasattr(item, "season")
+        and not item.is_field_locked("season")
+        and details.season is not None
+    ):
+        item.season = details.season
+        changes.append("season")
+    if (
+        hasattr(item, "episode")
+        and not item.is_field_locked("episode")
+        and details.episode is not None
+    ):
+        item.episode = details.episode
+        changes.append("episode")
+    if (
+        hasattr(item, "duration")
+        and not item.is_field_locked("duration")
+        and details.duration
+        and not item.duration
+    ):
+        item.duration = details.duration
+        changes.append("duration")
+
+    # Music specifics
+    if (
+        hasattr(item, "album")
+        and not item.is_field_locked("album")
+        and details.album
+        and (not item.album or overwrite)
+    ):
+        item.album = details.album
+        changes.append("album")
+
+    # Cover
+    if not item.is_field_locked("cover_image") and (
+        not item.cover_image_path or overwrite
+    ):
+        cover_bytes = details.poster_bytes
+        if not cover_bytes and details.poster_url:
+            from aarkib.services.metadata.client import ResilientHttpClient
+
+            client = ResilientHttpClient(provider_name=details.provider)
+            cover_bytes = client.get_bytes(details.poster_url)
+
+        if cover_bytes:
+            cover_filename = f"{item.file_hash[:16]}.webp"
+            cover_output_path = covers_dir / cover_filename
+            if generate_cover_webp(cover_bytes, cover_output_path):
+                item.cover_image_path = cover_filename
+                changes.append("cover_image")
+
+    # Stash external_id
+    if details.id:
+        item.external_id = f"{details.provider}:{details.id}"
+
+    if changes:
+        db.session.commit()
+        logger.info(
+            "Enriched %s ID %d (%s) with: %s",
+            item.media_type,
+            item.id,
+            item.title,
+            ", ".join(changes),
+        )
+
+    return {
+        "status": "success" if changes else "no_changes_needed",
+        "media_id": item.id,
+        "title": item.title,
+        "source": details.provider,
         "changes": changes,
     }
 
@@ -380,6 +619,41 @@ def enrich_all_books(
 
         return {
             "total": len(books),
+            "enriched": enriched_count,
+            "skipped": skipped_count,
+        }
+
+
+def enrich_all_media(
+    app: Flask,
+    overwrite: bool = False,
+    provider: str = "all",
+    media_type: str = "all",
+) -> dict[str, int]:
+    """Batch enriches media items in the database matching media_type."""
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        covers_dir.mkdir(parents=True, exist_ok=True)
+
+        stmt = select(MediaItem)
+        if media_type and media_type != "all":
+            stmt = stmt.where(MediaItem.media_type == media_type)
+
+        items = db.session.scalars(stmt).all()
+        enriched_count = 0
+        skipped_count = 0
+
+        for item in items:
+            res = enrich_media_item(
+                item, covers_dir, overwrite=overwrite, provider=provider
+            )
+            if res.get("changes"):
+                enriched_count += 1
+            else:
+                skipped_count += 1
+
+        return {
+            "total": len(items),
             "enriched": enriched_count,
             "skipped": skipped_count,
         }

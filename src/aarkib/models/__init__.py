@@ -11,6 +11,7 @@ from aarkib.models.media import (
     VideoItemMixin,
 )
 from aarkib.models.media_item import Book, Item, MediaItem
+from aarkib.models.metadata_cache import MetadataCacheEntry
 from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.tag import Tag, book_tags, media_tags
@@ -39,6 +40,7 @@ __all__ = [
     "UserFavorite",
     "Playlist",
     "PlaylistItem",
+    "MetadataCacheEntry",
     "media_creators",
     "book_authors",
     "media_tags",
