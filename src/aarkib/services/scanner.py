@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -547,6 +548,7 @@ def index_single_book(
     covers_dir: Path,
     auto_enrich: bool = False,
     library_media_type: str | None = None,
+    library_id: int | None = None,
 ) -> Book | None:
     """Parses and updates or inserts a single book record in the database."""
     supported = get_supported_extensions()
@@ -562,12 +564,21 @@ def index_single_book(
             select(Book).where(Book.original_file_path == resolved_path)
         )
         if existing_book and existing_book.file_hash == file_hash:
+            updated = False
             if (
                 library_media_type
                 and library_media_type != "all"
                 and existing_book.media_type != library_media_type
             ):
                 existing_book.media_type = library_media_type
+                updated = True
+            if (
+                library_id is not None
+                and getattr(existing_book, "library_id", None) != library_id
+            ):
+                existing_book.library_id = library_id
+                updated = True
+            if updated:
                 db.session.commit()
             return existing_book
 
@@ -587,6 +598,8 @@ def index_single_book(
 
         book = existing_book or Book(original_file_path=resolved_path)
         db.session.add(book)
+        if library_id is not None:
+            book.library_id = library_id
 
         book.title = metadata.title or file_path.stem
         book.sort_title = compute_sort_title(book.title)
@@ -653,12 +666,19 @@ def index_single_book(
         return None
 
 
-def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, int]:
+def scan_library(
+    app: Flask,
+    library_id: str | int | None = None,
+    progress_callback: Callable[[float, str], None] | None = None,
+) -> dict[str, int]:
     """Scans configured library directories for changes. Supports scanning a specific library."""
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
         auto_enrich = app.config.get("AUTO_ENRICH", False)
         covers_dir.mkdir(parents=True, exist_ok=True)
+
+        if progress_callback:
+            progress_callback(5.0, "Discovering media files in library folders...")
 
         libraries = sync_and_get_libraries(app)
         if library_id is not None:
@@ -681,10 +701,8 @@ def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, i
                 for d in fallback_dirs
             ]
 
-        added = 0
-        existing_files: set[str] = set()
         supported = get_supported_extensions()
-
+        candidate_files: list[tuple[Library, Path]] = []
         for lib in libraries:
             lib_dir = Path(lib.path).expanduser()
             lib_dir.mkdir(parents=True, exist_ok=True)
@@ -692,22 +710,45 @@ def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, i
                 for filename in filenames:
                     file_path = Path(root) / filename
                     if file_path.suffix.lower() in supported:
-                        existing_files.add(str(file_path.resolve()))
-                        book = index_single_book(
-                            file_path,
-                            covers_dir,
-                            auto_enrich=auto_enrich,
-                            library_media_type=lib.media_type,
-                        )
-                        if book:
-                            added += 1
+                        candidate_files.append((lib, file_path))
+
+        total_candidates = len(candidate_files)
+        if progress_callback:
+            progress_callback(
+                10.0, f"Discovered {total_candidates} files. Processing..."
+            )
+
+        added = 0
+        existing_files: set[str] = set()
+
+        for idx, (lib, file_path) in enumerate(candidate_files):
+            existing_files.add(str(file_path.resolve()))
+            book = index_single_book(
+                file_path,
+                covers_dir,
+                auto_enrich=auto_enrich,
+                library_media_type=lib.media_type,
+                library_id=getattr(lib, "id", None),
+            )
+            if book:
+                added += 1
+
+            if progress_callback and (idx % 5 == 0 or idx == total_candidates - 1):
+                pct = 10.0 + ((idx + 1) / max(total_candidates, 1)) * 80.0
+                progress_callback(
+                    pct, f"Indexing {file_path.name} ({idx + 1}/{total_candidates})"
+                )
 
         # Clean up deleted files from DB
+        if progress_callback:
+            progress_callback(92.0, "Pruning removed records...")
+
+        deleted = 0
         if library_id is not None:
-            deleted = 0
             for lib in libraries:
                 p_res, p_raw = library_path_conditions(lib)
                 lib_cond = or_(
+                    Book.library_id == lib.id if getattr(lib, "id", None) else False,
                     Book.original_file_path.startswith(p_res),
                     Book.original_file_path.startswith(p_raw),
                 )
@@ -721,7 +762,6 @@ def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, i
                         deleted += 1
         else:
             all_books = db.session.scalars(select(Book)).all()
-            deleted = 0
             for book in all_books:
                 if (
                     book.original_file_path not in existing_files
@@ -732,6 +772,11 @@ def scan_library(app: Flask, library_id: str | int | None = None) -> dict[str, i
 
         if deleted > 0:
             db.session.commit()
+
+        if progress_callback:
+            progress_callback(
+                100.0, f"Scan complete: {len(existing_files)} files processed"
+            )
 
         logger.info("Library scan complete: %d indexed, %d deleted.", added, deleted)
         return {
@@ -752,7 +797,24 @@ class LibraryChangeHandler(FileSystemEventHandler):
                 covers_dir = Path(self.app.config["COVERS_DIR"])
                 time.sleep(0.5)  # allow file write to finish
                 if file_path.exists():
-                    index_single_book(file_path, covers_dir)
+                    libraries = sync_and_get_libraries(self.app)
+                    matched_lib = None
+                    for lib in libraries:
+                        p_res, p_raw = library_path_conditions(lib)
+                        res_p = str(file_path.resolve())
+                        if res_p.startswith(p_res) or str(file_path).startswith(p_raw):
+                            matched_lib = lib
+                            break
+                    index_single_book(
+                        file_path,
+                        covers_dir,
+                        library_media_type=matched_lib.media_type
+                        if matched_lib
+                        else None,
+                        library_id=getattr(matched_lib, "id", None)
+                        if matched_lib
+                        else None,
+                    )
                 else:
                     book = db.session.scalar(
                         select(Book).where(

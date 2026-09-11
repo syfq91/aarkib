@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aarkib.extensions import db
+
+if TYPE_CHECKING:
+    from aarkib.models.media_item import MediaItem
 
 
 class Library(db.Model):
@@ -26,6 +29,11 @@ class Library(db.Model):
     media_type: Mapped[str] = mapped_column(
         String(50), default="all", nullable=False, index=True
     )
+
+    media_items: Mapped[list[MediaItem]] = relationship(
+        "MediaItem", back_populates="library"
+    )
+    books = synonym("media_items")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False

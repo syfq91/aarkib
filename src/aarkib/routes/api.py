@@ -23,6 +23,7 @@ from aarkib.models import (
     User,
     UserProgress,
 )
+from aarkib.services.job_manager import job_manager
 from aarkib.services.media_service import (
     MEDIA_TYPE_CHOICES,
     VIDEO_EXTENSIONS,
@@ -104,6 +105,23 @@ def enforce_api_auth():
 def health():
     """Healthcheck endpoint for container monitoring."""
     return jsonify({"status": "healthy", "app": "aarkib"})
+
+
+@api_bp.route("/jobs", methods=["GET"])
+def list_jobs():
+    """List recent background tasks and their execution states."""
+    limit = min(request.args.get("limit", 20, type=int), 100)
+    jobs = job_manager.list_jobs(limit=limit)
+    return jsonify({"jobs": [j.to_dict() for j in jobs]})
+
+
+@api_bp.route("/jobs/<job_id>", methods=["GET"])
+def get_job(job_id: str):
+    """Retrieve details, progress, and results for a specific background job."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        return api_error("Job not found", 404)
+    return jsonify(job.to_dict())
 
 
 @api_bp.route("/books", methods=["GET"])
@@ -441,11 +459,31 @@ def delete_library(identifier: str):
 @api_admin_required
 def scan_single_library(identifier: str):
     """Trigger a targeted rescan of a specific media folder (library)."""
-    result = scan_library(
-        current_app,
-        library_id=identifier,  # type: ignore
+    sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
+    if sync_mode:
+        result = scan_library(
+            current_app,
+            library_id=identifier,  # type: ignore
+        )
+        return jsonify({"status": "success", "result": result, "scan": result})
+
+    job = job_manager.submit_job(
+        "library_scan",
+        scan_library,
+        current_app._get_current_object(),
+        library_id=identifier,
     )
-    return jsonify({"status": "success", "result": result})
+    return (
+        jsonify(
+            {
+                "status": "accepted",
+                "job_id": job.id,
+                "job_url": f"/api/jobs/{job.id}",
+                "message": f"Targeted scan for library '{identifier}' initiated in background",
+            }
+        ),
+        202,
+    )
 
 
 @api_bp.route("/books/<int:book_id>", methods=["GET"])
@@ -966,8 +1004,27 @@ def delete_bookmark(bookmark_id: int):
 @api_admin_required
 def trigger_scan():
     """Trigger a full scan across all configured media folders."""
-    result = scan_library(current_app)  # type: ignore
-    return jsonify({"status": "success", "result": result})
+    sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
+    if sync_mode:
+        result = scan_library(current_app)  # type: ignore
+        return jsonify({"status": "success", "result": result, "scan": result})
+
+    job = job_manager.submit_job(
+        "library_scan",
+        scan_library,
+        current_app._get_current_object(),
+    )
+    return (
+        jsonify(
+            {
+                "status": "accepted",
+                "job_id": job.id,
+                "job_url": f"/api/jobs/{job.id}",
+                "message": "Full library scan initiated in background",
+            }
+        ),
+        202,
+    )
 
 
 @api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
@@ -1001,15 +1058,43 @@ def enrich_library():
     provider = str(
         data.get("provider", current_app.config.get("METADATA_PROVIDER", "all"))
     )
+    sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
 
     from aarkib.services.enricher import enrich_all_books
 
-    result = enrich_all_books(
-        current_app,
+    if sync_mode:
+        result = enrich_all_books(
+            current_app,
+            overwrite=overwrite,
+            provider=provider,
+        )
+        return jsonify({"status": "success", "result": result})
+
+    def run_enrichment(app, **kwargs):
+        return enrich_all_books(
+            app,
+            overwrite=kwargs.get("overwrite", False),
+            provider=kwargs.get("provider", "all"),
+        )
+
+    job = job_manager.submit_job(
+        "batch_enrich",
+        run_enrichment,
+        current_app._get_current_object(),
         overwrite=overwrite,
         provider=provider,
     )
-    return jsonify({"status": "success", "result": result})
+    return (
+        jsonify(
+            {
+                "status": "accepted",
+                "job_id": job.id,
+                "job_url": f"/api/jobs/{job.id}",
+                "message": "Batch metadata enrichment initiated in background",
+            }
+        ),
+        202,
+    )
 
 
 @api_bp.route("/books/<int:book_id>/edit", methods=["POST"])

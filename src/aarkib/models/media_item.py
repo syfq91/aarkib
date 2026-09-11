@@ -18,6 +18,7 @@ from aarkib.models.tag import media_tags
 if TYPE_CHECKING:
     from aarkib.models.collection import Collection
     from aarkib.models.creator import Creator
+    from aarkib.models.library import Library
     from aarkib.models.progress import Bookmark, UserProgress
     from aarkib.models.tag import Tag
 
@@ -42,9 +43,20 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
     )
     series_index: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Library folder metadata
+    library_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("libraries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Relationships
     collection: Mapped[Collection | None] = relationship(
         "Collection", back_populates="media_items"
+    )
+    library: Mapped[Library | None] = relationship(
+        "Library", back_populates="media_items"
     )
     creators: Mapped[list[Creator]] = relationship(
         "Creator", secondary=media_creators, back_populates="media_items"

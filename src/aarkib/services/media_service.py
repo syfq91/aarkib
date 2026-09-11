@@ -233,23 +233,30 @@ def library_path_conditions(library: Library) -> tuple[str, str]:
     return path_prefixes(library.path)
 
 
-def path_match_filter(path: str | Path):
+def path_match_filter(path: str | Path, library: Library | None = None):
     """Return SQLAlchemy OR conditions matching items within a library path."""
     p_res, p_raw = path_prefixes(path)
-    return or_(
+    conditions = [
         MediaItem.original_file_path.startswith(p_res),
         MediaItem.original_file_path.startswith(p_raw),
-    )
+    ]
+    if library and getattr(library, "id", None):
+        conditions.append(MediaItem.library_id == library.id)
+    return or_(*conditions)
 
 
 def count_media_in_library(library: Library) -> int:
     """Count catalog items indexed under a library folder."""
     p_res, p_raw = library_path_conditions(library)
-    cond = or_(
+    conditions = [
         MediaItem.original_file_path.startswith(p_res),
         MediaItem.original_file_path.startswith(p_raw),
+    ]
+    if getattr(library, "id", None):
+        conditions.append(MediaItem.library_id == library.id)
+    return (
+        db.session.scalar(select(func.count(MediaItem.id)).where(or_(*conditions))) or 0
     )
-    return db.session.scalar(select(func.count(MediaItem.id)).where(cond)) or 0
 
 
 count_books_in_library = count_media_in_library

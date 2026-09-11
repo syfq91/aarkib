@@ -537,22 +537,74 @@ document.getElementById("sort-select").addEventListener("change", () => {
   fetchBooks();
 });
 
+function pollBackgroundJob(jobId, onProgress, onComplete, onError) {
+  const poll = async () => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) {
+        onError("Could not fetch job status");
+        return;
+      }
+      const job = await res.json();
+      if (job.status === "running" || job.status === "queued") {
+        if (onProgress) onProgress(job.progress, job.progress_message);
+        setTimeout(poll, 600);
+      } else if (job.status === "completed") {
+        if (onComplete) onComplete(job.result);
+      } else if (job.status === "failed") {
+        if (onError) onError(job.error || "Job execution failed");
+      }
+    } catch (e) {
+      if (onError) onError("Network error while tracking progress");
+    }
+  };
+  setTimeout(poll, 400);
+}
+
 document.getElementById("scan-now-btn").addEventListener("click", async () => {
   const btn = document.getElementById("scan-now-btn");
   btn.disabled = true;
   btn.innerText = "⏳ Scanning...";
   try {
-    const res = await fetch("/api/library/scan", { method: "POST" });
+    const res = await fetch("/api/libraries/scan", { method: "POST" });
     if (res.status === 401) {
       window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname);
       return;
     }
     const data = await res.json();
-    showToast(`Scan complete: ${data.result.scanned} files checked`, "success");
-    setTimeout(() => window.location.reload(), 800);
+    if (res.status === 202 && data.job_id) {
+      showToast("Scan started in background...", "info");
+      pollBackgroundJob(
+        data.job_id,
+        (pct, msg) => {
+          btn.innerText = `⏳ ${Math.round(pct)}%`;
+        },
+        (result) => {
+          const count = result ? (result.scanned || result.added_or_updated || 0) : "";
+          showToast(`Scan complete: ${count} files processed`, "success");
+          btn.disabled = false;
+          btn.innerText = "🔄 Scan";
+          setTimeout(() => window.location.reload(), 900);
+        },
+        (err) => {
+          showToast(err || "Library scan failed", "error");
+          btn.disabled = false;
+          btn.innerText = "🔄 Scan";
+        }
+      );
+    } else if (data.status === "success" || data.result) {
+      const scanned = data.result ? data.result.scanned : (data.scan ? data.scan.scanned : 0);
+      showToast(`Scan complete: ${scanned} files checked`, "success");
+      setTimeout(() => window.location.reload(), 800);
+      btn.disabled = false;
+      btn.innerText = "🔄 Scan";
+    } else {
+      showToast(data.error || "Scan failed", "error");
+      btn.disabled = false;
+      btn.innerText = "🔄 Scan";
+    }
   } catch (err) {
     showToast("Library scan failed", "error");
-  } finally {
     btn.disabled = false;
     btn.innerText = "🔄 Scan";
   }

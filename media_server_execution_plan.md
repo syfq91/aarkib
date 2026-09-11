@@ -236,7 +236,7 @@ Aarkib uses declarative mixins on [`MediaItem`](file:///home/syafiq/code/aarkib/
   * `title`, `sort_title`, `media_type` (`book`, `comic`, `video`, `audio`)
   * `original_file_path` (Indexed, unique), `file_format`, `file_size`, `file_hash` (SHA-256)
   * `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, `created_at`, `updated_at`
-  * *(Planned Phase 3)*: `library_id` (Indexed FK to `libraries.id`, replacing string-prefix filesystem matching)
+  * `library_id` (Indexed FK to `libraries.id`, with bidirectional relationships)
 * [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L123): Video-specific attributes:
   * `duration` (seconds), `resolution_width`, `resolution_height`, `codec`, `season`, `episode`
 * [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L115): Audio & Audiobook attributes:
@@ -445,10 +445,10 @@ gantt
     Core Books, Comics & OPDS Sync       :done, p1, 2026-07, 2026-08
     section Phase 2 (Completed)
     Multi-Media Models & Video/Audio MVP :done, p2, 2026-08, 2026-09
-    section Phase 3 (Next)
-    Background Job Manager & library_id  :active, p3, 2026-09, 2026-10
-    section Phase 4
-    FFmpeg Remuxing, HLS & VAAPI Accel   :p4, 2026-10, 2026-11
+    section Phase 3 (Completed)
+    Background Job Manager & library_id  :done, p3, 2026-09, 2026-10
+    section Phase 4 (Next)
+    FFmpeg Remuxing, HLS & VAAPI Accel   :active, p4, 2026-10, 2026-11
     section Phase 5
     Audiobooks (M4B Chapters) & Playlists:p5, 2026-11, 2026-12
     section Phase 6
@@ -477,12 +477,12 @@ gantt
 - [x] In-browser HTML5 video player with episode navigation and progress resume (`/reader/video/<id>`).
 - [x] Dedicated HTML5 audio player interface with album art and scrubber (`/reader/audio/<id>`).
 
-### Phase 3: Background Job Manager & Relational Refinements `[PLANNED / NEXT]`
-- [ ] Build `services/job_manager.py`: In-process background job supervisor using `concurrent.futures.ThreadPoolExecutor`.
-- [ ] Convert `POST /api/libraries/scan` and `POST /api/libraries/<id>/scan` to return `202 Accepted` with `job_id`.
-- [ ] Create `GET /api/jobs/<job_id>` status and progress endpoint.
-- [ ] Add non-blocking progress spinner / toast notifications in `library.html` and `settings.html`.
-- [ ] Add indexed `library_id` FK on `MediaItem` to replace string path-prefix matching.
+### Phase 3: Background Job Manager & Relational Refinements `[COMPLETED]`
+- [x] Build `services/job_manager.py`: In-process background job supervisor using `concurrent.futures.ThreadPoolExecutor`.
+- [x] Convert `POST /api/libraries/scan` and `POST /api/libraries/<id>/scan` to return `202 Accepted` with `job_id`.
+- [x] Create `GET /api/jobs/<job_id>` status and progress endpoint.
+- [x] Add non-blocking progress spinner / toast notifications in `library.html` and `settings.html`.
+- [x] Add indexed `library_id` FK on `MediaItem` to replace string path-prefix matching.
 
 ### Phase 4: FFmpeg Direct Remuxing, HLS & Hardware Acceleration `[PLANNED]`
 - [ ] Build `services/transcoder.py`: Transcode session supervisor tracking active FFmpeg processes and client heartbeats.

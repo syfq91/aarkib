@@ -178,8 +178,8 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
     assert book_check.status_code == 200
     assert book_check.get_json()["media_type"] == "video"
 
-    # 4. POST /api/libraries/<identifier>/scan - Single library scan
-    scan_res = client.post(f"/api/libraries/{lib_id}/scan")
+    # 4. POST /api/libraries/<identifier>/scan - Single library scan (sync mode)
+    scan_res = client.post(f"/api/libraries/{lib_id}/scan?sync=true")
     assert scan_res.status_code == 200
     assert scan_res.get_json()["status"] == "success"
 

@@ -150,8 +150,8 @@ def test_api_enrich_endpoints(client, app, sample_epub):
         data = res.get_json()
         assert data["status"] == "success"
 
-        # Library enrich
-        res = client.post("/api/library/enrich", json={"overwrite": False})
+        # Library enrich (sync mode)
+        res = client.post("/api/library/enrich?sync=true", json={"overwrite": False})
         assert res.status_code == 200
         data = res.get_json()
         assert data["status"] == "success"
