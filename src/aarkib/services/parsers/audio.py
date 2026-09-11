@@ -378,6 +378,10 @@ def parse_audio(file_path: Path) -> ParsedAudioMetadata:
         meta = parse_flac(file_path)
     elif ext == ".wav":
         meta = parse_wav(file_path)
+    elif ext in (".m4a", ".m4b"):
+        from aarkib.services.parsers.video import read_mp4_metadata
+
+        meta = read_mp4_metadata(file_path)
 
     # Filename fallback for missing fields
     fn_meta = parse_audio_filename(file_path)
@@ -392,6 +396,8 @@ def parse_audio(file_path: Path) -> ParsedAudioMetadata:
     genre = meta.get("genre")
 
     tags: list[str] = ["Audio"]
+    if ext == ".m4b" and "Audiobook" not in tags:
+        tags.append("Audiobook")
     if genre and genre not in tags:
         tags.append(genre)
 

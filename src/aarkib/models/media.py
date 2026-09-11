@@ -82,6 +82,7 @@ class MediaItemMixin:
         return (self.file_format or "").lower() in (
             "mp3",
             "m4a",
+            "m4b",
             "flac",
             "ogg",
             "opus",

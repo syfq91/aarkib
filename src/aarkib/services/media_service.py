@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, select
 from aarkib.extensions import db
 from aarkib.models import Author, Library, MediaItem, Series, Tag
 
-AUDIO_EXTENSIONS = frozenset({"mp3", "m4a", "flac", "ogg", "opus", "wav", "aac"})
+AUDIO_EXTENSIONS = frozenset({"mp3", "m4a", "m4b", "flac", "ogg", "opus", "wav", "aac"})
 VIDEO_EXTENSIONS = frozenset({"mp4", "mkv", "webm", "avi", "mov", "m4v"})
 BOOK_EXTENSIONS = frozenset({"epub", "cbz", "cbr", "zip", "pdf", "mobi", "azw3"})
 MEDIA_TYPE_CHOICES = frozenset({"all", "book", "comic", "video", "audio"})

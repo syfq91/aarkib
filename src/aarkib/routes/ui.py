@@ -28,6 +28,7 @@ ui_bp = Blueprint("ui", __name__)
 
 
 @ui_bp.route("/")
+@ui_bp.route("/library")
 @optional_or_required_auth
 def index():
     authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()

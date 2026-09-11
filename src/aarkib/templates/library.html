@@ -98,12 +98,12 @@
     <div class="shelf-row-wrapper">
       <div class="shelf-row" id="row-in-progress">
         {% for item in in_progress_books %}
-          <a href="{{ item.book.reader_url }}" class="book-card" title="Continue {{ 'watching' if item.book.is_video else 'reading' }} {{ item.book.title }} ({{ item.percentage|round|int }}%)">
+          <a href="{{ item.book.reader_url }}" class="book-card" title="Continue {{ 'watching' if item.book.is_video else ('listening to' if item.book.is_audio else 'reading') }} {{ item.book.title }} ({{ item.percentage|round|int }}%)">
             <div class="book-cover-wrap">
               <img src="/api/books/{{ item.book.id }}/cover" alt="{{ item.book.title }}" class="book-cover-img" loading="lazy">
               <span class="badge-format">{{ item.book.file_format }}</span>
               <span class="badge-progress">{{ item.percentage|round|int }}%</span>
-              <span class="badge-resume">{% if item.book.is_video %}Watch →{% else %}Resume →{% endif %}</span>
+              <span class="badge-resume">{% if item.book.is_video %}Watch →{% elif item.book.is_audio %}Listen →{% else %}Resume →{% endif %}</span>
             </div>
             <div class="progress-bar-container" title="{{ item.percentage|round|int }}% completed">
               <div class="progress-bar-fill" style="width: {{ item.percentage }}%;"></div>

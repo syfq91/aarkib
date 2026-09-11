@@ -71,7 +71,7 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
                 kwargs["media_type"] = MediaType.COMIC.value
             elif fmt in ("mp4", "mkv", "webm", "avi", "mov", "m4v"):
                 kwargs["media_type"] = MediaType.VIDEO.value
-            elif fmt in ("mp3", "m4a", "flac", "ogg", "opus", "wav", "aac"):
+            elif fmt in ("mp3", "m4a", "m4b", "flac", "ogg", "opus", "wav", "aac"):
                 kwargs["media_type"] = MediaType.AUDIO.value
             else:
                 kwargs["media_type"] = MediaType.BOOK.value
@@ -160,13 +160,14 @@ class MediaItem(db.Model, MediaItemMixin, VideoItemMixin, AudioTrackMixin):
         elif (self.file_format or "").lower() in (
             "mp3",
             "m4a",
+            "m4b",
             "flac",
             "ogg",
             "opus",
             "wav",
             "aac",
         ):
-            return f"/player/audio/{self.id}"
+            return f"/reader/audio/{self.id}"
         return f"/reader/epub/{self.id}"
 
     @property

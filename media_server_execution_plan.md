@@ -84,7 +84,7 @@ graph TD
 ### Architectural Principles
 1. **Lightweight & Self-Contained**: Operates effortlessly on low-powered hardware (Raspberry Pi, NAS appliances, mini PCs) without heavy external brokers (no Celery, Redis, or PostgreSQL required). SQLite in Write-Ahead Logging (WAL) mode handles concurrent reads and background worker writes.
 2. **Non-Destructive Storage**: Original media files (`.epub`, `.cbz`, `.mp4`, `.flac`, `.m4b`) are strictly read-only. Extracted covers, posters, thumbnails, e-ink variants, and HLS segments are stored in isolated cache directories.
-3. **Non-Blocking Ingestion**: Heavy operations (library scanning, online metadata enrichment, thumbnail generation, video transcoding) execute asynchronously via a lightweight in-process `JobManager`, keeping HTTP responses instant and non-blocking.
+3. **Non-Blocking Ingestion (Target Architecture)**: Heavy operations (library scanning, online metadata enrichment, thumbnail generation, video transcoding) are designed to execute asynchronously via an in-process `JobManager` (Phase 3), keeping HTTP responses instant and non-blocking (`202 Accepted`).
 4. **Standards-First Interoperability**: Implements established open protocols:
    * **OPDS 1.2** (Atom XML) & **OPDS 2.0** (JSON-LD) for universal e-reader integration (KOReader, Moon+ Reader, Thorium).
    * **OPDS Progression 1.0** for reading progress synchronization with strict conflict resolution.
@@ -233,28 +233,30 @@ erDiagram
 Aarkib uses declarative mixins on [`MediaItem`](file:///home/syafiq/code/aarkib/src/aarkib/models/media_item.py) to represent all media types without schema bloat:
 
 * [`MediaItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L19): Base attributes shared across all formats:
-  * `title`, `sort_title`, `media_type` (`book`, `comic`, `video`, `audiobook`, `music`, `podcast`)
-  * `library_id` (Indexed FK to `libraries.id`, replacing string-prefix filesystem matching)
+  * `title`, `sort_title`, `media_type` (`book`, `comic`, `video`, `audio`)
   * `original_file_path` (Indexed, unique), `file_format`, `file_size`, `file_hash` (SHA-256)
   * `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, `created_at`, `updated_at`
-* [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L108): Video-specific attributes:
+  * *(Planned Phase 3)*: `library_id` (Indexed FK to `libraries.id`, replacing string-prefix filesystem matching)
+* [`VideoItemMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L123): Video-specific attributes:
   * `duration` (seconds), `resolution_width`, `resolution_height`, `codec`, `season`, `episode`
-* [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L98): Audio & Audiobook attributes:
-  * `duration`, `bitrate`, `album`, `track_number`, `disc_number`, `narrator`, `chapters_json`
-* **Comic Attributes**:
-  * `issue_number`, `volume_number`
+* [`AudioTrackMixin`](file:///home/syafiq/code/aarkib/src/aarkib/models/media.py#L115): Audio & Audiobook attributes:
+  * `duration`, `bitrate`, `album`, `track_number`, `disc_number`
+  * *(Planned Phase 5)*: `narrator`, `chapters_json`
+* **Book & Comic Attributes**:
+  * `series_index` (Float), `page_count` (Integer)
+  * *(Planned Phase 5)*: `issue_number`, `volume_number`
 
-### 4.4 User Favorites & Custom Playlists
+### 4.4 User Favorites & Custom Playlists `[PLANNED PHASE 5]`
 * **`UserFavorite`**: Composite table `(user_id, media_item_id, created_at)` allowing users to star/favorite items.
 * **`Playlist`**: `(id, user_id, title, description, media_type, is_public, created_at, updated_at)`
 * **`PlaylistItem`**: `(id, playlist_id, media_item_id, position, added_at)`
 
-### 4.5 Indexing & SQLite FTS5 Full-Text Search
+### 4.5 Indexing & SQLite FTS5 Full-Text Search `[INDEXES LIVE, FTS5 PLANNED PHASE 7]`
 All heavy query dimensions are explicitly indexed:
 * `original_file_path`, `file_hash`, `file_format`, `media_type`
-* Foreign keys: `collection_id`, `library_id`
+* Foreign keys: `collection_id` (and planned `library_id`)
 * Progress lookup: Unique index on `(user_id, media_item_id)` in [`UserProgress`](file:///home/syafiq/code/aarkib/src/aarkib/models/progress.py).
-* **SQLite FTS5**: Virtual table `media_items_fts(title, creators, collection, description, tags)` maintained via SQLite triggers for sub-millisecond search across all media libraries.
+* *(Planned Phase 7)* **SQLite FTS5**: Virtual table `media_items_fts(title, creators, collection, description, tags)` maintained via SQLite triggers for sub-millisecond search across all media libraries.
 
 ---
 

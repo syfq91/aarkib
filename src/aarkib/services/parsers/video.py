@@ -148,7 +148,7 @@ def parse_video_filename(file_path: Path) -> dict[str, Any]:
 def read_mp4_metadata(file_path: Path) -> dict[str, Any]:
     """Pure-Python parser for MP4/MOV container metadata (duration, width, height)."""
     meta: dict[str, Any] = {}
-    if file_path.suffix.lower() not in (".mp4", ".m4v", ".mov"):
+    if file_path.suffix.lower() not in (".mp4", ".m4v", ".mov", ".m4a", ".m4b"):
         return meta
 
     try:

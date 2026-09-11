@@ -56,6 +56,7 @@ DEFAULT_EXTENSIONS = {
     ".m4v",
     ".mp3",
     ".m4a",
+    ".m4b",
     ".flac",
     ".ogg",
     ".opus",

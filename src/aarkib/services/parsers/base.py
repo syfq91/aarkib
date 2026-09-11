@@ -116,7 +116,16 @@ def extract_metadata_from_file(file_path: Path) -> BaseParsedMetadata | None:
         from aarkib.services.parsers.video import parse_video
 
         return parse_video(file_path)
-    elif ext in (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac"):
+    elif ext in (
+        ".mp3",
+        ".m4a",
+        ".m4b",
+        ".flac",
+        ".ogg",
+        ".opus",
+        ".wav",
+        ".aac",
+    ):
         from aarkib.services.parsers.audio import parse_audio
 
         return parse_audio(file_path)

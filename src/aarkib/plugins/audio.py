@@ -18,6 +18,7 @@ class AudioMediaPlugin(MediaPlugin):
     supported_extensions = {
         ".mp3",
         ".m4a",
+        ".m4b",
         ".flac",
         ".ogg",
         ".opus",

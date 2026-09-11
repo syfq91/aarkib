@@ -20,14 +20,35 @@ def test_audio_plugin_metadata():
     assert plugin.name == "audio"
     assert plugin.media_type == "audio"
     assert ".mp3" in plugin.supported_extensions
+    assert ".m4a" in plugin.supported_extensions
+    assert ".m4b" in plugin.supported_extensions
     assert ".flac" in plugin.supported_extensions
     assert ".wav" in plugin.supported_extensions
-    assert plugin.get_player_url(55, "mp3") == "/reader/audio/55"
+    assert plugin.get_player_url(55, "m4b") == "/reader/audio/55"
 
     health = plugin.check_health()
     assert health["status"] == "ok"
     assert health["plugin"] == "audio"
-    assert ".mp3" in health["supported_extensions"]
+    assert ".m4b" in health["supported_extensions"]
+
+
+def test_m4b_audiobook_parsing(tmp_path: Path):
+    m4b_file = tmp_path / "Brandon Sanderson - Mistborn 01 - The Final Empire.m4b"
+    m4b_file.write_bytes(b"\x00" * 100)
+
+    meta = parse_audio(m4b_file)
+    assert meta.media_type == "audio"
+    assert meta.file_format == "m4b"
+    assert "Audiobook" in meta.tags
+    assert "The Final Empire" in meta.title or "Mistborn" in meta.title
+    item = MediaItem(
+        title=meta.title,
+        original_file_path=str(m4b_file),
+        file_format=meta.file_format,
+        file_hash="fakehashm4b",
+    )
+    assert item.is_audio is True
+    assert item.player_url == f"/reader/audio/{item.id}"
 
 
 def test_audio_filename_parsing():
