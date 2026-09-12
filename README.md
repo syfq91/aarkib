@@ -182,6 +182,10 @@ Aarkib exposes clean, unified REST APIs across all media types:
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
 | `/api/libraries/enrich` | `POST` | Enrich catalog items across configured media folders. |
 | `/api/media/<id>/enrich` | `POST` | Enrich a single media item with online metadata. |
+| `/api/settings` | `GET`, `PATCH` | Retrieve or dynamically update runtime preferences (auth, auto-scan, watcher, enrichment, page size). |
+| `/api/settings/reset` | `POST` | Reset runtime settings to environment defaults. |
+| `/api/favorites` | `GET` | List favorited media items for the authenticated user. |
+| `/api/playlists` | `GET`, `POST` | View or create media playlists. |
 | `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 
 ---
@@ -191,9 +195,10 @@ Aarkib exposes clean, unified REST APIs across all media types:
 Aarkib is engineered for unified, web-first administration. All management tasks are conducted directly in the responsive Web UI:
 
 - **First-Run Setup**: On first launch, navigating to `http://localhost:5000` prompts you to create the initial **Administrator** account.
+- **System & Library Preferences**: Fine-tune authentication requirements, user registration, startup scans, real-time filesystem watchers, metadata providers, and catalog page size dynamically under **Settings** $\to$ **System & Library Preferences** (`/settings#system-preferences`).
 - **User & Role Management**: Navigate to **Settings** $\to$ **User Management** (`/settings#users`) to create accounts, toggle Administrator/Reader privileges, reset passwords, or remove accounts.
-- **Library Scanning**: Navigate to **Settings** $\to$ **Library Tools** to trigger a full rescan or scan individual folders on demand.
-- **Search Indexing**: Rebuild the SQLite FTS5 full-text search index at any time with a single click under **Library Tools**.
+- **Media Folders & Libraries**: Configure media storage paths, set media types (books, comics, video, mixed), and rescan targeted folders.
+- **Library Scanning & Indexing**: Navigate to **Settings** $\to$ **Library Tools** to trigger a full rescan or rebuild the SQLite FTS5 search index.
 - **Metadata Enrichment**: Enrich media items with covers, summaries, and tags from Google Books, Open Library, TMDB, or MusicBrainz either library-wide or per-item.
 
 ---
@@ -201,7 +206,7 @@ Aarkib is engineered for unified, web-first administration. All management tasks
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (151 tests)
+# Run pytest test suite (157 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff

@@ -75,45 +75,58 @@ graph TD
 ```text
 aarkib/
 ├── src/aarkib/
-│   ├── __init__.py           # Flask app factory (create_app), DB migrations, CLI commands
+│   ├── __init__.py           # Flask app factory (create_app), DB auto-migrations, server runner
 │   ├── config.py             # Config dataclass, defaults, and AARKIB_MEDIA_DIR* multi-folder discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
-│   │   ├── __init__.py       # Model exports and aliases (MediaItem, Creator, Collection, Tag, User, Library, UserProgress)
+│   │   ├── __init__.py       # Model exports and aliases (MediaItem, Creator, Collection, Tag, User, Library, SystemSetting)
 │   │   ├── media_item.py     # Canonical MediaItem model (media_items table) unifying books, comics, video, and audio
 │   │   ├── creator.py        # Creator model (creators table) and media_creators association table
 │   │   ├── collection.py     # Collection model (collections table) for series, shows, albums
 │   │   ├── tag.py            # Tag model (tags table) and media_tags association table
 │   │   ├── library.py        # Library model (libraries table)
+│   │   ├── setting.py        # SystemSetting model (settings table) for persistent WebUI preferences
+│   │   ├── playlist.py       # Playlist and PlaylistItem models
+│   │   ├── job.py            # BackgroundJob persistent model for asynchronous tasks
+│   │   ├── metadata_cache.py # Online metadata response cache
 │   │   ├── media.py          # MediaItemMixin, PlayableItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum
-│   │   ├── user.py           # User model (users table)
+│   │   ├── user.py           # User and UserFavorite models
 │   │   └── progress.py       # UserProgress (user_progress table) and Bookmark (bookmarks table)
 │   ├── plugins/
 │   │   ├── __init__.py       # Plugin registry initialization and exports
 │   │   ├── base.py           # MediaPlugin abstract base class and PluginRegistry
 │   │   ├── book.py           # BookMediaPlugin (EPUB, CBZ, CBR, ZIP metadata, covers, player URLs)
 │   │   ├── video.py          # VideoMediaPlugin (MP4, MKV, WEBM, AVI, MOV, M4V metadata, covers, player URLs)
-│   │   └── audio.py          # AudioMediaPlugin (MP3, M4A, FLAC, OGG, OPUS, WAV, AAC metadata, covers, player URLs)
+│   │   ├── audio.py          # AudioMediaPlugin (MP3, M4A, FLAC, OGG, OPUS, WAV, AAC metadata, covers, player URLs)
+│   │   └── podcast.py        # PodcastMediaPlugin for RSS audio podcast feeds
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
 │   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
-│   │   ├── api.py            # REST endpoints: media items CRUD, stream, progress, metadata, scan, /health
-│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, Video (HTML5 player), and Audio (HTML5 player)
-│   │   └── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
+│   │   ├── api.py            # Unified REST endpoints: media CRUD, streams, progress, favorites, playlists, settings, /health
+│   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, Video, Audio, and Podcasts
+│   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
+│   │   └── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
 │   ├── services/
 │   │   ├── __init__.py
+│   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
+│   │   ├── job_manager.py    # Asynchronous background job manager and task queue
 │   │   ├── scanner.py        # Recursive multi-dir crawler, watchdog watcher, SHA-256 hash deduction, cover caching (.webp)
+│   │   ├── search.py         # SQLite FTS5 full-text search engine and query builder
+│   │   ├── transcoder.py     # On-demand video/audio remuxing and HLS adaptive streaming supervisor
 │   │   ├── optimizer.py      # E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
-│   │   ├── enricher.py       # Google Books & Open Library metadata enrichment client
+│   │   ├── enricher.py       # Multi-source metadata enrichment client
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
-│   │   ├── media_service.py  # Canonical multi-media service: edit_media_metadata, resolve creators/collections/tags, slug generation, path filtering, count_media
+│   │   ├── opml.py           # OPML podcast feed import and parser
+│   │   ├── media_service.py  # Canonical multi-media service: edit metadata, resolve creators/collections/tags, slugs
+│   │   ├── metadata/         # Pluggable metadata client, rate limiter, cache, and provider implementations
 │   │   └── parsers/
-│   │       ├── base.py       # BaseParsedMetadata, ParsedBookMetadata, ParsedVideoMetadata, ParsedAudioMetadata dataclasses
+│   │       ├── base.py       # BaseParsedMetadata and media-specific metadata dataclasses
 │   │       ├── epub.py       # EPUB 2/3 XML & OPF metadata, cover extractor, collection/series parser
 │   │       ├── cbz.py        # CBZ archive extractor, natural image sorting, ComicInfo.xml parser
 │   │       ├── video.py      # Video container metadata (duration, dimensions) and technical inspection
-│   │       └── audio.py      # Pure-Python ID3v2 (MP3), FLAC, and WAV audio metadata and cover extractor
+│   │       ├── audio.py      # Pure-Python ID3v2 (MP3), FLAC, and WAV audio metadata and cover extractor
+│   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css       # Core design system, top navbar, user dropdown, mobile bottom nav, themes
@@ -134,30 +147,43 @@ aarkib/
 │       ├── authors.html      # Creators / Authors grid & volume count
 │       ├── series.html       # Collections / Series grid & volume count
 │       ├── tags.html         # Categories & genre tags
-│       ├── settings.html     # Consolidated OPDS info, storage stats, metadata tools, admin user management
+│       ├── settings.html     # System preferences, OPDS feeds, storage stats, media folders, user management
 │       ├── reader_epub.html  # Dedicated EPUB web reader interface
 │       ├── reader_cbz.html   # Dedicated CBZ comic web reader interface
 │       ├── reader_video.html # Dedicated HTML5 video player interface
 │       ├── player_audio.html # Dedicated HTML5 audio player interface with album art and scrubber
+│       ├── player_audiobook.html # Audiobook player with chapter navigation
+│       ├── player_podcast.html # Podcast player with episode playlist
 │       ├── login.html        # Authentication login view
 │       ├── register.html     # User registration view
 │       ├── profile.html      # User profile, reading/listening statistics, password change
 │       ├── users.html        # Admin user management view
 │       └── opds/             # Jinja XML templates for OPDS 1.2 catalog feeds
 ├── tests/
-│   ├── conftest.py           # Pytest fixtures (sample EPUB & CBZ generator, test client, app)
-│   ├── test_api.py           # REST endpoints testing (CRUD, streams, filters, types, metadata edits)
+│   ├── conftest.py           # Pytest fixtures (sample media generator, test client, app)
+│   ├── test_api.py           # Unified REST endpoints testing
 │   ├── test_audio.py         # Audio parsing, audio plugin, and web audio player testing
 │   ├── test_auth.py          # Authentication, roles, registration, user isolation tests
-│   ├── test_enricher.py      # Google Books & Open Library parsing tests
-│   ├── test_main.py          # App creation and CLI command tests
+│   ├── test_enricher.py      # Metadata parsing tests
+│   ├── test_job_manager.py   # Asynchronous background jobs and task runner tests
+│   ├── test_main.py          # App creation and server launcher tests
+│   ├── test_metadata.py      # Pluggable metadata providers, cache, and rate limiter tests
 │   ├── test_models.py        # Database models & relationships tests
 │   ├── test_opds.py          # OPDS 1.2, OPDS 2.0, Authentication, Progression 1.0 tests
+│   ├── test_opml.py          # OPML import and podcast feed parsing tests
 │   ├── test_optimizer.py     # E-ink EPUB optimization tests
-│   ├── test_parsers.py       # EPUB and CBZ parser tests
+│   ├── test_parsers.py       # EPUB, CBZ, Audio, and Video parser tests
+│   ├── test_playlists.py     # Playlist CRUD and queue manipulation tests
 │   ├── test_plugins.py       # MediaPlugin & PluginRegistry tests
+│   ├── test_podcast.py       # Podcast playback and feed parsing tests
+│   ├── test_podcast_metadata.py # Podcast online enrichment tests
 │   ├── test_scanner.py       # Scanner & multi-directory environment tests
-│   └── test_ui.py            # UI routes & authentication redirection tests
+│   ├── test_search.py        # FTS5 full-text search indexing and query tests
+│   ├── test_settings.py      # Dynamic system settings, validation, and REST API tests
+│   ├── test_subsonic.py      # Subsonic API endpoint compatibility tests
+│   ├── test_transcoder.py    # FFmpeg remuxing and HLS stream generation tests
+│   ├── test_ui.py            # UI routes & authentication redirection tests
+│   └── test_video.py         # Video plugin, seeking, and playback tests
 ├── pyproject.toml            # Project metadata, dependencies, and ruff/pytest configurations
 ├── Dockerfile                # Multi-stage production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
@@ -211,6 +237,12 @@ aarkib/
    * Users manage media by placing files into mounted storage folders (`./data/media`, `./data/books`, NAS mounts).
    * Filesystem watcher and scanner service automatically detect additions, modifications, and deletions without a manual upload web form.
 
+9. **Dynamic System Preferences & Settings Service**:
+   * Runtime options (`AUTH_REQUIRED`, `ALLOW_REGISTRATION`, `AUTO_SCAN_ON_START`, `WATCH_LIBRARY`, `AUTO_ENRICH`, `METADATA_PROVIDER`, `PAGE_SIZE`) are managed via `settings_service.py` backed by the `SystemSetting` table.
+   * Precedence: `Database (WebUI)` > `Environment Variables (.env)` > `Hardcoded Defaults`.
+   * Modifying settings via `PATCH /api/settings` immediately updates in-memory `current_app.config` without restarting the server, and dynamically starts/stops the library watcher thread if `WATCH_LIBRARY` was toggled.
+   * `POST /api/settings/reset` clears database overrides and restores baseline environment values.
+
 ---
 
 ## 🛠️ Developer & Agent Commands
@@ -229,12 +261,9 @@ uv run pytest
 uv run ruff check --fix .
 uv run ruff format .
 
-# Re-scan local book directory
-uv run aarkib scan --enrich
-
-# Manage users from CLI
-uv run aarkib create-user --username admin --password pass --admin
-uv run aarkib list-users
+# Check code formatting without modifying
+uv run ruff check .
+uv run ruff format --check .
 ```
 
 ---

@@ -258,6 +258,29 @@ Aarkib features a decoupled, extensible plugin architecture designed to manage d
    - **HTTP 206 Streaming**: Custom `send_byte_range()` implementation supporting arbitrary chunk seeking, playback resume, and fast forward / rewind.
    - **In-Browser HTML5 Player** (`/reader/video/<id>`): Dedicated responsive player with keyboard shortcuts, speed options (0.75x–2.0x), automatic next-episode countdown, and real-time playback position sync.
 
+### 3.8 Dynamic System Preferences & Settings Service (`services/settings_service.py`)
+
+Aarkib decouples runtime application preferences from static environment configuration. Key operational controls are managed via a database-backed settings architecture:
+
+1. **Managed Runtime Settings**:
+   - `AUTH_REQUIRED` (bool): Require visitor authentication to browse, stream, download, or access OPDS.
+   - `ALLOW_REGISTRATION` (bool): Enable or disable public account registration on the login screen.
+   - `AUTO_SCAN_ON_START` (bool): Automatically trigger a full library scan at server startup.
+   - `WATCH_LIBRARY` (bool): Enable or disable the real-time background `watchdog` observer.
+   - `AUTO_ENRICH` (bool): Automatically fetch online metadata during library scans.
+   - `METADATA_PROVIDER` (str): Online provider selector (`all`, `googlebooks`, `openlibrary`).
+   - `PAGE_SIZE` (int): Catalog items per page.
+
+2. **Precedence Hierarchy**:
+   `WebUI Settings (Database)` $\to$ `Environment Variables (.env)` $\to$ `Hardcoded Defaults`.
+   If a setting has been modified via the Web UI, its persisted value in the `settings` SQLite table overrides the `.env` value. Unconfigured settings seamlessly fall back to `.env` variables or built-in defaults.
+
+3. **Hot-Reloading & Live Synchronization**:
+   - At startup, `load_settings_into_config(app)` injects all database overrides into Flask's `app.config`.
+   - Modifying settings via `PATCH /api/settings` immediately commits to SQLite and updates `app.config` in-memory without restarting the server.
+   - Toggling `WATCH_LIBRARY` dynamically starts or stops the background `watchdog.Observer` thread on the fly.
+   - Admins can revert all customizations to environment defaults at any time via `POST /api/settings/reset`.
+
 ---
 
 ## 4. Data Models & Entity Relationship
@@ -348,10 +371,12 @@ erDiagram
 
 ### Multi-Media Schema Mixins & Models (`models/`)
 - **`Library` (`models/library.py`)**: Persistent media library directory configuration (`slug`, `name`, `path`, `media_type`).
-- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus planned relational `library_id` FK.
+- **`SystemSetting` (`models/setting.py`)**: Key-value application configuration store (`key`, `value`, `updated_at`) supporting runtime WebUI overrides with dynamic in-memory hot-reloading into Flask's `app.config`.
+- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus relational `library_id` FK.
 - **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
-- **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and planned `narrator` + `chapters_json`.
-- **Curation Models (Planned)**: `UserFavorite` for starring media items and `Playlist` / `PlaylistItem` for custom audio/video collections.
+- **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and `chapters_json`.
+- **`BackgroundJob` (`models/job.py`)**: Persistent background task tracking (`task_id`, `job_type`, `status`, `progress`, `result_json`, timestamps).
+- **Curation Models**: `UserFavorite` (`models/user.py`) for starring media items and `Playlist` / `PlaylistItem` (`models/playlist.py`) for custom media collections.
 
 ### Database Pragmas & Concurrency
 - Configured with SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).
