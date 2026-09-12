@@ -445,4 +445,3 @@ def test_library_media_types_movie_tv_podcast_and_books(
         assert cbz_model.is_comic is True
         assert cbz_model.is_book is False
         assert "/reader/cbz/" in cbz_model.player_url
-
