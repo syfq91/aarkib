@@ -119,6 +119,33 @@ class ParsedMusicMetadata(ParsedAudioMetadata):
         self.media_type = "music"
 
 
+@dataclass
+class ParsedPodcastMetadata(ParsedAudioMetadata):
+    """Podcast episode parsed metadata."""
+
+    episode: int | None = None
+    season: int | None = None
+    episode_type: str | None = None  # full, trailer, bonus
+    feed_url: str | None = None
+    guid: str | None = None
+    show_title: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.media_type = "podcast"
+        if self.show_title and not self.series:
+            self.series = self.show_title
+        elif self.series and not self.show_title:
+            self.show_title = self.series
+        if self.series_index is None and self.episode is not None:
+            self.series_index = float(self.episode)
+        elif self.episode is None and self.series_index is not None:
+            try:
+                self.episode = int(self.series_index)
+            except ValueError, TypeError:
+                pass
+
+
 ParserFunc = Callable[[Path], BaseParsedMetadata | None]
 PARSER_REGISTRY: dict[str, ParserFunc] = {}
 

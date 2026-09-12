@@ -26,6 +26,7 @@ MEDIA_GROUPS = [
     {"key": "video", "label": "Movies & TV Shows", "icon": "🎬"},
     {"key": "book", "label": "Books", "icon": "📚"},
     {"key": "audiobook", "label": "Audiobooks", "icon": "🎧"},
+    {"key": "podcast", "label": "Podcasts & Shows", "icon": "🎙️"},
     {"key": "comic", "label": "Comics & Manga", "icon": "🎨"},
     {"key": "music", "label": "Music", "icon": "🎵"},
 ]
@@ -359,6 +360,8 @@ def search_grouped(
             target_key = "comic"
         elif m_type == "audiobook" or fmt == "m4b":
             target_key = "audiobook"
+        elif m_type == "podcast":
+            target_key = "podcast"
         elif m_type == "music" or (m_type == "audio" and fmt != "m4b"):
             target_key = "music"
         else:

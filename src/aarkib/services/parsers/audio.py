@@ -130,6 +130,30 @@ def parse_id3v2(file_path: Path) -> dict[str, Any]:
                 meta["year"] = _decode_id3_text(text_data, enc)[:4]
             elif frame_id == "TCON":
                 meta["genre"] = _decode_id3_text(text_data, enc)
+            elif frame_id == "PCST":
+                meta["is_podcast"] = True
+            elif frame_id == "TGID":
+                meta["podcast_guid"] = _decode_id3_text(text_data, enc)
+            elif frame_id == "WFED":
+                meta["podcast_feed_url"] = _decode_id3_text(text_data, enc)
+            elif frame_id == "TDES":
+                meta["description"] = _decode_id3_text(text_data, enc)
+            elif frame_id in ("COMM", "USLT") and "description" not in meta:
+                try:
+                    cdata = text_data[3:]  # Skip 3-byte language code
+                    if enc in (1, 2):
+                        null_idx = cdata.find(b"\x00\x00")
+                        if null_idx != -1:
+                            cdata = cdata[null_idx + 2 :]
+                    else:
+                        null_idx = cdata.find(b"\x00")
+                        if null_idx != -1:
+                            cdata = cdata[null_idx + 1 :]
+                    comm_txt = _decode_id3_text(cdata, enc).strip()
+                    if comm_txt:
+                        meta["description"] = comm_txt
+                except Exception:
+                    pass
             elif frame_id == "TLEN":
                 try:
                     meta["duration"] = round(
@@ -691,6 +715,17 @@ def parse_audio(file_path: Path) -> ParsedAudioMetadata:
             file_format=ext.lstrip("."),
             publication_date=year,
         )
+
+    is_podcast = bool(
+        meta.get("is_podcast")
+        or meta.get("podcast_feed_url")
+        or meta.get("podcast_guid")
+        or (genre and "podcast" in genre.lower())
+    )
+    if is_podcast:
+        from aarkib.services.parsers.podcast import parse_podcast
+
+        return parse_podcast(file_path)
 
     return ParsedMusicMetadata(
         title=title,

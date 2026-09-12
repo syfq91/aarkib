@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ item.title }}{% if item.series %} - {{ item.series.name }}{% endif %} - Aarkib Podcast Player</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .podcast-page {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 1.5rem 2.5rem 1.5rem;
+      box-sizing: border-box;
+      background: radial-gradient(circle at center top, #1e1b4b 0%, #0b0f19 80%);
+      position: relative;
+    }
+
+    .player-header {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .round-btn {
+      color: #f8fafc;
+      text-decoration: none;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .round-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .round-btn:active {
+      transform: scale(0.95);
+    }
+
+    .header-center {
+      text-align: center;
+      flex: 1;
+      padding: 0 1rem;
+    }
+    .header-badge {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #a5b4fc;
+      font-weight: 700;
+    }
+    .header-series {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cover-box {
+      width: 280px;
+      height: 280px;
+      max-width: 68vw;
+      max-height: 68vw;
+      border-radius: 1.25rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1e1b4b;
+      margin: auto 0;
+      position: relative;
+    }
+    .cover-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .cover-fallback {
+      font-size: 5rem;
+      color: #6366f1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+    }
+
+    .player-content {
+      width: 100%;
+      max-width: 680px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+      z-index: 10;
+    }
+
+    .info-section {
+      text-align: center;
+      width: 100%;
+      padding: 0 1rem;
+    }
+    .episode-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      margin-bottom: 0.4rem;
+    }
+    .item-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin: 0 0 0.3rem 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .item-creator {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Scrubber */
+    .scrubber-wrap {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .progress-bar-container {
+      position: relative;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #6366f1;
+      border-radius: 4px;
+      width: 0%;
+      position: relative;
+      transition: width 0.1s linear;
+    }
+    .progress-handle {
+      position: absolute;
+      right: -6px;
+      top: -4px;
+      width: 16px;
+      height: 16px;
+      background: #f8fafc;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .progress-bar-container:hover .progress-handle {
+      opacity: 1;
+    }
+    .time-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-variant-numeric: tabular-nums;
+      color: #94a3b8;
+    }
+
+    /* Main Controls */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      width: 100%;
+    }
+    .main-btn {
+      color: #f8fafc;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s, color 0.2s;
+    }
+    .main-btn:hover {
+      color: #a5b4fc;
+    }
+    .main-btn:active {
+      transform: scale(0.92);
+    }
+    .play-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #ffffff;
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
+    }
+    .play-btn:hover {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+    .jump-btn {
+      font-size: 1rem;
+      font-weight: 700;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .jump-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+    }
+
+    /* Utility row */
+    .util-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 0.5rem;
+    }
+    .pill-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: #cbd5e1;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: background 0.2s;
+    }
+    .pill-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+    }
+
+    /* Modals / Drawers */
+    .drawer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      max-height: 70vh;
+      background: #111827;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1.5rem 1.5rem 0 0;
+      box-shadow: 0 -20px 40px rgba(0,0,0,0.8);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(105%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer.open {
+      transform: translateY(0);
+    }
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .drawer-title {
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin: 0;
+    }
+    .drawer-body {
+      padding: 1.25rem 1.5rem;
+      overflow-y: auto;
+      line-height: 1.6;
+      color: #cbd5e1;
+      font-size: 0.95rem;
+    }
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 90;
+    }
+    .drawer-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .episode-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.8rem 1rem;
+      border-radius: 0.5rem;
+      color: #cbd5e1;
+      text-decoration: none;
+      transition: background 0.15s;
+      margin-bottom: 0.3rem;
+    }
+    .episode-list-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+    }
+    .episode-list-item.active {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="podcast-page">
+    <!-- Header -->
+    <div class="player-header">
+      <a href="{% if item.series %}/series{% else %}/{% endif %}" class="round-btn" title="Back">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </a>
+      <div class="header-center">
+        <div class="header-badge">Podcast</div>
+        <div class="header-series">{% if item.series %}{{ item.series.name }}{% else %}{{ item.creators_display }}{% endif %}</div>
+      </div>
+      <button class="round-btn" id="open-episodes-btn" title="Episode List">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+      </button>
+    </div>
+
+    <!-- Artwork -->
+    <div class="cover-box">
+      {% if item.cover_image_path %}
+        <img class="cover-img" src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}">
+      {% else %}
+        <div class="cover-fallback">🎙️</div>
+      {% endif %}
+    </div>
+
+    <!-- Controls & Info -->
+    <div class="player-content">
+      <div class="info-section">
+        {% if item.episode or item.season %}
+          <div class="episode-badge">
+            {% if item.season %}S{{ item.season }}{% endif %}{% if item.episode %}E{{ item.episode }}{% endif %}
+          </div>
+        {% endif %}
+        <h1 class="item-title">{{ item.title }}</h1>
+        <p class="item-creator">{{ item.creators_display }}</p>
+      </div>
+
+      <!-- Scrubber -->
+      <div class="scrubber-wrap">
+        <div class="progress-bar-container" id="progress-container">
+          <div class="progress-fill" id="progress-fill">
+            <div class="progress-handle"></div>
+          </div>
+        </div>
+        <div class="time-labels">
+          <span id="current-time">0:00</span>
+          <span id="remaining-time">-0:00</span>
+        </div>
+      </div>
+
+      <!-- Main Controls -->
+      <div class="controls-row">
+        {% if prev_episode %}
+          <a href="/reader/podcast/{{ prev_episode.id }}" class="main-btn" title="Previous Episode">
+            <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+          </a>
+        {% else %}
+          <div style="width: 24px;"></div>
+        {% endif %}
+
+        <button class="main-btn jump-btn" id="jump-back-btn" title="Jump Back 15s">
+          -15s
+        </button>
+
+        <button class="main-btn play-btn" id="play-btn" title="Play">
+          <svg id="play-icon" width="32" height="32" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="pause-icon" width="32" height="32" fill="currentColor" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+
+        <button class="main-btn jump-btn" id="jump-fwd-btn" title="Skip Forward 30s">
+          +30s
+        </button>
+
+        {% if next_episode %}
+          <a href="/reader/podcast/{{ next_episode.id }}" class="main-btn" title="Next Episode">
+            <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </a>
+        {% else %}
+          <div style="width: 24px;"></div>
+        {% endif %}
+      </div>
+
+      <!-- Utilities -->
+      <div class="util-row">
+        <button class="pill-btn" id="speed-btn" title="Playback Speed">1.0×</button>
+        <button class="pill-btn" id="notes-btn" title="Show Notes">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          Notes
+        </button>
+        <button class="pill-btn" id="sleep-btn" title="Sleep Timer">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+          Sleep
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Element -->
+  <audio id="podcast-audio" src="/api/media/{{ item.id }}/stream" preload="metadata"></audio>
+
+  <!-- Overlay -->
+  <div class="drawer-overlay" id="overlay"></div>
+
+  <!-- Show Notes Drawer -->
+  <div class="drawer" id="notes-drawer">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Episode Notes</h2>
+      <button class="round-btn" id="close-notes-btn">✕</button>
+    </div>
+    <div class="drawer-body">
+      {% if item.description %}
+        <div>{{ item.description | replace('\n', '<br>') | safe }}</div>
+      {% else %}
+        <p style="color: #64748b; font-style: italic;">No show notes available for this episode.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Episode List Drawer -->
+  <div class="drawer" id="episodes-drawer">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Episodes in Show</h2>
+      <button class="round-btn" id="close-episodes-btn">✕</button>
+    </div>
+    <div class="drawer-body">
+      {% for ep in all_episodes %}
+        <a href="/reader/podcast/{{ ep.id }}" class="episode-list-item {% if ep.id == item.id %}active{% endif %}">
+          <span>{% if ep.episode %}Ep {{ ep.episode }} - {% endif %}{{ ep.title }}</span>
+          <span style="font-size: 0.8rem; color: #64748b;">{{ ep.formatted_duration }}</span>
+        </a>
+      {% else %}
+        <p style="color: #64748b;">No sibling episodes found.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const audio = document.getElementById('podcast-audio');
+      const playBtn = document.getElementById('play-btn');
+      const playIcon = document.getElementById('play-icon');
+      const pauseIcon = document.getElementById('pause-icon');
+      const jumpBackBtn = document.getElementById('jump-back-btn');
+      const jumpFwdBtn = document.getElementById('jump-fwd-btn');
+      const progressContainer = document.getElementById('progress-container');
+      const progressFill = document.getElementById('progress-fill');
+      const currentTimeLabel = document.getElementById('current-time');
+      const remainingTimeLabel = document.getElementById('remaining-time');
+      const speedBtn = document.getElementById('speed-btn');
+      const notesBtn = document.getElementById('notes-btn');
+      const notesDrawer = document.getElementById('notes-drawer');
+      const closeNotesBtn = document.getElementById('close-notes-btn');
+      const episodesBtn = document.getElementById('open-episodes-btn');
+      const episodesDrawer = document.getElementById('episodes-drawer');
+      const closeEpisodesBtn = document.getElementById('close-episodes-btn');
+      const sleepBtn = document.getElementById('sleep-btn');
+      const overlay = document.getElementById('overlay');
+
+      const itemId = {{ item.id }};
+      const initialTime = {{ initial_time or 0.0 }};
+      const speeds = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+      let speedIdx = 1;
+      let sleepTimer = null;
+
+      function formatTime(sec) {
+        if (!sec || isNaN(sec) || sec < 0) sec = 0;
+        const s = Math.floor(sec);
+        const m = Math.floor(s / 60);
+        const h = Math.floor(m / 60);
+        const remM = m % 60;
+        const remS = s % 60;
+        if (h > 0) {
+          return `${h}:${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+        }
+        return `${remM}:${remS.toString().padStart(2, '0')}`;
+      }
+
+      // Initial progress restore
+      audio.addEventListener('loadedmetadata', function() {
+        if (initialTime > 0 && initialTime < audio.duration) {
+          audio.currentTime = initialTime;
+        }
+        updateTimeUI();
+      });
+
+      function updateTimeUI() {
+        const cur = audio.currentTime;
+        const dur = audio.duration || 0;
+        currentTimeLabel.textContent = formatTime(cur);
+        remainingTimeLabel.textContent = dur > 0 ? `-${formatTime(dur - cur)}` : '-0:00';
+        const pct = dur > 0 ? (cur / dur) * 100 : 0;
+        progressFill.style.width = pct + '%';
+      }
+
+      audio.addEventListener('timeupdate', updateTimeUI);
+
+      // Play / Pause
+      playBtn.addEventListener('click', function() {
+        if (audio.paused) {
+          audio.play();
+        } else {
+          audio.pause();
+        }
+      });
+
+      audio.addEventListener('play', function() {
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = 'block';
+      });
+
+      audio.addEventListener('pause', function() {
+        playIcon.style.display = 'block';
+        pauseIcon.style.display = 'none';
+      });
+
+      // Jump controls
+      jumpBackBtn.addEventListener('click', function() {
+        audio.currentTime = Math.max(0, audio.currentTime - 15);
+      });
+
+      jumpFwdBtn.addEventListener('click', function() {
+        const dur = audio.duration || Infinity;
+        audio.currentTime = Math.min(dur, audio.currentTime + 30);
+      });
+
+      // Scrubber seeking
+      progressContainer.addEventListener('click', function(e) {
+        const rect = progressContainer.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const pct = Math.max(0, Math.min(1, clickX / rect.width));
+        if (audio.duration) {
+          audio.currentTime = pct * audio.duration;
+        }
+      });
+
+      // Speed control
+      speedBtn.addEventListener('click', function() {
+        speedIdx = (speedIdx + 1) % speeds.length;
+        const spd = speeds[speedIdx];
+        audio.playbackRate = spd;
+        speedBtn.textContent = spd + '×';
+      });
+
+      // Sleep timer
+      const sleepDurations = [0, 15, 30, 45, 60];
+      let sleepIdx = 0;
+      sleepBtn.addEventListener('click', function() {
+        sleepIdx = (sleepIdx + 1) % sleepDurations.length;
+        const mins = sleepDurations[sleepIdx];
+        if (sleepTimer) clearTimeout(sleepTimer);
+
+        if (mins === 0) {
+          sleepBtn.textContent = 'Sleep';
+        } else {
+          sleepBtn.textContent = mins + 'm';
+          sleepTimer = setTimeout(function() {
+            audio.pause();
+            sleepBtn.textContent = 'Sleep';
+            sleepIdx = 0;
+          }, mins * 60 * 1000);
+        }
+      });
+
+      // Drawers
+      function closeDrawers() {
+        notesDrawer.classList.remove('open');
+        episodesDrawer.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+
+      notesBtn.addEventListener('click', function() {
+        notesDrawer.classList.add('open');
+        overlay.classList.add('open');
+      });
+      closeNotesBtn.addEventListener('click', closeDrawers);
+
+      episodesBtn.addEventListener('click', function() {
+        episodesDrawer.classList.add('open');
+        overlay.classList.add('open');
+      });
+      closeEpisodesBtn.addEventListener('click', closeDrawers);
+      overlay.addEventListener('click', closeDrawers);
+
+      // Keyboard shortcuts
+      window.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.code === 'Space') {
+          e.preventDefault();
+          playBtn.click();
+        } else if (e.code === 'ArrowLeft') {
+          e.preventDefault();
+          jumpBackBtn.click();
+        } else if (e.code === 'ArrowRight') {
+          e.preventDefault();
+          jumpFwdBtn.click();
+        }
+      });
+
+      // Progress sync
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      function saveProgress() {
+        const cur = audio.currentTime;
+        const dur = audio.duration || 0;
+        const pct = dur > 0 ? (cur / dur) * 100 : 0;
+        fetch(`/api/media/${itemId}/progress`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || '',
+          },
+          body: JSON.stringify({
+            location: cur.toFixed(2),
+            percentage: pct.toFixed(2),
+          })
+        }).catch(function(err) {
+          console.debug('Progress save error:', err);
+        });
+      }
+
+      setInterval(saveProgress, 10000);
+      window.addEventListener('beforeunload', saveProgress);
+    })();
+  </script>
+</body>
+</html>

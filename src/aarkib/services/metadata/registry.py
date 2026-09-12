@@ -8,8 +8,10 @@ from aarkib.services.metadata.base import (
     MetadataSearchResult,
 )
 from aarkib.services.metadata.providers.google_books import GoogleBooksProvider
+from aarkib.services.metadata.providers.itunes import iTunesPodcastProvider
 from aarkib.services.metadata.providers.musicbrainz import MusicBrainzProvider
 from aarkib.services.metadata.providers.open_library import OpenLibraryProvider
+from aarkib.services.metadata.providers.podcastindex import PodcastIndexProvider
 from aarkib.services.metadata.providers.tmdb import TMDBProvider
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,15 @@ class MetadataProviderRegistry:
         "music": ["musicbrainz"],
         "audio": ["musicbrainz"],
         "audiobook": ["googlebooks", "openlibrary", "musicbrainz"],
-        "all": ["tmdb", "musicbrainz", "googlebooks", "openlibrary"],
+        "podcast": ["itunes", "podcastindex"],
+        "all": [
+            "tmdb",
+            "musicbrainz",
+            "googlebooks",
+            "openlibrary",
+            "itunes",
+            "podcastindex",
+        ],
     }
 
     def __init__(self) -> None:
@@ -34,6 +44,8 @@ class MetadataProviderRegistry:
         self.register(OpenLibraryProvider())
         self.register(TMDBProvider())
         self.register(MusicBrainzProvider())
+        self.register(iTunesPodcastProvider())
+        self.register(PodcastIndexProvider())
 
     def register(self, provider: MetadataProvider) -> None:
         """Registers a metadata provider instance."""

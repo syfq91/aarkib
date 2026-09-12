@@ -18,15 +18,24 @@ COPY src/ ./src/
 COPY README.md LICENSE ./
 RUN uv sync --frozen --no-dev
 
-# Install system runtime dependencies (ffmpeg for media analysis, video thumbnails, and audio metadata)
+# Install system runtime dependencies with VAAPI hardware acceleration (Intel & AMD)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends \
+        ffmpeg \
+        vainfo \
+        libva2 \
+        libva-drm2 \
+        i965-va-driver \
+        intel-media-va-driver \
+        mesa-va-drivers && \
     rm -rf /var/lib/apt/lists/*
 
-# Create unprivileged user and default data directories
-RUN groupadd -g 1000 aarkib && \
-    useradd -u 1000 -g aarkib -d /app -s /bin/sh aarkib && \
-    mkdir -p /app/data/media /app/data/books /app/data/covers /app/data/optimized && \
+# Create unprivileged user with hardware device access and default data directories
+RUN (getent group render || groupadd -r render || true) && \
+    (getent group video || groupadd -r video || true) && \
+    groupadd -g 1000 aarkib && \
+    useradd -u 1000 -g aarkib -G video,render -d /app -s /bin/sh aarkib && \
+    mkdir -p /app/data/media /app/data/books /app/data/covers /app/data/optimized /app/data/transcode /app/data/podcasts && \
     chown -R aarkib:aarkib /app
 
 # Expose default HTTP port

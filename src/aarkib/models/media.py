@@ -221,3 +221,13 @@ class VideoItemMixin(PlayableItemMixin):
     codec: Mapped[str | None] = mapped_column(String(50), nullable=True)
     season: Mapped[int | None] = mapped_column(Integer, nullable=True)
     episode: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class PodcastItemMixin(PlayableItemMixin):
+    """Blueprint mixin for podcast episode metadata attributes."""
+
+    episode_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    podcast_feed_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    podcast_guid: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, index=True
+    )

@@ -18,4 +18,20 @@ services:
       - AARKIB_AUTO_ENRICH=false
       - AARKIB_METADATA_PROVIDER=all
       - AARKIB_PAGE_SIZE=24
+      - AARKIB_VAAPI_DEVICE=${AARKIB_VAAPI_DEVICE:-}
       - SECRET_KEY=${SECRET_KEY:-}
+    volumes:
+      - ./data:/app/data
+      # Mount your host media directories as needed:
+      # - /path/to/media/books:/app/data/books:ro
+      # - /path/to/media/comics:/app/data/comics:ro
+      # - /path/to/media/videos:/app/data/videos:ro
+      # - /path/to/media/audiobooks:/app/data/audiobooks:ro
+      # - /path/to/media/music:/app/data/music:ro
+      # - /path/to/media/podcasts:/app/data/podcasts:ro
+    devices:
+      - /dev/dri:/dev/dri # Hardware acceleration passthrough for Intel & AMD VAAPI
+    group_add:
+      - video
+      - render
+

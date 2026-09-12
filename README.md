@@ -14,6 +14,8 @@
 - 📖 **E-Books & Comics**: Native support for `.epub`, `.cbz`, `.cbr`, and `.zip` formats with automatic metadata & cover extraction.
 - 🎬 **Movies & TV Shows**: Streaming for `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v` with HTTP 206 byte-range seeking, smart TV show (`S01E02`) / movie naming detection, pure-Python MP4 container metadata (duration, width, height), and poster extraction.
 - 🎵 **Audiobooks & Music**: Built-in support for audio media (`.mp3`, `.m4b`, `.flac`, `.aac`, `.wav`) with pure-Python ID3/FLAC metadata parsing, dedicated in-browser HTML5 audio player, runtime duration, album artwork, and listening progress synchronization.
+- 🎙️ **Podcasts & Audio Shows**: Ingest local podcast audio collections, OPML feed import, iTunes & PodcastIndex online enrichment, and dedicated episode player with playback speed and scrubber navigation.
+- 📱 **Subsonic / OpenSubsonic API**: Built-in Subsonic API compatibility layer (`/rest`) enabling native mobile streaming via popular clients like Symfonium, DSub, Ultrasonic, and Plappa.
 - ⚡ **Non-Blocking Background Job Architecture**: Asynchronous worker for library scans and batch enrichments without blocking web workers.
 - 🎬 **Adaptive Remuxing & Transcoding**: Direct MKV container remuxing (`-c copy`) and HLS transcoding with Linux VAAPI hardware acceleration.
 - 🔌 **Extensible Media Plugin & Provider System**: Pluggable architecture (`MediaPlugin` & `MetadataProvider`) allowing modular media parsers, artwork extractors, and online metadata scrapers (Google Books, Open Library, TMDB, MusicBrainz).
@@ -203,7 +205,7 @@ uv run aarkib list-users
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (72 tests)
+# Run pytest test suite (152 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff

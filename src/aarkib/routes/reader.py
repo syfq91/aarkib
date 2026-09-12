@@ -232,6 +232,67 @@ def play_music(item_id: int):
     )
 
 
+@reader_bp.route("/podcast/<int:item_id>")
+@optional_or_required_auth
+def play_podcast(item_id: int):
+    """Dedicated podcast episode player with episode notes and jump navigation."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Podcast episode not found")
+    if not item.is_audio and item.file_format not in AUDIO_EXTENSIONS:
+        abort(400, description="Item is not an audio episode")
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    user_cond = (
+        UserProgress.user_id.is_(None)
+        if user_id is None
+        else (UserProgress.user_id == user_id)
+    )
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            user_cond,
+            UserProgress.media_item_id == item.id,
+        )
+    )
+
+    initial_time = 0.0
+    if progress and progress.progress_location:
+        try:
+            initial_time = max(0.0, float(progress.progress_location))
+        except ValueError, TypeError:
+            initial_time = 0.0
+
+    next_episode = None
+    prev_episode = None
+    all_episodes: list[MediaItem] = []
+
+    if item.collection_id:
+        all_episodes = list(
+            db.session.scalars(
+                select(MediaItem)
+                .where(MediaItem.collection_id == item.collection_id)
+                .order_by(MediaItem.series_index.asc(), MediaItem.id.asc())
+            ).all()
+        )
+        for idx, ep in enumerate(all_episodes):
+            if ep.id == item.id:
+                if idx + 1 < len(all_episodes):
+                    next_episode = all_episodes[idx + 1]
+                if idx > 0:
+                    prev_episode = all_episodes[idx - 1]
+                break
+
+    return render_template(
+        "player_podcast.html",
+        item=item,
+        initial_time=initial_time,
+        progress=progress,
+        next_episode=next_episode,
+        prev_episode=prev_episode,
+        all_episodes=all_episodes,
+    )
+
+
 @reader_bp.route("/audio/<int:item_id>")
 @optional_or_required_auth
 def play_audio(item_id: int):
@@ -244,5 +305,7 @@ def play_audio(item_id: int):
 
     if item.is_audiobook:
         return play_audiobook(item_id)
+    if item.is_podcast:
+        return play_podcast(item_id)
 
     return play_music(item_id)

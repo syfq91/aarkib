@@ -1886,3 +1886,38 @@ def delete_playlist(playlist_id: int):
     db.session.delete(playlist)
     db.session.commit()
     return jsonify({"status": "success", "message": "Playlist deleted"})
+
+
+@api_bp.route("/podcasts/opml/import", methods=["POST"])
+@api_admin_required
+def import_opml():
+    """Import podcast show subscriptions from an uploaded OPML file or XML payload."""
+    xml_content = None
+    if "file" in request.files:
+        upload = request.files["file"]
+        xml_content = upload.read().decode("utf-8", errors="ignore")
+    elif request.is_json:
+        data = request.get_json(silent=True) or {}
+        xml_content = data.get("opml") or data.get("content")
+    else:
+        raw_text = request.get_data(as_text=True)
+        if raw_text and "<opml" in raw_text:
+            xml_content = raw_text
+
+    if not xml_content or not xml_content.strip():
+        return api_error("No OPML file or XML content provided", 400)
+
+    try:
+        from aarkib.services.opml import import_opml_channels, parse_opml
+
+        feeds = parse_opml(xml_content)
+        if not feeds:
+            return api_error("No valid podcast feed outlines found in OPML", 400)
+
+        result = import_opml_channels(feeds)
+        return jsonify({"status": "success", "data": result})
+    except ValueError as exc:
+        return api_error(str(exc), 400)
+    except Exception as exc:
+        current_app.logger.exception("Failed to import OPML: %s", exc)
+        return api_error(f"OPML import error: {exc}", 500)

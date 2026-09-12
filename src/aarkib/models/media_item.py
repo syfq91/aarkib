@@ -12,6 +12,7 @@ from aarkib.models.media import (
     AudioTrackMixin,
     MediaItemMixin,
     MediaType,
+    PodcastItemMixin,
     VideoItemMixin,
 )
 from aarkib.models.tag import media_tags
@@ -31,6 +32,7 @@ class MediaItem(
     VideoItemMixin,
     AudiobookItemMixin,
     AudioTrackMixin,
+    PodcastItemMixin,
 ):
     """Unified catalog model representing books, comics, videos, and audio in Aarkib."""
 
@@ -164,6 +166,8 @@ class MediaItem(
                         else self.author
                     )
                 return "Unknown Author"
+            elif self.is_podcast:
+                return "Unknown Host"
             elif self.is_music or self.is_audio:
                 return "Unknown Artist"
             return "Unknown Author"
@@ -199,6 +203,8 @@ class MediaItem(
             return f"/reader/audiobook/{self.id}"
         elif self.media_type == MediaType.MUSIC.value:
             return f"/reader/music/{self.id}"
+        elif self.media_type == MediaType.PODCAST.value:
+            return f"/reader/podcast/{self.id}"
         elif (self.file_format or "").lower() in (
             "mp3",
             "m4a",

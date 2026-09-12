@@ -509,6 +509,12 @@ def _resolve_media_type(
         or "Audiobook" in getattr(metadata, "tags", [])
     ):
         return "audiobook"
+    if (
+        "Podcast" in getattr(metadata, "tags", [])
+        or "/podcast/" in resolved_path.lower()
+        or "/podcasts/" in resolved_path.lower()
+    ):
+        return "podcast"
     if fmt in AUDIO_EXTENSIONS:
         return meta_type or "music"
     return "book"
@@ -605,7 +611,12 @@ def index_single_book(
                 db.session.commit()
             return existing_book
 
-        plugin = plugin_registry.get_plugin_for_extension(file_path.suffix)
+        plugin = None
+        if library_media_type and library_media_type != "all":
+            plugin = plugin_registry.get_plugin_for_media_type(library_media_type)
+        if not plugin:
+            plugin = plugin_registry.get_plugin_for_extension(file_path.suffix)
+
         if plugin:
             metadata = plugin.parse_metadata(file_path)
         else:
@@ -691,6 +702,12 @@ def index_single_book(
             book.chapters_json = json.dumps(chapters) if chapters else None
         if hasattr(book, "abridged"):
             book.abridged = getattr(metadata, "abridged", False)
+        if hasattr(book, "episode_type") and not is_locked("episode_type"):
+            book.episode_type = getattr(metadata, "episode_type", None)
+        if hasattr(book, "podcast_feed_url") and not is_locked("podcast_feed_url"):
+            book.podcast_feed_url = getattr(metadata, "feed_url", None)
+        if hasattr(book, "podcast_guid") and not is_locked("podcast_guid"):
+            book.podcast_guid = getattr(metadata, "guid", None)
 
         _assign_authors_tags_series(book, metadata)
 

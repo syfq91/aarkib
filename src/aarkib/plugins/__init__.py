@@ -9,6 +9,7 @@ from aarkib.plugins.audio import (
 )
 from aarkib.plugins.base import MediaPlugin, PluginRegistry, plugin_registry
 from aarkib.plugins.book import BookMediaPlugin
+from aarkib.plugins.podcast import PodcastMediaPlugin
 from aarkib.plugins.video import VideoMediaPlugin
 
 if TYPE_CHECKING:
@@ -33,6 +34,10 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
     if not plugin_registry.get_plugin("audiobook"):
         plugin_registry.register(AudiobookMediaPlugin())
 
+    # Register PodcastMediaPlugin if not already registered
+    if not plugin_registry.get_plugin("podcast"):
+        plugin_registry.register(PodcastMediaPlugin())
+
     # Register MusicMediaPlugin if not already registered
     if not plugin_registry.get_plugin("music"):
         plugin_registry.register(MusicMediaPlugin())
@@ -56,5 +61,6 @@ __all__ = [
     "AudioMediaPlugin",
     "AudiobookMediaPlugin",
     "MusicMediaPlugin",
+    "PodcastMediaPlugin",
     "init_plugins",
 ]

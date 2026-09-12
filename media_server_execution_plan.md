@@ -598,10 +598,10 @@ gantt
     TMDB & MusicBrainz Metadata Providers:done, p6, 2026-12, 2027-01
     section Phase 7 (Completed)
     SQLite FTS5 Unified Grouped Search   :done, p7, 2027-01, 2027-02
-    section Phase 8 (Next)
-    Local Podcasts & Audio Shows         :active, p8, 2027-02, 2027-03
-    section Phase 9
-    Production Packaging & Third-Party API:p9, 2027-03, 2027-04
+    section Phase 8 (Completed)
+    Local Podcasts & Audio Shows         :done, p8, 2027-02, 2027-03
+    section Phase 9 (Completed)
+    Production Packaging & Third-Party API:done, p9, 2027-03, 2027-04
 ```
 
 ### Phase 1: Core Foundation & Book/Comic Engine `[COMPLETED]`
@@ -660,16 +660,16 @@ gantt
 - [x] Update `/api/media?q=` and OPDS search feeds to query FTS5 index with sub-millisecond latency and BM25 relevance ranking.
 - [x] Categorize search results in WebUI by media type (Movies, TV, Books, Audiobooks, Music, Comics) with grouped result sections, item counts, and category navigation.
 
-### Phase 8: Local Podcasts & Audio Shows `[PLANNED]`
-- [ ] Create `PodcastMediaPlugin` to index locally stored podcast audio files (`.mp3`, `.m4a`).
-- [ ] Support OPML file import for organizing locally archived shows, seasons, and channels.
-- [ ] Parse embedded episode metadata and fetch show metadata/cover art from PodcastIndex.
-- [ ] Dedicated audio show player with episode ordering and progress tracking.
+### Phase 8: Local Podcasts & Audio Shows `[COMPLETED]`
+- [x] Create `PodcastMediaPlugin` to index locally stored podcast audio files (`.mp3`, `.m4a`, `.ogg`, `.opus`, `.aac`).
+- [x] Support OPML file import for organizing locally archived shows, seasons, and channels.
+- [x] Parse embedded episode metadata and fetch show metadata/cover art from iTunes Search & PodcastIndex.
+- [x] Dedicated audio show player with episode ordering, speed controls, jump navigation, and progress tracking.
 
-### Phase 9: Multi-Arch Production Packaging & Third-Party APIs `[PLANNED]`
-- [ ] Update `Dockerfile` to include `ffmpeg`, `libva-drm2`, and VAAPI drivers for `linux/amd64` and `linux/arm64`.
-- [ ] Configure `docker-compose.yml` with `/dev/dri` hardware acceleration passthrough.
-- [ ] Evaluate lightweight Subsonic / Audiobookshelf API shim for mobile app interoperability (Symfonium, Plappa).
+### Phase 9: Multi-Arch Production Packaging & Third-Party APIs `[COMPLETED]`
+- [x] Update `Dockerfile` to include `ffmpeg`, `libva-drm2`, and VAAPI drivers for `linux/amd64` and `linux/arm64`.
+- [x] Configure `docker-compose.yml` with `/dev/dri` hardware acceleration passthrough.
+- [x] Implement lightweight Subsonic / OpenSubsonic API shim for mobile app interoperability (Symfonium, DSub, Ultrasonic, Plappa).
 
 ---
 
