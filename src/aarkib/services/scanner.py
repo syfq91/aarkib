@@ -17,7 +17,7 @@ from watchdog.observers import Observer
 from aarkib.config import (
     NAMED_DIR_REGEX,
     Config,
-    get_env_library_dirs,
+    get_env_media_dirs,
     split_path_string,
 )
 from aarkib.extensions import db
@@ -96,35 +96,47 @@ def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
     return sha256.hexdigest()
 
 
-def get_library_dirs_from_config(app: Flask | None = None) -> list[Path]:
-    """Resolves one or more library directories directly from app config and environment variables."""
+def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
+    """Resolves one or more media directories directly from app config and environment variables."""
     raw_candidates: list[Any] = []
 
     if app is not None:
-        raw_dirs = app.config.get("LIBRARY_DIRS")
-        raw_dir = app.config.get("LIBRARY_DIR")
+        raw_dirs = app.config.get("MEDIA_DIRS") or app.config.get("LIBRARY_DIRS")
+        raw_dir = app.config.get("MEDIA_DIR") or app.config.get("LIBRARY_DIR")
 
-        if raw_dirs is not None and raw_dirs != Config.LIBRARY_DIRS:
+        default_dirs = getattr(Config, "MEDIA_DIRS", None) or getattr(
+            Config, "LIBRARY_DIRS", None
+        )
+        default_dir = getattr(Config, "MEDIA_DIR", None) or getattr(
+            Config, "LIBRARY_DIR", None
+        )
+
+        if raw_dirs is not None and raw_dirs != default_dirs:
             if isinstance(raw_dirs, (list, tuple, set)):
                 raw_candidates.extend(raw_dirs)
             else:
                 raw_candidates.append(raw_dirs)
 
-        if raw_dir is not None and raw_dir != Config.LIBRARY_DIR:
+        if raw_dir is not None and raw_dir != default_dir:
             if isinstance(raw_dir, (list, tuple, set)):
                 raw_candidates.extend(raw_dir)
             else:
                 raw_candidates.append(raw_dir)
 
     # Check explicitly defined environment variables
-    env_paths = get_env_library_dirs()
+    env_paths = get_env_media_dirs()
     if env_paths:
         raw_candidates.extend(env_paths)
 
     # If neither app config override nor explicit env vars were found
     if not raw_candidates:
         if app is not None:
-            raw = app.config.get("LIBRARY_DIRS") or app.config.get("LIBRARY_DIR")
+            raw = (
+                app.config.get("MEDIA_DIRS")
+                or app.config.get("MEDIA_DIR")
+                or app.config.get("LIBRARY_DIRS")
+                or app.config.get("LIBRARY_DIR")
+            )
             if raw is not None:
                 if isinstance(raw, (list, tuple, set)):
                     raw_candidates.extend(raw)
@@ -132,15 +144,9 @@ def get_library_dirs_from_config(app: Flask | None = None) -> list[Path]:
                     raw_candidates.append(raw)
             else:
                 data_dir = Path(app.config.get("DATA_DIR", "data"))
-                if (data_dir / "books").exists() and not (data_dir / "media").exists():
-                    raw_candidates.append(data_dir / "books")
-                else:
-                    raw_candidates.append(data_dir / "media")
+                raw_candidates.append(data_dir / "media")
         else:
-            if Path("data/books").exists() and not Path("data/media").exists():
-                raw_candidates.append(Path("data/books"))
-            else:
-                raw_candidates.append(Path("data/media"))
+            raw_candidates.append(Path("data/media"))
 
     # Parse and deduplicate
     final_paths: list[Path] = []
@@ -180,11 +186,12 @@ def get_library_dirs_from_config(app: Flask | None = None) -> list[Path]:
             if app is not None
             else Path("data")
         )
-        if (data_dir / "books").exists() and not (data_dir / "media").exists():
-            return [data_dir / "books"]
         return [data_dir / "media"]
 
     return final_paths
+
+
+get_library_dirs_from_config = get_media_dirs_from_config
 
 
 def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
@@ -212,12 +219,15 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
     # If database has no libraries yet, seed from config/env/defaults.
     # If database already has libraries, only sync any newly declared explicit env vars or custom app config dirs.
     if not existing_libs:
-        target_dirs = get_library_dirs_from_config(app)
+        target_dirs = get_media_dirs_from_config(app)
     else:
-        target_dirs = get_env_library_dirs()
+        target_dirs = get_env_media_dirs()
         if app is not None:
-            custom_dirs = app.config.get("LIBRARY_DIRS")
-            if custom_dirs and custom_dirs != Config.LIBRARY_DIRS:
+            custom_dirs = app.config.get("MEDIA_DIRS") or app.config.get("LIBRARY_DIRS")
+            default_dirs = getattr(Config, "MEDIA_DIRS", None) or getattr(
+                Config, "LIBRARY_DIRS", None
+            )
+            if custom_dirs and custom_dirs != default_dirs:
                 items = (
                     custom_dirs
                     if isinstance(custom_dirs, (list, tuple, set))
@@ -239,7 +249,7 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
                 "Failed to resolve library path %s: %s", lib.path, exc_info=True
             )
 
-    # Named environment map for friendly names (e.g. AARKIB_LIBRARY_DIR_MANGA)
+    # Named environment map for friendly names (e.g. AARKIB_MEDIA_DIR_MANGA)
     named_map: dict[str, str] = {}
     for k, v in os.environ.items():
         m = NAMED_DIR_REGEX.match(k)

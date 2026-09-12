@@ -132,7 +132,7 @@ sequenceDiagram
 - **Direct Folder Drops (No Upload UI)**:
   - Users add media simply by copying or mounting files into storage folders (`./data/media`, `./data/books`, external drives). The scanner and filesystem watcher handle indexing automatically without requiring web upload forms.
 - **Multi-Directory Discovery**: Supported via multiple environment conventions:
-  - `AARKIB_MEDIA_DIR`, `AARKIB_LIBRARY_DIR`, `AARKIB_BOOKS_DIR`, `MEDIA_DIR` (supports colon, semicolon, comma, or newline delimiters).
+  - `AARKIB_MEDIA_DIR`, `AARKIB_MEDIA_DIRS`, `MEDIA_DIR`, `MEDIA_DIRS` (supports colon, semicolon, comma, or newline delimiters).
   - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, `DIR1`, `DIR2`.
   - Named variables: `AARKIB_MEDIA_DIR_MANGA`, `AARKIB_MEDIA_DIR_MOVIES`, `AARKIB_MEDIA_DIR_VIDEO`.
 - **Deduplication & Integrity**: Every media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading/playback history or metadata customizations.

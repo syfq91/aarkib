@@ -174,7 +174,7 @@ def test_settings_page_displays_multiple_directories(tmp_path):
 
     class MultiDirTestConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = f"{dir1}:{dir2}"
+        MEDIA_DIR = f"{dir1}:{dir2}"
         COVERS_DIR = tmp_path / "data" / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/settings_test.db"
 
@@ -273,7 +273,7 @@ def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample
 
     class MultiLibConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = f"{novels_dir}:{manga_dir}"
+        MEDIA_DIR = f"{novels_dir}:{manga_dir}"
         COVERS_DIR = tmp_path / "data" / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/multi_lib.db"
 

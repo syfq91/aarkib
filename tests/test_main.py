@@ -5,7 +5,7 @@ from aarkib.config import TestConfig
 def test_create_app(tmp_path):
     class CustomConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = tmp_path / "books"
+        MEDIA_DIR = tmp_path / "media"
         COVERS_DIR = tmp_path / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/app_test.db"
 

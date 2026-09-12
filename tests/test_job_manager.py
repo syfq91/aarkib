@@ -120,8 +120,8 @@ def test_api_async_scan_and_jobs(client, app, tmp_path, sample_epub):
 
     _login_admin(client, app)
 
-    # Put a book into default library dir
-    books_dir = Path(app.config["LIBRARY_DIR"])
+    # Put a book into default media dir
+    books_dir = Path(app.config["MEDIA_DIR"])
     books_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(sample_epub, books_dir / "async_test.epub")
 

@@ -14,7 +14,8 @@ from aarkib.extensions import db
 def app(tmp_path: Path) -> Flask:
     class CustomTestConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = tmp_path / "books"
+        MEDIA_DIR = tmp_path / "media"
+        MEDIA_DIRS = [tmp_path / "media"]
         COVERS_DIR = tmp_path / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/test.db"
 

@@ -9,19 +9,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 PRIMARY_DIR_VARS: tuple[str, ...] = (
     "AARKIB_MEDIA_DIR",
     "AARKIB_MEDIA_DIRS",
-    "AARKIB_LIBRARY_DIR",
-    "AARKIB_LIBRARY_DIRS",
     "MEDIA_DIR",
     "MEDIA_DIRS",
-    "LIBRARY_DIR",
-    "LIBRARY_DIRS",
 )
 
-NUMBERED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_)?(?:LIBRARY_|MEDIA_)?DIR_?(\d+)$", re.IGNORECASE
-)
+NUMBERED_DIR_REGEX = re.compile(r"^(?:AARKIB_)?(?:MEDIA_)?DIR_?(\d+)$", re.IGNORECASE)
 NAMED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_)?(?:LIBRARY_|MEDIA_)?DIR_([A-Za-z0-9_]+)$",
+    r"^(?:AARKIB_)?(?:MEDIA_)?DIR_([A-Za-z0-9_]+)$",
     re.IGNORECASE,
 )
 
@@ -75,11 +69,11 @@ def split_path_string(val: str) -> list[str]:
     return [val.strip().strip("'\"")]
 
 
-def get_env_library_dirs(env: dict[str, str] | None = None) -> list[Path]:
-    """Collects all library directory paths explicitly declared in environment variables.
+def get_env_media_dirs(env: dict[str, str] | None = None) -> list[Path]:
+    """Collects all media directory paths explicitly declared in environment variables.
 
     Supports:
-    - AARKIB_MEDIA_DIR, AARKIB_MEDIA_DIRS, AARKIB_LIBRARY_DIR, AARKIB_LIBRARY_DIRS, MEDIA_DIR, MEDIA_DIRS, LIBRARY_DIR, LIBRARY_DIRS
+    - AARKIB_MEDIA_DIR, AARKIB_MEDIA_DIRS, MEDIA_DIR, MEDIA_DIRS
     - Numbered variables: DIR1, DIR2, DIR_1, DIR_2, AARKIB_DIR1, AARKIB_MEDIA_DIR_1, etc.
     - Named variables: AARKIB_MEDIA_DIR_MANGA, AARKIB_DIR_COMICS, etc.
     - Delimited values (colons, semicolons, commas, newlines).
@@ -145,19 +139,23 @@ def get_env_library_dirs(env: dict[str, str] | None = None) -> list[Path]:
     return parsed_paths
 
 
-def discover_library_dirs(
+get_env_library_dirs = get_env_media_dirs
+
+
+def discover_media_dirs(
     data_dir: Path | str | None = None,
     env: dict[str, str] | None = None,
 ) -> list[Path]:
-    """Discovers all library directories from environment variables or returns default data/media or data/books."""
-    env_paths = get_env_library_dirs(env=env)
+    """Discovers all media directories from environment variables or returns default data/media."""
+    env_paths = get_env_media_dirs(env=env)
     if env_paths:
         return env_paths
 
     data_path = Path(data_dir) if data_dir else (BASE_DIR / "data")
-    if (data_path / "books").exists() and not (data_path / "media").exists():
-        return [data_path / "books"]
     return [data_path / "media"]
+
+
+discover_library_dirs = discover_media_dirs
 
 
 class Config:
@@ -196,8 +194,10 @@ class Config:
                 os.chmod(_key_path, 0o600)
             except OSError:
                 pass
-    LIBRARY_DIRS: list[Path] = discover_library_dirs(DATA_DIR)
-    LIBRARY_DIR: Path = LIBRARY_DIRS[0] if LIBRARY_DIRS else (DATA_DIR / "media")
+    MEDIA_DIRS: list[Path] = discover_media_dirs(DATA_DIR)
+    MEDIA_DIR: Path = MEDIA_DIRS[0] if MEDIA_DIRS else (DATA_DIR / "media")
+    LIBRARY_DIRS: list[Path] = MEDIA_DIRS
+    LIBRARY_DIR: Path = MEDIA_DIR
     COVERS_DIR: Path = Path(os.getenv("AARKIB_COVERS_DIR", DATA_DIR / "covers"))
     OPTIMIZED_DIR: Path = Path(
         os.getenv("AARKIB_OPTIMIZED_DIR", DATA_DIR / "optimized")

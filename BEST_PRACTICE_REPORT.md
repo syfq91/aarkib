@@ -422,7 +422,7 @@ cover resolves relative to {@code covers_dir} derived from the library name). Th
 cover fallback is excluded. A stricter `_is_within_library` check on `get_book_file` /
 `download_book_file` was implemented and then **reverted** with its unused helper removed: the
 test suite (e.g. `tests/test_optimizer.py`, `test_ui.py`, `test_video.py`) legitimately indexes
-books whose `original_file_path` lives outside the configured `LIBRARY_DIR`, so a blanket check
+books whose `original_file_path` lives outside the configured `MEDIA_DIR`, so a blanket check
 broke 3+ tests. Decision recorded in commit message; book files are "servable by id" as before
 (scanner is the only writer of `original_file_path`, and the DB id is an int, so no path input
 surface exists).

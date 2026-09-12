@@ -9,7 +9,7 @@ from aarkib.services.scanner import get_library_dirs, scan_library
 
 def test_get_library_dirs(tmp_path):
     class Config1(TestConfig):
-        LIBRARY_DIR = f"{tmp_path}/dir1:{tmp_path}/dir2"
+        MEDIA_DIR = f"{tmp_path}/dir1:{tmp_path}/dir2"
 
     app1 = create_app(Config1)
     dirs1 = get_library_dirs(app1)
@@ -18,7 +18,7 @@ def test_get_library_dirs(tmp_path):
     assert dirs1[1] == Path(f"{tmp_path}/dir2")
 
     class Config2(TestConfig):
-        LIBRARY_DIR = [tmp_path / "a", tmp_path / "b"]
+        MEDIA_DIR = [tmp_path / "a", tmp_path / "b"]
 
     app2 = create_app(Config2)
     dirs2 = get_library_dirs(app2)
@@ -41,7 +41,7 @@ def test_scan_multiple_directories(tmp_path, sample_epub, sample_cbz):
 
     class MultiDirConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = f"{dir1}:{dir2}"
+        MEDIA_DIR = f"{dir1}:{dir2}"
         COVERS_DIR = tmp_path / "data" / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/multi_test.db"
 
@@ -67,7 +67,7 @@ def test_scan_symlinked_directory(tmp_path, sample_epub):
 
     class SymlinkConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        LIBRARY_DIR = lib_dir
+        MEDIA_DIR = lib_dir
         COVERS_DIR = tmp_path / "data" / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/symlink_test.db"
 
@@ -78,23 +78,26 @@ def test_scan_symlinked_directory(tmp_path, sample_epub):
 
 
 def test_get_env_library_dirs(tmp_path):
-    from aarkib.config import get_env_library_dirs, split_path_string
+    from aarkib.config import get_env_media_dirs, split_path_string
 
     # Test split_path_string
     assert split_path_string("/a:/b;/c,/d\n/e") == ["/a", "/b", "/c", "/d", "/e"]
     assert split_path_string("C:\\books;D:\\comics") == ["C:\\books", "D:\\comics"]
 
+    # Verify retired AARKIB_LIBRARY_DIR is ignored
+    assert get_env_media_dirs(env={"AARKIB_LIBRARY_DIR": f"{tmp_path}/ignored"}) == []
+
     # Test numbered and named environment variables in custom dict
     mock_env = {
-        "AARKIB_LIBRARY_DIR": f"{tmp_path}/main",
-        "AARKIB_LIBRARY_DIR1": f"{tmp_path}/manga",
-        "AARKIB_LIBRARY_DIR2": f"{tmp_path}/comics",
-        "AARKIB_LIBRARY_DIR3": f"{tmp_path}/novels",
-        "AARKIB_LIBRARY_DIR4": f"{tmp_path}/audiobooks",
+        "AARKIB_MEDIA_DIR": f"{tmp_path}/main",
+        "AARKIB_MEDIA_DIR1": f"{tmp_path}/manga",
+        "AARKIB_MEDIA_DIR2": f"{tmp_path}/comics",
+        "AARKIB_MEDIA_DIR3": f"{tmp_path}/novels",
+        "AARKIB_MEDIA_DIR4": f"{tmp_path}/audiobooks",
         "AARKIB_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
-        "AARKIB_LIBRARY_DIR_10": f"{tmp_path}/extra10",
+        "AARKIB_MEDIA_DIR_10": f"{tmp_path}/extra10",
     }
-    paths = get_env_library_dirs(env=mock_env)
+    paths = get_env_media_dirs(env=mock_env)
     path_strs = [str(p) for p in paths]
 
     # Primary should come first
@@ -132,9 +135,9 @@ def test_scan_multiple_directories_via_env(
     shutil.copy(sample_cbz, dir2 / "comic1.cbz")
     shutil.copy(sample_epub, dir3 / "book2.epub")
 
-    monkeypatch.setenv("AARKIB_LIBRARY_DIR", str(dir1))
-    monkeypatch.setenv("AARKIB_LIBRARY_DIR1", str(dir2))
-    monkeypatch.setenv("AARKIB_LIBRARY_DIR2", str(dir3))
+    monkeypatch.setenv("AARKIB_MEDIA_DIR", str(dir1))
+    monkeypatch.setenv("AARKIB_MEDIA_DIR1", str(dir2))
+    monkeypatch.setenv("AARKIB_MEDIA_DIR2", str(dir3))
 
     class EnvMultiDirConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
@@ -257,7 +260,7 @@ def test_library_change_handler_on_created(app, tmp_path, sample_epub):
     from aarkib.models import Book
     from aarkib.services.scanner import LibraryChangeHandler
 
-    lib_dir = Path(app.config["LIBRARY_DIR"])
+    lib_dir = Path(app.config["MEDIA_DIR"])
     lib_dir.mkdir(parents=True, exist_ok=True)
     target = lib_dir / "watched.epub"
     shutil.copy(sample_epub, target)
@@ -284,7 +287,7 @@ def test_library_change_handler_on_deleted(app, tmp_path, sample_epub):
     from aarkib.models import Book
     from aarkib.services.scanner import LibraryChangeHandler
 
-    lib_dir = Path(app.config["LIBRARY_DIR"])
+    lib_dir = Path(app.config["MEDIA_DIR"])
     lib_dir.mkdir(parents=True, exist_ok=True)
     target = lib_dir / "disappearing.epub"
     shutil.copy(sample_epub, target)
