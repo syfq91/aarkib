@@ -203,9 +203,11 @@ class PluginRegistry:
         """Returns all registered plugins of a specific type."""
         return [p for p in self._plugins.values() if p.plugin_type == plugin_type]
 
-    def get_all_supported_extensions(self) -> set[str]:
-        """Returns the union of all file extensions handled by registered plugins."""
-        return set(self._ext_map.keys())
+    def get_all_supported_extensions(self, active_only: bool = True) -> set[str]:
+        """Returns the union of file extensions handled by registered plugins."""
+        if not active_only:
+            return set(self._ext_map.keys())
+        return {ext for ext, plugin in self._ext_map.items() if plugin.enabled}
 
 
 plugin_registry = PluginRegistry()

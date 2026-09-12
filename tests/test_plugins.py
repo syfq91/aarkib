@@ -212,3 +212,74 @@ def test_plugin_toggle_disable():
 
     assert "subsonic" not in test_app.blueprints
     assert "opds" in test_app.blueprints
+
+
+def test_runtime_opds_guard(client, app):
+    from aarkib.services.settings_service import update_settings
+
+    # Disable OPDS
+    update_settings(app, {"ENABLE_OPDS": False})
+    res = client.get("/opds")
+    assert res.status_code == 404
+    assert b"OPDS catalog feeds are disabled on this server." in res.data
+
+    res_opt = client.get("/opds/x4")
+    assert res_opt.status_code == 404
+
+    # Re-enable OPDS
+    update_settings(app, {"ENABLE_OPDS": True})
+    res_enabled = client.get("/opds")
+    assert res_enabled.status_code == 200
+    assert b"feed" in res_enabled.data.lower()
+
+
+def test_runtime_subsonic_guard(client, app):
+    from aarkib.services.settings_service import update_settings
+
+    # Disable Subsonic
+    update_settings(app, {"ENABLE_SUBSONIC": False})
+
+    # JSON request
+    res_json = client.get("/rest/ping.view?f=json")
+    assert res_json.status_code == 200
+    data = res_json.get_json()
+    assert data["subsonic-response"]["status"] == "failed"
+    assert data["subsonic-response"]["error"]["code"] == 0
+    assert "disabled" in data["subsonic-response"]["error"]["message"].lower()
+
+    # XML request
+    res_xml = client.get("/rest/ping.view?f=xml")
+    assert res_xml.status_code == 200
+    assert b'code="0"' in res_xml.data
+
+    # Re-enable Subsonic
+    update_settings(app, {"ENABLE_SUBSONIC": True})
+    res_enabled = client.get("/rest/ping.view?f=json")
+    assert res_enabled.status_code == 200
+    data_enabled = res_enabled.get_json()
+    # Code should now be auth required (40) or ok, not 10
+    if data_enabled["subsonic-response"]["status"] == "failed":
+        assert data_enabled["subsonic-response"]["error"]["code"] != 10
+
+
+def test_plugin_supported_extensions_active_only():
+    from aarkib.plugins import plugin_registry
+
+    video_plugin = plugin_registry.get_plugin("video")
+    if video_plugin:
+        original_state = video_plugin.enabled
+        try:
+            video_plugin.enabled = True
+            assert ".mp4" in plugin_registry.get_all_supported_extensions(
+                active_only=True
+            )
+
+            video_plugin.enabled = False
+            assert ".mp4" not in plugin_registry.get_all_supported_extensions(
+                active_only=True
+            )
+            assert ".mp4" in plugin_registry.get_all_supported_extensions(
+                active_only=False
+            )
+        finally:
+            video_plugin.enabled = original_state

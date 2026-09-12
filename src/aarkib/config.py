@@ -244,6 +244,64 @@ class Config:
     )
     PAGE_SIZE: int = int(os.getenv("AARKIB_PAGE_SIZE", "24"))
 
+    # Plugin & Feature Toggles
+    ENABLE_OPDS: bool = (os.getenv("AARKIB_ENABLE_OPDS", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_SUBSONIC: bool = (os.getenv("AARKIB_ENABLE_SUBSONIC", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_EINK_OPTIMIZER: bool = (
+        os.getenv("AARKIB_ENABLE_EINK_OPTIMIZER", "true")
+    ).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_BOOKS: bool = (os.getenv("AARKIB_ENABLE_BOOKS", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_VIDEO: bool = (os.getenv("AARKIB_ENABLE_VIDEO", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_AUDIO: bool = (os.getenv("AARKIB_ENABLE_AUDIO", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_AUDIOBOOK: bool = (os.getenv("AARKIB_ENABLE_AUDIOBOOK", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_PODCAST: bool = (os.getenv("AARKIB_ENABLE_PODCAST", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    ENABLE_MUSIC: bool = (os.getenv("AARKIB_ENABLE_MUSIC", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+
     # Maximum request payload limit (16 MB)
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 

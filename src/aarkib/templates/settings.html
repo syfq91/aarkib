@@ -15,7 +15,15 @@
     <div>
       <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
         <span>📡</span> OPDS Catalog Feeds
+        {% if system_settings and not system_settings.settings.ENABLE_OPDS.value %}
+          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; margin-left: auto;">Inactive (Disabled)</span>
+        {% endif %}
       </h3>
+      {% if system_settings and not system_settings.settings.ENABLE_OPDS.value %}
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #ef4444;">
+          ⚠️ OPDS feeds are currently disabled in <strong>Protocols &amp; Services</strong> settings below. Feeds will return 404 until re-enabled.
+        </div>
+      {% endif %}
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
         Add these URLs to any OPDS e-reader (KOReader, Xteink, Moon+ Reader, Thorium, Panels, etc.) to browse and download books:
       </p>
@@ -371,6 +379,167 @@
           {% if system_settings.settings.PAGE_SIZE.is_overridden %}
             <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.PAGE_SIZE.env_default }})</span></div>
           {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 5: Protocols & Services -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>📡</span> Protocols & Services
+        </h4>
+
+        <!-- ENABLE_OPDS -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_OPDS" name="ENABLE_OPDS" {% if system_settings.settings.ENABLE_OPDS.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>OPDS Feeds & Sync</span>
+            </label>
+            {% if system_settings.settings.ENABLE_OPDS.value %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.7rem;">🟢 Active</span>
+            {% else %}
+              <span class="badge" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary); font-size: 0.7rem;">⚪ Inactive</span>
+            {% endif %}
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Serve OPDS 1.2 (Atom) & 2.0 (JSON-LD) feeds and OPDS Progression 1.0 reading sync at <code>/opds</code>.
+          </p>
+          {% if system_settings.settings.ENABLE_OPDS.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.ENABLE_OPDS.env_default }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- ENABLE_SUBSONIC -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_SUBSONIC" name="ENABLE_SUBSONIC" {% if system_settings.settings.ENABLE_SUBSONIC.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Subsonic Mobile API</span>
+            </label>
+            {% if system_settings.settings.ENABLE_SUBSONIC.value %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.7rem;">🟢 Active</span>
+            {% else %}
+              <span class="badge" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary); font-size: 0.7rem;">⚪ Inactive</span>
+            {% endif %}
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Subsonic v1.16.1 compatible endpoints at <code>/rest</code> for third-party mobile music players (Symfonium, DSub).
+          </p>
+          {% if system_settings.settings.ENABLE_SUBSONIC.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.ENABLE_SUBSONIC.env_default }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- ENABLE_EINK_OPTIMIZER -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_EINK_OPTIMIZER" name="ENABLE_EINK_OPTIMIZER" {% if system_settings.settings.ENABLE_EINK_OPTIMIZER.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>E-Ink Device Optimizer</span>
+            </label>
+            {% if system_settings.settings.ENABLE_EINK_OPTIMIZER.value %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.7rem;">🟢 Active</span>
+            {% else %}
+              <span class="badge" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary); font-size: 0.7rem;">⚪ Inactive</span>
+            {% endif %}
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            On-demand font stripping, CSS sanitization, and 16-level grayscale dithering for e-paper devices.
+          </p>
+          {% if system_settings.settings.ENABLE_EINK_OPTIMIZER.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.ENABLE_EINK_OPTIMIZER.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 6: Media Format Plugins -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>🎬</span> Media Format Plugins
+        </h4>
+
+        <!-- ENABLE_BOOKS -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_BOOKS" name="ENABLE_BOOKS" {% if system_settings.settings.ENABLE_BOOKS.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Books & Comics</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">.epub, .cbz, .cbr</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            EPUB and Comic archive indexing, metadata parsing, and web reader.
+          </p>
+        </div>
+
+        <!-- ENABLE_VIDEO -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_VIDEO" name="ENABLE_VIDEO" {% if system_settings.settings.ENABLE_VIDEO.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Movies & TV Shows</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">.mp4, .mkv, .webm</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Video media scanning, metadata extraction, HTTP 206 range seeking, and video player.
+          </p>
+        </div>
+
+        <!-- ENABLE_AUDIO -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_AUDIO" name="ENABLE_AUDIO" {% if system_settings.settings.ENABLE_AUDIO.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Audio & Music</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">.mp3, .flac, .wav</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Generic audio track playback, album artwork, and audio web player.
+          </p>
+        </div>
+
+        <!-- ENABLE_AUDIOBOOK -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_AUDIOBOOK" name="ENABLE_AUDIOBOOK" {% if system_settings.settings.ENABLE_AUDIOBOOK.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Dedicated Audiobooks</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">.m4b</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Audiobook parsing, chapter marker navigation, and position resume.
+          </p>
+        </div>
+
+        <!-- ENABLE_PODCAST -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_PODCAST" name="ENABLE_PODCAST" {% if system_settings.settings.ENABLE_PODCAST.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Podcasts & Shows</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">OPML, RSS</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Podcast episode parsing, OPML import/export, and episodic player.
+          </p>
+        </div>
+
+        <!-- ENABLE_MUSIC -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="checkbox" id="setting-ENABLE_MUSIC" name="ENABLE_MUSIC" {% if system_settings.settings.ENABLE_MUSIC.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+              <span>Music Albums</span>
+            </label>
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">Albums, Discs</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Music album grouping, track numbers, and disc numbers.
+          </p>
         </div>
       </div>
 
@@ -786,15 +955,20 @@ async function saveSystemSettings() {
     saveBtn.innerText = "⏳ Saving...";
   }
 
-  const payload = {
-    AUTH_REQUIRED: document.getElementById("setting-AUTH_REQUIRED").checked,
-    ALLOW_REGISTRATION: document.getElementById("setting-ALLOW_REGISTRATION").checked,
-    AUTO_SCAN_ON_START: document.getElementById("setting-AUTO_SCAN_ON_START").checked,
-    WATCH_LIBRARY: document.getElementById("setting-WATCH_LIBRARY").checked,
-    AUTO_ENRICH: document.getElementById("setting-AUTO_ENRICH").checked,
-    METADATA_PROVIDER: document.getElementById("setting-METADATA_PROVIDER").value,
-    PAGE_SIZE: parseInt(document.getElementById("setting-PAGE_SIZE").value, 10),
-  };
+  const payload = {};
+  document.querySelectorAll("#system-settings-form [id^='setting-']").forEach(el => {
+    const key = el.id.replace("setting-", "");
+    if (el.type === "checkbox") {
+      payload[key] = el.checked;
+    } else if (el.type === "number") {
+      payload[key] = parseInt(el.value, 10);
+    } else {
+      payload[key] = el.value;
+    }
+  });
+  if (payload.PAGE_SIZE !== undefined) {
+    payload.PAGE_SIZE = parseInt(payload.PAGE_SIZE, 10);
+  }
 
   try {
     const res = await fetch("/api/settings", {

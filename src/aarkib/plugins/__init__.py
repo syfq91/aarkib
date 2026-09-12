@@ -63,9 +63,10 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
         from aarkib import csrf
 
         for plugin in plugin_registry.get_all_plugins():
-            # Check dynamic enable/disable toggle (e.g. AARKIB_ENABLE_SUBSONIC, AARKIB_ENABLE_OPDS)
-            cfg_key = f"AARKIB_ENABLE_{plugin.name.upper()}"
-            is_enabled = app.config.get(cfg_key, True)
+            # Check dynamic enable/disable toggle (e.g. ENABLE_SUBSONIC, AARKIB_ENABLE_SUBSONIC)
+            cfg_key = f"ENABLE_{plugin.name.upper()}"
+            legacy_key = f"AARKIB_ENABLE_{plugin.name.upper()}"
+            is_enabled = app.config.get(cfg_key, app.config.get(legacy_key, True))
             if isinstance(is_enabled, str):
                 is_enabled = is_enabled.lower() not in ("0", "false", "no", "off")
             plugin.enabled = bool(is_enabled)

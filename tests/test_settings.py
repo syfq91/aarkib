@@ -200,3 +200,60 @@ def test_ui_settings_view_for_admin_and_reader(client, app):
     assert b"System & Library Preferences" in res_admin.data
     assert b"setting-AUTH_REQUIRED" in res_admin.data
     assert b"setting-PAGE_SIZE" in res_admin.data
+    assert b"Protocols & Services" in res_admin.data
+    assert b"Media Format Plugins" in res_admin.data
+    assert b"setting-ENABLE_OPDS" in res_admin.data
+    assert b"setting-ENABLE_SUBSONIC" in res_admin.data
+    assert b"setting-ENABLE_BOOKS" in res_admin.data
+
+
+def test_plugin_settings_sync_and_api(client, app):
+    from aarkib.plugins import plugin_registry
+
+    _login_admin(client, app)
+
+    # Verify all 9 plugin settings exist in MANAGED_SETTINGS
+    plugin_keys = [
+        "ENABLE_OPDS",
+        "ENABLE_SUBSONIC",
+        "ENABLE_EINK_OPTIMIZER",
+        "ENABLE_BOOKS",
+        "ENABLE_VIDEO",
+        "ENABLE_AUDIO",
+        "ENABLE_AUDIOBOOK",
+        "ENABLE_PODCAST",
+        "ENABLE_MUSIC",
+    ]
+    for key in plugin_keys:
+        assert key in MANAGED_SETTINGS
+        assert MANAGED_SETTINGS[key].type is bool
+
+    # Initially enabled
+    assert plugin_registry.get_plugin("opds").enabled is True
+    assert plugin_registry.get_plugin("subsonic").enabled is True
+
+    # Disable OPDS and Subsonic via PATCH /api/settings
+    res = client.patch(
+        "/api/settings",
+        json={"ENABLE_OPDS": False, "ENABLE_SUBSONIC": False},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "success"
+    assert app.config["ENABLE_OPDS"] is False
+    assert app.config["ENABLE_SUBSONIC"] is False
+    assert plugin_registry.get_plugin("opds").enabled is False
+    assert plugin_registry.get_plugin("subsonic").enabled is False
+
+    # Verify in-memory persistence and reload
+    load_settings_into_config(app)
+    assert app.config["ENABLE_OPDS"] is False
+    assert plugin_registry.get_plugin("opds").enabled is False
+
+    # Reset back to defaults
+    res_reset = client.post("/api/settings/reset")
+    assert res_reset.status_code == 200
+    assert app.config["ENABLE_OPDS"] is True
+    assert app.config["ENABLE_SUBSONIC"] is True
+    assert plugin_registry.get_plugin("opds").enabled is True
+    assert plugin_registry.get_plugin("subsonic").enabled is True

@@ -5,14 +5,22 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    jsonify,
+    render_template,
+    request,
+)
 from flask_login import current_user
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, MediaItem, Series, Tag, User, UserProgress
-from aarkib.plugins.base import ProtocolPlugin
+from aarkib.plugins.base import ProtocolPlugin, plugin_registry
 
 if TYPE_CHECKING:
     from flask import Flask
@@ -20,6 +28,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 opds_bp = Blueprint("opds", __name__, url_prefix="/opds")
+
+
+@opds_bp.before_request
+def _guard_opds_enabled():
+    """Guards OPDS routes when OPDS protocol plugin is disabled."""
+    plugin = plugin_registry.get_plugin("opds")
+    if (plugin and not plugin.enabled) or not current_app.config.get(
+        "ENABLE_OPDS", True
+    ):
+        abort(404, description="OPDS catalog feeds are disabled on this server.")
+
 
 OPDS_NAV_TYPE = (
     "application/atom+xml;profile=opds-catalog;kind=navigation;charset=utf-8"

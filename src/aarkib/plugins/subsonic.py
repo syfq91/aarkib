@@ -37,6 +37,21 @@ SUBSONIC_VERSION = "1.16.1"
 SERVER_VERSION = "0.1.0"
 
 
+@subsonic_bp.before_request
+def _guard_subsonic_enabled():
+    """Guards Subsonic routes when Subsonic protocol plugin is disabled."""
+    from aarkib.plugins.base import plugin_registry
+
+    plugin = plugin_registry.get_plugin("subsonic")
+    if (plugin and not plugin.enabled) or not current_app.config.get(
+        "ENABLE_SUBSONIC", True
+    ):
+        return subsonic_response(
+            error_code=0,
+            error_msg="Subsonic API is disabled on this server.",
+        )
+
+
 def subsonic_response(
     data: dict[str, Any] | None = None,
     error_code: int | None = None,

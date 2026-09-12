@@ -224,10 +224,24 @@ def settings():
     series_count = db.session.scalar(select(func.count(Series.id))) or 0
 
     system_settings = None
+    plugins_info = None
     if current_user.is_authenticated and current_user.is_admin:
+        from aarkib.plugins import plugin_registry
         from aarkib.services.settings_service import get_effective_settings
 
         system_settings = get_effective_settings(current_app)
+        plugins_info = [
+            {
+                "name": p.name,
+                "display_name": p.display_name or p.name.title(),
+                "type": p.plugin_type,
+                "description": p.description,
+                "enabled": p.enabled,
+                "health": p.check_health(),
+                "setting_key": f"ENABLE_{p.name.upper()}",
+            }
+            for p in plugin_registry.get_all_plugins()
+        ]
 
     return render_template(
         "settings.html",
@@ -241,6 +255,7 @@ def settings():
         author_count=author_count,
         series_count=series_count,
         system_settings=system_settings,
+        plugins_info=plugins_info,
     )
 
 
