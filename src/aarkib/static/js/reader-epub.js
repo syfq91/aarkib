@@ -1,9 +1,9 @@
 let book;
 let rendition;
 let currentFontSize = 100;
-let currentFlow = localStorage.getItem("aarkib-reader-flow") || localStorage.getItem("buukuu-reader-flow") || "paginated";
-let currentTheme = localStorage.getItem("aarkib-reader-theme") || localStorage.getItem("buukuu-reader-theme") || "dark";
-let currentSpread = localStorage.getItem("aarkib-reader-spread") || localStorage.getItem("buukuu-reader-spread") || "auto";
+let currentFlow = localStorage.getItem("aarkib-reader-flow") || "paginated";
+let currentTheme = localStorage.getItem("aarkib-reader-theme") || "dark";
+let currentSpread = localStorage.getItem("aarkib-reader-spread") || "auto";
 let progressDebounceTimer;
 let flattenedToc = [];
 let lastKnownChapterTitle = "";
@@ -264,8 +264,7 @@ function adjustContentImages(contents) {
       [class*="image_full"] img,
       [class*="cover_image"] img,
       #coverimage,
-      body.aarkib-fullpage-illustration img,
-      body.buukuu-fullpage-illustration img {
+      body.aarkib-fullpage-illustration img {
         width: 100% !important;
         height: 100% !important;
         max-width: 100% !important;
@@ -301,8 +300,7 @@ function adjustContentImages(contents) {
       }
       
       /* Pure illustration / Cover fullpage mode */
-      body.aarkib-fullpage-illustration,
-      body.buukuu-fullpage-illustration {
+      body.aarkib-fullpage-illustration {
         padding: 0.5rem !important;
         margin: 0 !important;
         display: flex !important;
@@ -317,13 +315,9 @@ function adjustContentImages(contents) {
       }
       
       body.aarkib-fullpage-illustration > div,
-      body.buukuu-fullpage-illustration > div,
       body.aarkib-fullpage-illustration > section,
-      body.buukuu-fullpage-illustration > section,
       body.aarkib-fullpage-illustration .galley-rw,
-      body.buukuu-fullpage-illustration .galley-rw,
-      body.aarkib-fullpage-illustration section,
-      body.buukuu-fullpage-illustration section {
+      body.aarkib-fullpage-illustration section {
         display: flex !important;
         flex-direction: column !important;
         justify-content: center !important;
@@ -451,7 +445,7 @@ function getEpubInitialLocation() {
   }
   const bookId = getEpubBookId();
   if (bookId) {
-    const localLoc = localStorage.getItem("aarkib-progress-" + bookId) || localStorage.getItem("buukuu-progress-" + bookId);
+    const localLoc = localStorage.getItem("aarkib-progress-" + bookId);
     if (localLoc && localLoc !== "0" && localLoc !== "" && localLoc !== "completed") return localLoc;
   }
   return null;

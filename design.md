@@ -32,8 +32,8 @@ graph TD
 
     subgraph Presentation & Routing Layer
         AuthFilter[Auth Guard & Basic Auth Interceptor]
-        UIRoutes[UI Blueprint: /book/:id, /authors, /series]
-        APIRoutes[REST API Blueprint: /api/books, /api/progress]
+        UIRoutes[UI Blueprint: /media/:id, /authors, /series]
+        APIRoutes[REST API Blueprint: /api/media, /api/libraries]
         OPDSRoutes[OPDS Blueprint: /opds, /opds/v2, /opds/:device]
         ReaderRoutes[Reader & Player: /reader/epub/:id, /reader/cbz/:id, /reader/video/:id]
     end
@@ -197,7 +197,7 @@ Aarkib exposes a complete suite of OPDS endpoints tailored for modern e-readers 
 | **OPDS 1.2 Search** | `/opds/search?q={query}` | `application/atom+xml` | OpenSearch feed for querying titles and creators. |
 | **OPDS 2.0 Catalog** | `/opds/v2/catalog.json` | `application/opds+json` | Modern JSON-LD publication and navigation feeds. |
 | **OPDS Authentication** | `/opds/authentication.json` | `application/opds-authentication+json` | Informs clients of HTTP Basic Auth challenge requirements. |
-| **OPDS Progression 1.0** | `/opds/books/<id>/progression` | `application/vnd.opds.progression+json` | Read/write reading progression (percentage, locator, timestamp). |
+| **OPDS Progression 1.0** | `/opds/media/<id>/progression` | `application/vnd.opds.progression+json` | Read/write reading progression (percentage, locator, timestamp). |
 | **Device OPDS Feeds** | `/opds/<preset>` | `application/atom+xml` | Atom feeds offering pre-routed links to optimized EPUB downloads. |
 
 #### Reading Progression & Conflict Handling
@@ -218,9 +218,9 @@ Aarkib provides rich in-browser reading environments without external server plu
 
 1. **EPUB Web Reader (`reader_epub.html`, `reader-epub.js`)**:
    - Built on `ePub.js` and `JSZip`.
-   - **In-Memory Streaming**: Rather than serving unpacked files or individual XML resources through custom routing (which risks directory traversal vulnerabilities), the web client downloads the book as an `ArrayBuffer` via `/api/books/<id>/file` and opens it directly in browser memory.
+   - **In-Memory Streaming**: Rather than serving unpacked files or individual XML resources through custom routing (which risks directory traversal vulnerabilities), the web client downloads the book as an `ArrayBuffer` via `/api/media/<id>/file` and opens it directly in browser memory.
    - **UI Controls**: Font size adjustments, margins, font family selection, full-text navigation, and color themes (Light, Dark, Sepia, OLED).
-   - **Position Sync**: Continuously pushes reading CFI locators and calculated percentage to `/api/books/<id>/progress`.
+   - **Position Sync**: Continuously pushes reading CFI locators and calculated percentage to `/api/media/<id>/progress`.
 2. **CBZ Comic Reader (`reader_cbz.html`, `reader-cbz.js`)**:
    - Custom, responsive HTML5 canvas and image viewer.
    - Dual viewing modes: **Continuous Vertical Webtoon Scroll** and **Single-Page Flip**.

@@ -2,9 +2,9 @@ let totalPages = 1;
 let pagesData = [];
 let currentPage = 1;
 let currentBookId = null;
-let currentSpread = localStorage.getItem("aarkib-cbz-spread") || localStorage.getItem("buukuu-cbz-spread") || "single";
-let currentDirection = localStorage.getItem("aarkib-cbz-direction") || localStorage.getItem("buukuu-cbz-direction") || "ltr";
-let currentWebtoonWidth = localStorage.getItem("aarkib-cbz-webtoon-width") || localStorage.getItem("buukuu-cbz-webtoon-width") || "medium";
+let currentSpread = localStorage.getItem("aarkib-cbz-spread") || "single";
+let currentDirection = localStorage.getItem("aarkib-cbz-direction") || "ltr";
+let currentWebtoonWidth = localStorage.getItem("aarkib-cbz-webtoon-width") || "medium";
 let progressDebounceTimer;
 let webtoonObserver = null;
 let isWebtoonRendered = false;
@@ -13,8 +13,8 @@ let scrollTimeout = null;
 const preloadedImages = new Map();
 
 // Migrate legacy mode if new keys are not yet set
-if (!localStorage.getItem("aarkib-cbz-spread") && !localStorage.getItem("buukuu-cbz-spread") && !localStorage.getItem("aarkib-cbz-direction") && !localStorage.getItem("buukuu-cbz-direction")) {
-  const legacyMode = localStorage.getItem("aarkib-cbz-mode") || localStorage.getItem("buukuu-cbz-mode");
+if (!localStorage.getItem("aarkib-cbz-spread") && !localStorage.getItem("aarkib-cbz-direction")) {
+  const legacyMode = localStorage.getItem("aarkib-cbz-mode");
   if (legacyMode === "manga") {
     currentSpread = "double";
     currentDirection = "rtl";
@@ -60,8 +60,7 @@ async function initCBZReader() {
 
   if (currentPage <= 1 && currentBookId) {
     const localPage = parseInt(
-      localStorage.getItem("aarkib-cbz-progress-" + currentBookId) ||
-      localStorage.getItem("buukuu-cbz-progress-" + currentBookId),
+      localStorage.getItem("aarkib-cbz-progress-" + currentBookId),
       10
     );
     if (localPage && localPage > 1) {

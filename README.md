@@ -35,8 +35,8 @@
   - Dark, Light, and OLED themes with persistent state.
   - Installable Progressive Web App (PWA) with offline asset caching.
 - ✨ **Metadata Enrichment & Manual Editor**:
-  - Auto-enrich books using Google Books & Open Library APIs.
-  - Interactive "✏️ Edit Book & Series" metadata modal on book details.
+  - Auto-enrich media using Google Books, Open Library, TMDB, and MusicBrainz.
+  - Interactive "✏️ Edit Metadata" modal on media details.
   - Smart automatic series volume detection from filenames and EPUB 3 / Calibre OPF tags.
 - 🐳 **Docker & Production Ready**: Hardened container running as unprivileged user (`USER aarkib`), built-in healthcheck endpoint (`/api/health`), and persistent SQLite WAL storage.
 
@@ -176,8 +176,8 @@ Aarkib exposes clean, unified REST APIs across all media types:
 | `/api/libraries` | `GET`, `POST` | List all configured media folders or add a new folder with custom `media_type`. |
 | `/api/libraries/<id>` | `GET`, `PUT`, `DELETE` | View, update `media_type` / name, or remove media folder. |
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
-| `/api/libraries/scan` | `POST` | Trigger full scan across all configured media folders. |
-| `/api/libraries/enrich` | `POST` | Enrich catalog items with Google Books & Open Library metadata. |
+| `/api/libraries/enrich` | `POST` | Enrich catalog items across configured media folders. |
+| `/api/media/<id>/enrich` | `POST` | Enrich a single media item with online metadata. |
 | `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 
 ---
@@ -190,11 +190,13 @@ Aarkib includes a CLI for server administration:
 # Scan and index media in configured folders
 uv run aarkib scan
 
-# Scan library and auto-fetch metadata from Google Books / Open Library
+# Scan library and auto-fetch metadata from online sources
 uv run aarkib scan --enrich
 
-# Fetch online metadata for indexed books
+# Fetch online metadata across libraries (or filter by media type / item ID)
 uv run aarkib enrich
+uv run aarkib enrich --type video
+uv run aarkib enrich --item-id 1
 
 # Create a new user or administrator
 uv run aarkib create-user --username alice --password secret123 --admin

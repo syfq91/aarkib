@@ -15,7 +15,6 @@ from sqlalchemy.orm import selectinload
 from aarkib.extensions import db
 from aarkib.models import (
     Author,
-    Book,
     Bookmark,
     Library,
     MediaItem,
@@ -153,10 +152,10 @@ def list_media():
         MAX_PER_PAGE,
     )
 
-    query = select(Book).options(
-        selectinload(Book.authors),
-        selectinload(Book.series),
-        selectinload(Book.tags),
+    query = select(MediaItem).options(
+        selectinload(MediaItem.authors),
+        selectinload(MediaItem.series),
+        selectinload(MediaItem.tags),
     )
 
     relevance_order = False
@@ -166,7 +165,7 @@ def list_media():
         # Attempt FTS5 search
         matching_ids = search_media_ids(q, limit=2000)
         if matching_ids:
-            query = query.filter(Book.id.in_(matching_ids))
+            query = query.filter(MediaItem.id.in_(matching_ids))
             if sort_by in ("relevance", "rank") or (
                 sort_by == "added_at" and "sort" not in request.args
             ):
@@ -175,36 +174,36 @@ def list_media():
                 relevance_order = True
                 order_case = case(
                     {mid: idx for idx, mid in enumerate(matching_ids)},
-                    value=Book.id,
+                    value=MediaItem.id,
                 )
                 query = query.order_by(order_case.asc())
         elif matching_ids == []:
-            query = query.filter(Book.id == -1)
+            query = query.filter(MediaItem.id == -1)
         else:
             search_filter = or_(
-                Book.title.ilike(f"%{q}%"),
-                Book.description.ilike(f"%{q}%"),
-                Book.authors.any(Author.name.ilike(f"%{q}%")),
-                Book.tags.any(Tag.name.ilike(f"%{q}%")),
-                Book.series.has(Series.name.ilike(f"%{q}%")),
+                MediaItem.title.ilike(f"%{q}%"),
+                MediaItem.description.ilike(f"%{q}%"),
+                MediaItem.authors.any(Author.name.ilike(f"%{q}%")),
+                MediaItem.tags.any(Tag.name.ilike(f"%{q}%")),
+                MediaItem.series.has(Series.name.ilike(f"%{q}%")),
             )
             query = query.filter(search_filter)
 
     if author_id:
-        query = query.filter(Book.authors.any(Author.id == author_id))
+        query = query.filter(MediaItem.authors.any(Author.id == author_id))
     if series_id:
-        query = query.filter(Book.series_id == series_id)
+        query = query.filter(MediaItem.series_id == series_id)
     if tag_id:
-        query = query.filter(Book.tags.any(Tag.id == tag_id))
+        query = query.filter(MediaItem.tags.any(Tag.id == tag_id))
     if file_format:
-        query = query.filter(Book.file_format == file_format)
+        query = query.filter(MediaItem.file_format == file_format)
     if media_type:
         if media_type == "audio":
             query = query.filter(
-                Book.media_type.in_(["audio", "audiobook", "music", "podcast"])
+                MediaItem.media_type.in_(["audio", "audiobook", "music", "podcast"])
             )
         else:
-            query = query.filter(Book.media_type == media_type)
+            query = query.filter(MediaItem.media_type == media_type)
     if library_filter:
         from aarkib.services.scanner import get_library_definitions
 
@@ -224,18 +223,22 @@ def list_media():
             query = query.filter(path_match_filter(matched_lib["path"]))
         else:
             prefix = library_filter.rstrip("/\\") + "/"
-            query = query.filter(Book.original_file_path.startswith(prefix))
+            query = query.filter(MediaItem.original_file_path.startswith(prefix))
 
     # Sorting
     if not relevance_order:
         if sort_by == "title":
-            col = Book.sort_title if hasattr(Book, "sort_title") else Book.title
+            col = (
+                MediaItem.sort_title
+                if hasattr(MediaItem, "sort_title")
+                else MediaItem.title
+            )
         elif sort_by == "series_index":
-            col = Book.series_index
+            col = MediaItem.series_index
         elif sort_by == "author":
-            col = Book.title
+            col = MediaItem.title
         else:
-            col = Book.created_at
+            col = MediaItem.created_at
 
         query = query.order_by(col.desc() if order == "desc" else col.asc())
 
@@ -249,13 +252,15 @@ def list_media():
         else (UserProgress.user_id == user_id)
     )
     progress_map = {}
-    book_ids = [b.id for b in pagination.items]
-    if book_ids:
+    item_ids = [b.id for b in pagination.items]
+    if item_ids:
         records = db.session.scalars(
-            select(UserProgress).where(user_cond, UserProgress.book_id.in_(book_ids))
+            select(UserProgress).where(
+                user_cond, UserProgress.media_item_id.in_(item_ids)
+            )
         ).all()
         progress_map = {
-            r.book_id: {
+            r.media_item_id: {
                 "percentage": r.percentage,
                 "location": r.progress_location,
                 "completed": r.is_completed,
@@ -465,19 +470,19 @@ def update_library(identifier: str):
         if new_media_type in MEDIA_TYPE_CHOICES:
             lib.media_type = new_media_type
 
-            # Propagate media_type update to all books indexed in this folder
+            # Propagate media_type update to all items indexed in this folder
             p_res, p_raw = library_path_conditions(lib)
             cond = or_(
-                Book.original_file_path.startswith(p_res),
-                Book.original_file_path.startswith(p_raw),
+                MediaItem.original_file_path.startswith(p_res),
+                MediaItem.original_file_path.startswith(p_raw),
             )
             if new_media_type != "all":
                 db.session.execute(
-                    update(Book).where(cond).values(media_type=new_media_type)
+                    update(MediaItem).where(cond).values(media_type=new_media_type)
                 )
             else:
-                books = db.session.scalars(select(Book).where(cond)).all()
-                for b in books:
+                items = db.session.scalars(select(MediaItem).where(cond)).all()
+                for b in items:
                     if b.file_format in ("cbz", "cbr", "zip"):
                         b.media_type = "comic"
                     elif b.file_format in VIDEO_EXTENSIONS:
@@ -511,16 +516,16 @@ def delete_library(identifier: str):
     except KeyError:
         return jsonify({"error": "Library not found"}), 404
 
-    # Remove books indexed under this library
+    # Remove items indexed under this library
     p_res, p_raw = library_path_conditions(lib)
     cond = or_(
-        Book.original_file_path.startswith(p_res),
-        Book.original_file_path.startswith(p_raw),
+        MediaItem.original_file_path.startswith(p_res),
+        MediaItem.original_file_path.startswith(p_raw),
     )
-    books = db.session.scalars(select(Book).where(cond)).all()
-    deleted_count = len(books)
-    book_ids = [b.id for b in books]
-    for b in books:
+    items = db.session.scalars(select(MediaItem).where(cond)).all()
+    deleted_count = len(items)
+    item_ids = [b.id for b in items]
+    for b in items:
         db.session.delete(b)
 
     db.session.delete(lib)
@@ -528,13 +533,14 @@ def delete_library(identifier: str):
 
     from aarkib.services.search import remove_media_item_fts
 
-    for bid in book_ids:
+    for bid in item_ids:
         remove_media_item_fts(bid)
 
     return jsonify(
         {
             "status": "success",
             "deleted_id": identifier,
+            "deleted_items": deleted_count,
             "deleted_books": deleted_count,
         }
     )
@@ -574,16 +580,16 @@ def scan_single_library(identifier: str):
 @api_bp.route("/media/<int:item_id>", methods=["GET"])
 def get_media_item(item_id: int):
     """Return full item details, including user progress, for a single catalog item."""
-    book = db.session.scalar(
-        select(Book)
+    item = db.session.scalar(
+        select(MediaItem)
         .options(
-            selectinload(Book.creators),
-            selectinload(Book.collection),
-            selectinload(Book.tags),
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.collection),
+            selectinload(MediaItem.tags),
         )
-        .where(Book.id == item_id)
+        .where(MediaItem.id == item_id)
     )
-    if not book:
+    if not item:
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
@@ -594,7 +600,7 @@ def get_media_item(item_id: int):
     )
     prog = None
     prog_record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
+        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
     )
     if prog_record:
         prog = {
@@ -606,52 +612,52 @@ def get_media_item(item_id: int):
 
     return jsonify(
         {
-            "id": book.id,
-            "title": book.title,
-            "media_type": book.media_type,
-            "creators": [a.name for a in book.creators],
-            "creators_display": book.creators_display,
-            "authors": [a.name for a in book.authors],
-            "authors_display": book.authors_display,
-            "description": book.description,
-            "publisher": book.publisher,
-            "language": book.language,
-            "isbn": book.isbn,
-            "publication_date": book.publication_date,
-            "file_format": book.file_format,
-            "file_size": book.file_size,
-            "collection": book.collection.name if book.collection else None,
-            "collection_id": book.collection_id,
-            "series": book.series.name if book.series else None,
-            "series_index": book.series_index,
-            "tags": [t.name for t in book.tags],
-            "page_count": book.page_count,
-            "duration": book.duration,
-            "formatted_duration": book.formatted_duration,
-            "resolution_width": book.resolution_width,
-            "resolution_height": book.resolution_height,
-            "resolution_label": book.resolution_label,
-            "codec": book.codec,
-            "season": book.season,
-            "episode": book.episode,
-            "episode_code": book.episode_code,
-            "author": getattr(book, "author", None),
-            "narrator": getattr(book, "narrator", None),
-            "chapters": book.chapters if hasattr(book, "chapters") else [],
-            "abridged": getattr(book, "abridged", False),
-            "album": getattr(book, "album", None),
-            "album_artist": getattr(book, "album_artist", None),
-            "genre": getattr(book, "genre", None),
-            "release_year": getattr(book, "release_year", None),
-            "track_number": getattr(book, "track_number", None),
-            "disc_number": getattr(book, "disc_number", None),
-            "is_compilation": getattr(book, "is_compilation", False),
-            "cover_url": f"/api/media/{book.id}/cover",
-            "download_url": f"/api/media/{book.id}/download",
-            "file_url": f"/api/media/{book.id}/file",
-            "player_url": book.player_url,
+            "id": item.id,
+            "title": item.title,
+            "media_type": item.media_type,
+            "creators": [a.name for a in item.creators],
+            "creators_display": item.creators_display,
+            "authors": [a.name for a in item.authors],
+            "authors_display": item.authors_display,
+            "description": item.description,
+            "publisher": item.publisher,
+            "language": item.language,
+            "isbn": item.isbn,
+            "publication_date": item.publication_date,
+            "file_format": item.file_format,
+            "file_size": item.file_size,
+            "collection": item.collection.name if item.collection else None,
+            "collection_id": item.collection_id,
+            "series": item.series.name if item.series else None,
+            "series_index": item.series_index,
+            "tags": [t.name for t in item.tags],
+            "page_count": item.page_count,
+            "duration": item.duration,
+            "formatted_duration": item.formatted_duration,
+            "resolution_width": item.resolution_width,
+            "resolution_height": item.resolution_height,
+            "resolution_label": item.resolution_label,
+            "codec": item.codec,
+            "season": item.season,
+            "episode": item.episode,
+            "episode_code": item.episode_code,
+            "author": getattr(item, "author", None),
+            "narrator": getattr(item, "narrator", None),
+            "chapters": item.chapters if hasattr(item, "chapters") else [],
+            "abridged": getattr(item, "abridged", False),
+            "album": getattr(item, "album", None),
+            "album_artist": getattr(item, "album_artist", None),
+            "genre": getattr(item, "genre", None),
+            "release_year": getattr(item, "release_year", None),
+            "track_number": getattr(item, "track_number", None),
+            "disc_number": getattr(item, "disc_number", None),
+            "is_compilation": getattr(item, "is_compilation", False),
+            "cover_url": f"/api/media/{item.id}/cover",
+            "download_url": f"/api/media/{item.id}/download",
+            "file_url": f"/api/media/{item.id}/file",
+            "player_url": item.player_url,
             "progress": prog,
-            "created_at": book.created_at.isoformat() if book.created_at else None,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
         }
     )
 
@@ -659,25 +665,25 @@ def get_media_item(item_id: int):
 @api_bp.route("/media/<int:item_id>/cover", methods=["GET"])
 def get_media_cover(item_id: int):
     """Serve the cached WebP cover/poster image for a media item."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         abort(404)
 
-    if book.cover_image_path:
+    if item.cover_image_path:
         covers_dir = Path(current_app.config["COVERS_DIR"])
-        cover_file = covers_dir / book.cover_image_path
+        cover_file = covers_dir / item.cover_image_path
         if cover_file.exists() and _is_within_covers(cover_file):
             return send_file(cover_file, mimetype="image/webp")
 
     # Generate fallback SVG cover
-    if book.is_video:
-        title = book.title[:30] + ("..." if len(book.title) > 30 else "")
+    if item.is_video:
+        title = item.title[:30] + ("..." if len(item.title) > 30 else "")
         sub = (
-            f"S{book.season:02d}E{book.episode:02d}"
-            if (book.season is not None and book.episode is not None)
+            f"S{item.season:02d}E{item.episode:02d}"
+            if (item.season is not None and item.episode is not None)
             else (
-                book.publication_date
-                or (book.file_format.upper() if book.file_format else "VIDEO")
+                item.publication_date
+                or (item.file_format.upper() if item.file_format else "VIDEO")
             )
         )
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
@@ -693,7 +699,7 @@ def get_media_cover(item_id: int):
         <text x="150" y="210" fill="#f8fafc" font-size="18" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
         <text x="150" y="250" fill="#a5b4fc" font-size="14" font-family="system-ui, sans-serif" text-anchor="middle">{sub}</text>
         <rect x="90" y="295" width="120" height="28" rx="6" fill="#4338ca"/>
-        <text x="150" y="314" fill="#ffffff" font-size="12" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{(book.file_format or "video").upper()}</text>
+        <text x="150" y="314" fill="#ffffff" font-size="12" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{(item.file_format or "video").upper()}</text>
         <text x="150" y="410" fill="#6366f1" font-size="12" font-family="system-ui, sans-serif" letter-spacing="2" text-anchor="middle">AARKIB VIDEO</text>
     </svg>"""
         return (
@@ -702,8 +708,8 @@ def get_media_cover(item_id: int):
             {"Content-Type": "image/svg+xml"},
         )
 
-    title = book.title[:30] + ("..." if len(book.title) > 30 else "")
-    author = book.authors_display[:25]
+    title = item.title[:30] + ("..." if len(item.title) > 30 else "")
+    author = item.authors_display[:25]
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
         <rect width="300" height="450" fill="#1e293b" rx="8"/>
         <rect x="12" y="12" width="276" height="426" fill="none" stroke="#475569" stroke-width="2" rx="6"/>
@@ -723,40 +729,40 @@ def get_media_cover(item_id: int):
 @api_bp.route("/media/<int:item_id>/stream", methods=["GET"])
 def get_media_file(item_id: int, filename: str | None = None):
     """Stream the original media file with HTTP 206 byte-range support."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
     guessed, _ = mimetypes.guess_type(str(file_path))
     if guessed:
         mimetype = guessed
-    elif book.file_format == "epub":
+    elif item.file_format == "epub":
         mimetype = "application/epub+zip"
-    elif book.file_format in ("cbz", "zip", "cbr"):
+    elif item.file_format in ("cbz", "zip", "cbr"):
         mimetype = "application/vnd.comicbook+zip"
-    elif book.file_format == "mp4":
+    elif item.file_format == "mp4":
         mimetype = "video/mp4"
-    elif book.file_format == "webm":
+    elif item.file_format == "webm":
         mimetype = "video/webm"
-    elif book.file_format == "mkv":
+    elif item.file_format == "mkv":
         mimetype = "video/x-matroska"
-    elif book.file_format in ("m4b", "m4a"):
+    elif item.file_format in ("m4b", "m4a"):
         mimetype = "audio/mp4"
-    elif book.file_format == "mp3":
+    elif item.file_format == "mp3":
         mimetype = "audio/mpeg"
-    elif book.file_format == "flac":
+    elif item.file_format == "flac":
         mimetype = "audio/flac"
-    elif book.file_format == "wav":
+    elif item.file_format == "wav":
         mimetype = "audio/wav"
-    elif book.file_format == "ogg":
+    elif item.file_format == "ogg":
         mimetype = "audio/ogg"
-    elif book.file_format == "opus":
+    elif item.file_format == "opus":
         mimetype = "audio/opus"
-    elif book.file_format == "aac":
+    elif item.file_format == "aac":
         mimetype = "audio/aac"
     else:
         mimetype = "application/octet-stream"
@@ -773,11 +779,11 @@ def get_media_file(item_id: int, filename: str | None = None):
 @api_bp.route("/stream/<int:item_id>/info", methods=["GET"])
 def get_stream_info(item_id: int):
     """Returns technical stream metadata, codecs, tracks, and recommended playback strategy."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
@@ -791,15 +797,15 @@ def get_stream_info(item_id: int):
 
     return jsonify(
         {
-            "id": book.id,
-            "title": book.title,
-            "file_format": book.file_format,
+            "id": item.id,
+            "title": item.title,
+            "file_format": item.file_format,
             "original_file_path": str(file_path),
             "streams": streams,
             "evaluation": eval_res,
-            "direct_url": f"/api/media/{book.id}/file",
-            "remux_url": f"/api/media/{book.id}/stream/remux",
-            "hls_url": f"/api/media/{book.id}/stream/hls/master.m3u8",
+            "direct_url": f"/api/media/{item.id}/file",
+            "remux_url": f"/api/media/{item.id}/stream/remux",
+            "hls_url": f"/api/media/{item.id}/stream/hls/master.m3u8",
         }
     )
 
@@ -808,11 +814,11 @@ def get_stream_info(item_id: int):
 @api_bp.route("/stream/<int:item_id>/remux", methods=["GET"])
 def stream_remux_video(item_id: int):
     """Progressive on-the-fly container remux (e.g. MKV -> fragmented MP4) via FFmpeg pipe."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
@@ -842,11 +848,11 @@ def stream_remux_video(item_id: int):
 @api_bp.route("/stream/<int:item_id>/hls/master.m3u8", methods=["GET"])
 def get_hls_master_playlist(item_id: int):
     """Spawns/attaches to an HLS transcode session and returns the master playlist."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
@@ -864,7 +870,7 @@ def get_hls_master_playlist(item_id: int):
     )
 
     session = transcode_supervisor.create_or_get_hls_session(
-        media_item_id=book.id,
+        media_item_id=item.id,
         file_path=file_path,
         transcode_base_dir=transcode_dir,
         resolution=resolution,
@@ -879,7 +885,7 @@ def get_hls_master_playlist(item_id: int):
         "#EXTM3U\n"
         "#EXT-X-VERSION:7\n"
         f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},NAME="{resolution}"\n'
-        f"/api/media/{book.id}/stream/hls/{session.session_id}/playlist.m3u8\n"
+        f"/api/media/{item.id}/stream/hls/{session.session_id}/playlist.m3u8\n"
     )
 
     return Response(
@@ -893,10 +899,10 @@ def get_hls_master_playlist(item_id: int):
 
 
 @api_bp.route(
-    "/media/<int:book_id>/stream/hls/<session_id>/playlist.m3u8", methods=["GET"]
+    "/media/<int:item_id>/stream/hls/<session_id>/playlist.m3u8", methods=["GET"]
 )
-@api_bp.route("/stream/<int:book_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
-def get_hls_session_playlist(book_id: int, session_id: str):
+@api_bp.route("/stream/<int:item_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
+def get_hls_session_playlist(item_id: int, session_id: str):
     """Serves the HLS playlist generated by an active transcode session."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -914,12 +920,12 @@ def get_hls_session_playlist(book_id: int, session_id: str):
 
 
 @api_bp.route(
-    "/media/<int:book_id>/stream/hls/<session_id>/<path:segment_name>", methods=["GET"]
+    "/media/<int:item_id>/stream/hls/<session_id>/<path:segment_name>", methods=["GET"]
 )
 @api_bp.route(
-    "/stream/<int:book_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
+    "/stream/<int:item_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
 )
-def get_hls_segment(book_id: int, session_id: str, segment_name: str):
+def get_hls_segment(item_id: int, session_id: str, segment_name: str):
     """Serves an HLS segment (.m4s or init.mp4) and updates session heartbeat."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -945,10 +951,10 @@ def get_hls_segment(book_id: int, session_id: str, segment_name: str):
 
 
 @api_bp.route(
-    "/media/<int:book_id>/stream/hls/<session_id>/heartbeat", methods=["POST"]
+    "/media/<int:item_id>/stream/hls/<session_id>/heartbeat", methods=["POST"]
 )
-@api_bp.route("/stream/<int:book_id>/hls/<session_id>/heartbeat", methods=["POST"])
-def hls_heartbeat(book_id: int, session_id: str):
+@api_bp.route("/stream/<int:item_id>/hls/<session_id>/heartbeat", methods=["POST"])
+def hls_heartbeat(item_id: int, session_id: str):
     """Client heartbeat ping to keep an active HLS transcode session alive."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -960,9 +966,9 @@ def hls_heartbeat(book_id: int, session_id: str):
     return jsonify({"status": "ok", "session_id": session_id})
 
 
-@api_bp.route("/media/<int:book_id>/stream/hls/<session_id>/stop", methods=["POST"])
-@api_bp.route("/stream/<int:book_id>/hls/<session_id>/stop", methods=["POST"])
-def stop_hls_session(book_id: int, session_id: str):
+@api_bp.route("/media/<int:item_id>/stream/hls/<session_id>/stop", methods=["POST"])
+@api_bp.route("/stream/<int:item_id>/hls/<session_id>/stop", methods=["POST"])
+def stop_hls_session(item_id: int, session_id: str):
     """Explicitly stops a transcode session and prunes its scratch directory."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -974,11 +980,11 @@ def stop_hls_session(book_id: int, session_id: str):
 @api_bp.route("/stream/<int:item_id>/subtitles", methods=["GET"])
 def list_subtitles(item_id: int):
     """Returns list of embedded subtitle tracks for a media item."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
@@ -987,7 +993,7 @@ def list_subtitles(item_id: int):
     streams = probe_media_streams(file_path)
     return jsonify(
         {
-            "id": book.id,
+            "id": item.id,
             "subtitles": streams.get("subtitles", []),
         }
     )
@@ -999,11 +1005,11 @@ def list_subtitles(item_id: int):
 @api_bp.route("/stream/<int:item_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
 def get_subtitle_vtt(item_id: int, track_index: int):
     """Extracts and converts the requested embedded subtitle track to WebVTT."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
@@ -1024,16 +1030,16 @@ def get_subtitle_vtt(item_id: int, track_index: int):
 )
 def download_media_file(item_id: int, preset: str | None = None):
     """Download a media file, optionally served from a precomputed e-ink optimized EPUB."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File missing from storage", 404)
 
-    if preset_arg and book.file_format == "epub":
+    if preset_arg and item.file_format == "epub":
         optimized_dir = Path(
             current_app.config.get(
                 "OPTIMIZED_DIR",
@@ -1044,13 +1050,13 @@ def download_media_file(item_id: int, preset: str | None = None):
 
         try:
             opt_path = get_or_create_optimized_epub(
-                book_id=book.id,
-                file_path=book.original_file_path,
-                file_hash=book.file_hash,
+                item_id=item.id,
+                file_path=item.original_file_path,
+                file_hash=item.file_hash,
                 preset_key=preset_arg,
                 optimized_dir=optimized_dir,
             )
-            download_name = f"{book.title} ({preset_arg.upper()}).epub"
+            download_name = f"{item.title} ({preset_arg.upper()}).epub"
             return send_file(
                 opt_path,
                 as_attachment=True,
@@ -1059,10 +1065,10 @@ def download_media_file(item_id: int, preset: str | None = None):
             )
         except Exception as e:
             current_app.logger.error(
-                "Failed optimizing on download for %s: %s", book.title, e
+                "Failed optimizing on download for %s: %s", item.title, e
             )
 
-    filename = f"{book.title}.{book.file_format}"
+    filename = f"{item.title}.{item.file_format}"
     guessed, _ = mimetypes.guess_type(str(file_path))
     mimetype = guessed or "application/octet-stream"
     return send_file(
@@ -1082,8 +1088,8 @@ def get_optimizer_presets():
 @api_admin_required
 def precompute_media_optimization(item_id: int):
     """Pre-generate optimized EPUB cache for a media item."""
-    book = db.session.get(Book, item_id)
-    if not book or book.file_format != "epub":
+    item = db.session.get(MediaItem, item_id)
+    if not item or item.file_format != "epub":
         return api_error("Item is not an EPUB", 400)
 
     data = request.get_json(silent=True) or {}
@@ -1099,14 +1105,14 @@ def precompute_media_optimization(item_id: int):
 
     try:
         opt_path = get_or_create_optimized_epub(
-            book_id=book.id,
-            file_path=book.original_file_path,
-            file_hash=book.file_hash,
+            item_id=item.id,
+            file_path=item.original_file_path,
+            file_hash=item.file_hash,
             preset_key=preset_arg,
             optimized_dir=optimized_dir,
         )
         opt_size = opt_path.stat().st_size
-        orig_size = book.file_size or Path(book.original_file_path).stat().st_size
+        orig_size = item.file_size or Path(item.original_file_path).stat().st_size
         reduction = (
             round((1.0 - (opt_size / orig_size)) * 100, 1) if orig_size > 0 else 0
         )
@@ -1114,14 +1120,13 @@ def precompute_media_optimization(item_id: int):
         return jsonify(
             {
                 "status": "success",
-                "id": book.id,
-                "item_id": book.id,
-                "book_id": book.id,
+                "id": item.id,
+                "item_id": item.id,
                 "preset": preset_arg,
                 "original_size": orig_size,
                 "optimized_size": opt_size,
                 "reduction_percent": reduction,
-                "download_url": f"/api/media/{book.id}/download/optimized/{preset_arg}",
+                "download_url": f"/api/media/{item.id}/download/optimized/{preset_arg}",
             }
         )
     except Exception as e:
@@ -1132,11 +1137,11 @@ def precompute_media_optimization(item_id: int):
 @api_bp.route("/media/<int:item_id>/pages", methods=["GET"])
 def get_cbz_pages(item_id: int):
     """List page metadata (path, width, height) for a CBZ comic."""
-    book = db.session.get(Book, item_id)
-    if not book or book.file_format not in ("cbz", "zip", "cbr"):
+    item = db.session.get(MediaItem, item_id)
+    if not item or item.file_format not in ("cbz", "zip", "cbr"):
         return api_error("Item is not a CBZ comic", 400)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         return api_error("File not found", 404)
 
@@ -1157,16 +1162,15 @@ def get_cbz_pages(item_id: int):
     pages = [
         {
             "page_number": idx + 1,
-            "url": f"/api/media/{book.id}/page/{idx + 1}",
+            "url": f"/api/media/{item.id}/page/{idx + 1}",
             "filename": Path(name).name,
         }
         for idx, name in enumerate(image_names)
     ]
     return jsonify(
         {
-            "id": book.id,
-            "item_id": book.id,
-            "book_id": book.id,
+            "id": item.id,
+            "item_id": item.id,
             "total_pages": len(pages),
             "pages": pages,
         }
@@ -1176,11 +1180,11 @@ def get_cbz_pages(item_id: int):
 @api_bp.route("/media/<int:item_id>/page/<int:page_num>", methods=["GET"])
 def get_cbz_page_image(item_id: int, page_num: int):
     """Serve a single page image from a CBZ comic archive."""
-    book = db.session.get(Book, item_id)
-    if not book or book.file_format not in ("cbz", "zip", "cbr"):
+    item = db.session.get(MediaItem, item_id)
+    if not item or item.file_format not in ("cbz", "zip", "cbr"):
         abort(404)
 
-    file_path = Path(book.original_file_path)
+    file_path = Path(item.original_file_path)
     if not file_path.exists():
         abort(404)
 
@@ -1221,7 +1225,7 @@ def get_cbz_page_image(item_id: int, page_num: int):
             )
     except Exception as e:
         current_app.logger.error(
-            "Error serving page %s for book %s: %s", page_num, item_id, e
+            "Error serving page %s for media item %s: %s", page_num, item_id, e
         )
         abort(500, description=f"Unable to read comic page: {e}")
 
@@ -1229,8 +1233,8 @@ def get_cbz_page_image(item_id: int, page_num: int):
 @api_bp.route("/media/<int:item_id>/progress", methods=["GET", "POST"])
 def media_progress(item_id: int):
     """Fetch or update reading/video progress for a media item."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
@@ -1251,11 +1255,11 @@ def media_progress(item_id: int):
         is_completed = bool(data.get("is_completed", False) or percentage >= 99.0)
 
         record = db.session.scalar(
-            select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
+            select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
         )
 
         if not record:
-            record = UserProgress(user_id=user_id, book_id=book.id)
+            record = UserProgress(user_id=user_id, media_item_id=item.id)
 
         # Only update location if new location is non-zero or record has no valid location
         if location and location != "0":
@@ -1282,7 +1286,7 @@ def media_progress(item_id: int):
 
     # GET request
     record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.book_id == book.id)
+        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
     )
 
     if record:
@@ -1300,8 +1304,8 @@ def media_progress(item_id: int):
 @api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])
 def bookmarks(item_id: int):
     """List or create bookmarks for a media item."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
@@ -1317,7 +1321,7 @@ def bookmarks(item_id: int):
 
         bm = Bookmark(
             user_id=user_id,
-            book_id=book.id,
+            media_item_id=item.id,
             location=location,
             title=title,
             snippet=snippet,
@@ -1333,7 +1337,7 @@ def bookmarks(item_id: int):
             }
         ), 201
 
-    query = select(Bookmark).where(Bookmark.book_id == book.id)
+    query = select(Bookmark).where(Bookmark.media_item_id == item.id)
     if user_id:
         query = query.where(Bookmark.user_id == user_id)
     bms = db.session.scalars(query.order_by(Bookmark.created_at.desc())).all()
@@ -1604,32 +1608,32 @@ def enrich_library():
 @api_admin_required
 def edit_media_metadata(item_id: int):
     """Manually edit a media item's title, creators, series, tags, and descriptive fields."""
-    book = db.session.get(Book, item_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         return api_error("Media item not found", 404)
 
     from aarkib.services.media_service import edit_media_metadata as apply_edits
 
     data = request.get_json(silent=True) or request.form
-    apply_edits(book, data)
+    apply_edits(item, data)
     db.session.commit()
 
     from aarkib.services.search import sync_media_item_fts
 
-    sync_media_item_fts(book.id)
+    sync_media_item_fts(item.id)
 
     item_dict = {
-        "id": book.id,
-        "title": book.title,
-        "collection": book.collection.name if book.collection else None,
-        "collection_id": book.collection_id,
-        "series": book.series.name if book.series else None,
-        "series_index": book.series_index,
-        "creators": [a.name for a in book.creators],
-        "creators_display": book.creators_display,
-        "authors": [a.name for a in book.authors],
-        "tags": [t.name for t in book.tags],
-        "locked_fields": book.get_locked_fields(),
+        "id": item.id,
+        "title": item.title,
+        "collection": item.collection.name if item.collection else None,
+        "collection_id": item.collection_id,
+        "series": item.series.name if item.series else None,
+        "series_index": item.series_index,
+        "creators": [a.name for a in item.creators],
+        "creators_display": item.creators_display,
+        "authors": [a.name for a in item.authors],
+        "tags": [t.name for t in item.tags],
+        "locked_fields": item.get_locked_fields(),
     }
 
     return jsonify(

@@ -23,44 +23,45 @@ def open_media_item(item_id: int):
     return redirect(item.player_url)
 
 
-@reader_bp.route("/epub/<int:book_id>")
+@reader_bp.route("/epub/<int:item_id>")
 @optional_or_required_auth
-def read_epub(book_id: int):
-    book = db.session.get(MediaItem, book_id)
-    if not book:
-        abort(404, description="Book not found")
-    if book.file_format != "epub":
-        abort(400, description="Book is not an EPUB")
+def read_epub(item_id: int):
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Item not found")
+    if item.file_format != "epub":
+        abort(400, description="Item is not an EPUB")
 
     user_id = current_user.id if current_user.is_authenticated else None
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.media_item_id == book.id,
+            UserProgress.media_item_id == item.id,
         )
     )
 
     return render_template(
         "reader_epub.html",
-        book=book,
+        item=item,
+        book=item,
         initial_location=progress.progress_location if progress else "0",
     )
 
 
-@reader_bp.route("/cbz/<int:book_id>")
+@reader_bp.route("/cbz/<int:item_id>")
 @optional_or_required_auth
-def read_cbz(book_id: int):
-    book = db.session.get(MediaItem, book_id)
-    if not book:
-        abort(404, description="Book not found")
-    if book.file_format not in ("cbz", "zip", "cbr"):
-        abort(400, description="Book is not a CBZ comic")
+def read_cbz(item_id: int):
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Item not found")
+    if item.file_format not in ("cbz", "zip", "cbr"):
+        abort(400, description="Item is not a CBZ comic")
 
     user_id = current_user.id if current_user.is_authenticated else None
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.media_item_id == book.id,
+            UserProgress.media_item_id == item.id,
         )
     )
 
@@ -73,25 +74,26 @@ def read_cbz(book_id: int):
 
     return render_template(
         "reader_cbz.html",
-        book=book,
+        item=item,
+        book=item,
         initial_page=initial_page,
     )
 
 
-@reader_bp.route("/video/<int:book_id>")
+@reader_bp.route("/video/<int:item_id>")
 @optional_or_required_auth
-def watch_video(book_id: int):
-    book = db.session.get(MediaItem, book_id)
-    if not book:
+def watch_video(item_id: int):
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         abort(404, description="Video not found")
-    if not book.is_video and book.file_format not in VIDEO_EXTENSIONS:
+    if not item.is_video and item.file_format not in VIDEO_EXTENSIONS:
         abort(400, description="Item is not a video")
 
     user_id = current_user.id if current_user.is_authenticated else None
     progress = db.session.scalar(
         select(UserProgress).where(
             UserProgress.user_id == user_id,
-            UserProgress.media_item_id == book.id,
+            UserProgress.media_item_id == item.id,
         )
     )
 
@@ -105,14 +107,14 @@ def watch_video(book_id: int):
     # Next / previous episode navigation if part of a collection / show
     next_video = None
     prev_video = None
-    if book.collection_id:
+    if item.collection_id:
         episodes = db.session.scalars(
             select(MediaItem)
-            .where(MediaItem.collection_id == book.collection_id)
+            .where(MediaItem.collection_id == item.collection_id)
             .order_by(MediaItem.series_index.asc(), MediaItem.id.asc())
         ).all()
         for idx, ep in enumerate(episodes):
-            if ep.id == book.id:
+            if ep.id == item.id:
                 if idx + 1 < len(episodes):
                     next_video = episodes[idx + 1]
                 if idx > 0:
@@ -121,7 +123,8 @@ def watch_video(book_id: int):
 
     return render_template(
         "reader_video.html",
-        book=book,
+        item=item,
+        book=item,
         initial_time=initial_time,
         progress=progress,
         next_video=next_video,

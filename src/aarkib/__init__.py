@@ -303,31 +303,50 @@ def register_commands(app: Flask) -> None:
             click.echo(f"{u.id:<4} {u.username:<20} {role:<10} {joined:<12}")
 
     @app.cli.command("enrich")
-    @click.option("--book-id", type=int, help="ID of specific book to enrich")
+    @click.option(
+        "--item-id",
+        "--id",
+        "--book-id",
+        "item_id",
+        type=int,
+        help="ID of specific media item to enrich",
+    )
+    @click.option(
+        "--type",
+        "media_type",
+        default="all",
+        help="Media type filter (book, video, music, audiobook, podcast, all)",
+    )
     @click.option("--overwrite", is_flag=True, help="Overwrite existing metadata")
     @click.option(
         "--provider",
         default="all",
-        type=click.Choice(["all", "googlebooks", "openlibrary"]),
-        help="Metadata provider",
+        help="Metadata provider (all, googlebooks, openlibrary, tmdb, musicbrainz)",
     )
-    def enrich_command(book_id, overwrite, provider):
-        """Enrich catalog metadata using online sources (Google Books / Open Library)."""
+    def enrich_command(item_id, media_type, overwrite, provider):
+        """Enrich catalog metadata using online sources (Google Books, Open Library, TMDB, MusicBrainz)."""
         from aarkib.models import MediaItem
-        from aarkib.services.enricher import enrich_all_books, enrich_book
+        from aarkib.services.enricher import enrich_all_media, enrich_media_item
 
         covers_dir = Path(app.config["COVERS_DIR"])
-        if book_id:
-            book = db.session.get(MediaItem, book_id)
-            if not book:
-                click.echo(f"Media item ID {book_id} not found.")
+        if item_id:
+            item = db.session.get(MediaItem, item_id)
+            if not item:
+                click.echo(f"Media item ID {item_id} not found.")
                 return
-            click.echo(f"Enriching '{book.title}'...")
-            res = enrich_book(book, covers_dir, overwrite=overwrite, provider=provider)
+            click.echo(f"Enriching '{item.title}'...")
+            res = enrich_media_item(
+                item, covers_dir, overwrite=overwrite, provider=provider
+            )
             click.echo(f"Result: {res}")
         else:
-            click.echo("Enriching all books in library...")
-            res = enrich_all_books(app, overwrite=overwrite, provider=provider)
+            click.echo(f"Enriching media in library (type: {media_type})...")
+            res = enrich_all_media(
+                app,
+                overwrite=overwrite,
+                provider=provider,
+                media_type=media_type,
+            )
             click.echo(f"Enrichment complete: {res}")
 
 

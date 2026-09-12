@@ -237,17 +237,11 @@ def test_api_media_and_legacy_routes(client, app, sample_epub):
     assert res_stream_media.headers["Content-Type"].startswith("application/epub+zip")
     assert client.get(f"/api/books/{book_id}/stream").status_code == 404
 
-    # UI routes: /media/<id> gives 200, /book/<id> and /item/<id> 301 redirect to /media/<id>
+    # UI route: /media/<id> gives 200; retired legacy routes return 404
     ui_media = client.get(f"/media/{book_id}")
     assert ui_media.status_code == 200
-
-    ui_book = client.get(f"/book/{book_id}", follow_redirects=False)
-    assert ui_book.status_code == 301
-    assert ui_book.headers["Location"].endswith(f"/media/{book_id}")
-
-    ui_item = client.get(f"/item/{book_id}", follow_redirects=False)
-    assert ui_item.status_code == 301
-    assert ui_item.headers["Location"].endswith(f"/media/{book_id}")
+    assert client.get(f"/book/{book_id}").status_code == 404
+    assert client.get(f"/item/{book_id}").status_code == 404
 
 
 def test_api_bookmark_authorization(client, app, sample_epub):

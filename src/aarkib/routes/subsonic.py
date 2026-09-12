@@ -486,7 +486,6 @@ def scrobble(user: User | None = None):
         prog = UserProgress(
             user_id=user_id,
             media_item_id=item.id,
-            book_id=item.id,
         )
         db.session.add(prog)
 

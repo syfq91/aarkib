@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Series, Tag, User, UserProgress
+from aarkib.models import Author, MediaItem, Series, Tag, User, UserProgress
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ OPDS_READABLE_TYPES: tuple[str, ...] = ("book", "comic", "audiobook")
 def opds_readable_filter():
     """Filter condition restricting OPDS catalog items to readable media."""
     return or_(
-        Book.media_type.in_(OPDS_READABLE_TYPES),
-        Book.media_type.is_(None),
+        MediaItem.media_type.in_(OPDS_READABLE_TYPES),
+        MediaItem.media_type.is_(None),
     )
 
 
@@ -273,11 +273,9 @@ def _resolve_progression_conflict(progress, modified_dt, user) -> Response | Non
     return None
 
 
-@opds_bp.route("/media/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
-@opds_bp.route("/v2/media/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
-@opds_bp.route("/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
-@opds_bp.route("/v2/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
-def opds_book_progression(book_id: int):
+@opds_bp.route("/media/<int:item_id>/progression", methods=["GET", "PUT", "POST"])
+@opds_bp.route("/v2/media/<int:item_id>/progression", methods=["GET", "PUT", "POST"])
+def opds_media_progression(item_id: int):
     """OPDS Progression 1.0 Fetch and Update endpoint."""
     user = get_opds_user()
     if current_app.config.get("AUTH_REQUIRED", False) and not user:
@@ -289,8 +287,8 @@ def opds_book_progression(book_id: int):
             headers={"WWW-Authenticate": 'Basic realm="Aarkib OPDS"'},
         )
 
-    book = db.session.get(Book, book_id)
-    if not book:
+    item = db.session.get(MediaItem, item_id)
+    if not item:
         problem = {
             "type": "https://registry.opds.io/error#publication-not-found",
             "title": "Publication not found in Aarkib catalog.",
@@ -303,7 +301,7 @@ def opds_book_progression(book_id: int):
     if request.method == "GET":
         progress = db.session.scalar(
             select(UserProgress).where(
-                UserProgress.book_id == book_id,
+                UserProgress.media_item_id == item_id,
                 UserProgress.user_id == user_id,
             )
         )
@@ -330,7 +328,7 @@ def opds_book_progression(book_id: int):
 
     progress = db.session.scalar(
         select(UserProgress).where(
-            UserProgress.book_id == book_id,
+            UserProgress.media_item_id == item_id,
             UserProgress.user_id == user_id,
         )
     )
@@ -342,7 +340,7 @@ def opds_book_progression(book_id: int):
     is_new = progress is None
     if not progress:
         progress = UserProgress(
-            book_id=book_id,
+            media_item_id=item_id,
             user_id=user_id,
             progress_location=vals["primary_location"],
             percentage=vals["percentage"],
@@ -426,16 +424,16 @@ def opds2_recent(preset: str | None = None):
     """Returns OPDS 2.0 Recent Publications Feed with Progression 1.0 links."""
     base_url = request.host_url.rstrip("/")
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
-    books = db.session.scalars(
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.series))
+    items = db.session.scalars(
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.series))
         .where(opds_readable_filter())
-        .order_by(Book.created_at.desc())
+        .order_by(MediaItem.created_at.desc())
         .limit(50)
     ).all()
 
     publications = []
-    for b in books:
+    for b in items:
         if preset and b.file_format == "epub":
             acq_href = f"{base_url}/api/media/{b.id}/download/optimized/{preset}"
         else:
@@ -445,7 +443,7 @@ def opds2_recent(preset: str | None = None):
             "metadata": {
                 "@type": "http://schema.org/Book",
                 "title": b.title,
-                "identifier": f"urn:aarkib:book:{b.id}",
+                "identifier": f"urn:aarkib:media:{b.id}",
                 "modified": (b.updated_at or datetime.now(UTC)).isoformat(),
                 "author": [{"name": a.name} for a in b.authors]
                 if b.authors
@@ -539,10 +537,10 @@ def recent_feed(preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     per_page = 30
     query = (
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.tags))
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
         .where(opds_readable_filter())
-        .order_by(Book.created_at.desc())
+        .order_by(MediaItem.created_at.desc())
     )
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
@@ -600,10 +598,10 @@ def author_books(author_id: int, preset: str | None = None):
 
     page = request.args.get("page", 1, type=int)
     query = (
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.authors.any(Author.id == author_id), opds_readable_filter())
-        .order_by(Book.title.asc())
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .filter(MediaItem.authors.any(Author.id == author_id), opds_readable_filter())
+        .order_by(MediaItem.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
@@ -660,10 +658,10 @@ def series_books(series_id: int, preset: str | None = None):
 
     page = request.args.get("page", 1, type=int)
     query = (
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.series_id == series_id, opds_readable_filter())
-        .order_by(Book.series_index.asc(), Book.title.asc())
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .filter(MediaItem.series_id == series_id, opds_readable_filter())
+        .order_by(MediaItem.series_index.asc(), MediaItem.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
@@ -720,10 +718,10 @@ def tag_books(tag_id: int, preset: str | None = None):
 
     page = request.args.get("page", 1, type=int)
     query = (
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.tags))
-        .filter(Book.tags.any(Tag.id == tag_id), opds_readable_filter())
-        .order_by(Book.title.asc())
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .filter(MediaItem.tags.any(Tag.id == tag_id), opds_readable_filter())
+        .order_by(MediaItem.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
@@ -774,8 +772,8 @@ def search_feed(preset: str | None = None):
     per_page = 30
 
     query = (
-        select(Book)
-        .options(selectinload(Book.authors), selectinload(Book.tags))
+        select(MediaItem)
+        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
         .where(opds_readable_filter())
     )
     relevance_order = False
@@ -784,29 +782,29 @@ def search_feed(preset: str | None = None):
 
         matching_ids = search_media_ids(q, limit=1000)
         if matching_ids:
-            query = query.filter(Book.id.in_(matching_ids))
+            query = query.filter(MediaItem.id.in_(matching_ids))
             from sqlalchemy import case
 
             relevance_order = True
             order_case = case(
                 {mid: idx for idx, mid in enumerate(matching_ids)},
-                value=Book.id,
+                value=MediaItem.id,
             )
             query = query.order_by(order_case.asc())
         elif matching_ids == []:
-            query = query.filter(Book.id == -1)
+            query = query.filter(MediaItem.id == -1)
         else:
             search_filter = or_(
-                Book.title.ilike(f"%{q}%"),
-                Book.description.ilike(f"%{q}%"),
-                Book.authors.any(Author.name.ilike(f"%{q}%")),
-                Book.tags.any(Tag.name.ilike(f"%{q}%")),
-                Book.series.has(Series.name.ilike(f"%{q}%")),
+                MediaItem.title.ilike(f"%{q}%"),
+                MediaItem.description.ilike(f"%{q}%"),
+                MediaItem.authors.any(Author.name.ilike(f"%{q}%")),
+                MediaItem.tags.any(Tag.name.ilike(f"%{q}%")),
+                MediaItem.series.has(Series.name.ilike(f"%{q}%")),
             )
             query = query.filter(search_filter)
 
     if not relevance_order:
-        query = query.order_by(Book.title.asc())
+        query = query.order_by(MediaItem.title.asc())
     pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"

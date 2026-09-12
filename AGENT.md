@@ -17,10 +17,10 @@ graph TD
         Auth[Flask-Login & Basic Auth]
         
         subgraph Routes
-            UIRoutes[UI Views: / /book/:id /authors /series /settings]
-            APIRoutes[REST API: /api/books /api/libraries /progress]
+            UIRoutes[UI Views: / /media/:id /authors /series /settings]
+            APIRoutes[REST API: /api/media /api/libraries /progress]
             OPDSRoutes[OPDS 1.2 / 2.0 / Progression 1.0: /opds]
-            ReaderRoutes[Web Readers & Players: /reader/epub /reader/cbz /reader/video]
+            ReaderRoutes[Web Readers & Players: /reader/epub /reader/cbz /reader/video /reader/audio]
             AuthRoutes[Auth & User Management: /auth]
         end
         
@@ -37,7 +37,7 @@ graph TD
         
         subgraph Storage
             DB[(SQLite with WAL mode: aarkib.db)]
-            BooksDir[(Media Storage: ./data/media or ./data/books + Multi-Dir Scan)]
+            BooksDir[(Media Storage: ./data/media + Multi-Dir Scan)]
             CoversDir[(Covers Storage: ./data/covers)]
             OptimizedDir[(Optimized E-Ink Cache: ./data/optimized)]
         end
@@ -130,7 +130,7 @@ aarkib/
 │   └── templates/
 │       ├── base.html         # Base template with top navbar, avatar menu, mobile nav, flash alerts
 │       ├── library.html      # Main bookshelf with search, filters (type, format, sort), scan trigger
-│       ├── book_detail.html  # Media detail page, progress bar, download, online enrich, "Edit Media" modal
+│       ├── media_detail.html # Media detail page, progress bar, download, online enrich, "Edit Media" modal
 │       ├── authors.html      # Creators / Authors grid & volume count
 │       ├── series.html       # Collections / Series grid & volume count
 │       ├── tags.html         # Categories & genre tags
@@ -169,9 +169,9 @@ aarkib/
 ## 🔑 Core Invariants & Architectural Rules
 
 1. **Authentication Enforcement (`AARKIB_AUTH_REQUIRED`)**:
-   * Default is `AARKIB_AUTH_REQUIRED=true` (with `BUUKUU_AUTH_REQUIRED` as fallback).
+   * Default is `AARKIB_AUTH_REQUIRED=true`.
    * Unauthenticated web visitors are redirected to `/auth/login?next=<url>` (or `/auth/register` if no users exist in the system).
-   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients (authenticating `current_user` via Flask-Login's `request_loader`). `/api/health` and book covers are publicly accessible without authentication.
+   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients (authenticating `current_user` via Flask-Login's `request_loader`). `/api/health` and media covers are publicly accessible without authentication.
    * OPDS endpoints (`/opds/*`) return `401 Unauthorized` with `WWW-Authenticate: Basic realm="Aarkib OPDS"` and an `application/opds-authentication+json` document.
 
 2. **Multi-Media Plugin Architecture & Video/Audio Support**:
@@ -184,10 +184,10 @@ aarkib/
 3. **Reading & Playback Progression & Syncing**:
    * `UserProgress.percentage` is stored as a float between `0.0` and `100.0`.
    * **OPDS Progression 1.0**: The specification requires progression as a float between `0.0` and `1.0`. `opds.py` translates between internal percentage (`0-100`) and OPDS standard (`0.0-1.0`).
-   * When updating progression via `PUT /opds/books/<id>/progression`, if the incoming payload has an older `modified` timestamp than existing server state, return `409 Conflict` with `application/problem+json` and type `https://registry.opds.io/error#progression-date`.
+   * When updating progression via `PUT /opds/media/<id>/progression`, if the incoming payload has an older `modified` timestamp than existing server state, return `409 Conflict` with `application/problem+json` and type `https://registry.opds.io/error#progression-date`.
 
 4. **EPUB Web Reader (ePub.js) In-Memory Architecture**:
-   * To prevent ePub.js from attempting to fetch unpacked directory contents (`/api/books/<id>/file/META-INF/container.xml`), `reader-epub.js` fetches binary bytes (`ArrayBuffer`) and initializes `ePub(arrayBuffer)` via in-memory `JSZip`.
+   * To prevent ePub.js from attempting to fetch unpacked directory contents (`/api/media/<id>/file/META-INF/container.xml`), `reader-epub.js` fetches binary bytes (`ArrayBuffer`) and initializes `ePub(arrayBuffer)` via in-memory `JSZip`.
 
 5. **Series Metadata Extraction**:
    * Extracted from:
@@ -195,7 +195,7 @@ aarkib/
      2. EPUB 3 `<meta property="belongs-to-collection">` and `<meta property="group-position">`.
      3. CBZ `ComicInfo.xml` (`<Series>`, `<Number>`).
      4. Regex heuristic on filename/title (`extract_series_from_title`).
-     5. Manual editing via `PATCH /api/books/<id>` (legacy `POST /api/books/<id>/edit` kept for backward compatibility).
+     5. Manual editing via `PATCH /api/media/<id>` or `POST /api/media/<id>/edit`.
 
 6. **Database WAL Mode & Auto-Migrations**:
    * SQLite is configured in WAL (Write-Ahead Logging) mode via SQLAlchemy engine connect event listener in `src/aarkib/__init__.py`. Always preserve this for concurrency.

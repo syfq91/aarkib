@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from aarkib.extensions import db
-from aarkib.models import Book, MediaItem, Tag
+from aarkib.models import MediaItem
 from aarkib.services.thumbnail import generate_cover_webp
 
 if TYPE_CHECKING:
@@ -276,114 +276,11 @@ def enrich_book(
     overwrite: bool = False,
     provider: str = "all",
 ) -> dict[str, Any]:
-    """Enriches metadata for a single Book instance and saves changes to DB."""
-    if not book.is_book:
-        return enrich_media_item(
-            book, covers_dir, overwrite=overwrite, provider=provider
-        )
-
-    first_author = book.authors[0].name if book.authors else None
-    meta = fetch_external_metadata(
-        isbn=book.isbn,
-        title=book.title,
-        author=first_author,
-        provider=provider,
-    )
-
-    if not meta:
-        return {"status": "not_found", "book_id": book.id, "changes": []}
-
-    changes: list[str] = []
-
-    if (
-        not book.is_field_locked("description")
-        and (not book.description or overwrite)
-        and meta.description
-    ):
-        book.description = meta.description
-        changes.append("description")
-
-    if (
-        not book.is_field_locked("publisher")
-        and (not book.publisher or overwrite)
-        and meta.publisher
-    ):
-        book.publisher = meta.publisher
-        changes.append("publisher")
-
-    if (
-        not book.is_field_locked("publication_date")
-        and (not book.publication_date or overwrite)
-        and meta.publication_date
-    ):
-        book.publication_date = str(meta.publication_date)[:10]
-        changes.append("publication_date")
-
-    if (
-        not book.is_field_locked("language")
-        and (not book.language or overwrite)
-        and meta.language
-    ):
-        book.language = meta.language
-        changes.append("language")
-
-    if (
-        not book.is_field_locked("page_count")
-        and (not book.page_count or overwrite)
-        and meta.page_count
-    ):
-        book.page_count = meta.page_count
-        changes.append("page_count")
-
-    if not book.is_field_locked("isbn") and (not book.isbn or overwrite) and meta.isbn:
-        book.isbn = meta.isbn
-        changes.append("isbn")
-
-    # Update or attach tags
-    if not book.is_field_locked("tags") and meta.tags and (not book.tags or overwrite):
-        existing_tags = {
-            t.name.lower(): t for t in db.session.scalars(select(Tag)).all()
-        }
-        tag_objs = []
-        for tag_name in meta.tags:
-            cleaned = tag_name.strip().title()
-            if not cleaned or len(cleaned) > 50:
-                continue
-            if cleaned.lower() in existing_tags:
-                tag_objs.append(existing_tags[cleaned.lower()])
-            else:
-                new_tag = Tag(name=cleaned)
-                db.session.add(new_tag)
-                existing_tags[cleaned.lower()] = new_tag
-                tag_objs.append(new_tag)
-        book.tags = tag_objs
-        changes.append(f"tags ({len(tag_objs)})")
-
-    # Cover image download & WebP conversion
-    if (
-        not book.is_field_locked("cover_image")
-        and meta.cover_bytes
-        and (not book.cover_image_path or overwrite)
-    ):
-        cover_filename = f"{book.file_hash[:16]}.webp"
-        cover_output_path = covers_dir / cover_filename
-        if generate_cover_webp(meta.cover_bytes, cover_output_path):
-            book.cover_image_path = cover_filename
-            changes.append("cover_image")
-
-    if changes:
-        db.session.commit()
-        logger.info(
-            "Enriched book ID %d (%s) with: %s", book.id, book.title, ", ".join(changes)
-        )
-
-    return {
-        "status": "success" if changes else "no_changes_needed",
-        "book_id": book.id,
-        "title": book.title,
-        "source": meta.source,
-        "changes": changes,
-    }
+    """Compatibility wrapper that enriches a book using enrich_media_item."""
+    res = enrich_media_item(book, covers_dir, overwrite=overwrite, provider=provider)
+    if "book_id" not in res and "media_id" in res:
+        res["book_id"] = res["media_id"]
+    return res
 
 
 def enrich_media_item(
@@ -555,6 +452,25 @@ def enrich_media_item(
         item.album = details.album
         changes.append("album")
 
+    # Book / Comic specifics
+    if (
+        hasattr(item, "page_count")
+        and not item.is_field_locked("page_count")
+        and (not item.page_count or overwrite)
+        and details.page_count
+    ):
+        item.page_count = details.page_count
+        changes.append("page_count")
+
+    if (
+        hasattr(item, "isbn")
+        and not item.is_field_locked("isbn")
+        and (not item.isbn or overwrite)
+        and details.isbn
+    ):
+        item.isbn = details.isbn
+        changes.append("isbn")
+
     # Cover
     if not item.is_field_locked("cover_image") and (
         not item.cover_image_path or overwrite
@@ -604,27 +520,10 @@ def enrich_all_books(
     overwrite: bool = False,
     provider: str = "all",
 ) -> dict[str, int]:
-    """Batch enriches all books in the database."""
-    with app.app_context():
-        covers_dir = Path(app.config["COVERS_DIR"])
-        covers_dir.mkdir(parents=True, exist_ok=True)
-
-        books = db.session.scalars(select(Book)).all()
-        enriched_count = 0
-        skipped_count = 0
-
-        for b in books:
-            res = enrich_book(b, covers_dir, overwrite=overwrite, provider=provider)
-            if res.get("changes"):
-                enriched_count += 1
-            else:
-                skipped_count += 1
-
-        return {
-            "total": len(books),
-            "enriched": enriched_count,
-            "skipped": skipped_count,
-        }
+    """Batch enriches all books in the database using enrich_all_media."""
+    return enrich_all_media(
+        app, overwrite=overwrite, provider=provider, media_type="book"
+    )
 
 
 def enrich_all_media(

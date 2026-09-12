@@ -79,9 +79,9 @@ def get_env_library_dirs(env: dict[str, str] | None = None) -> list[Path]:
     """Collects all library directory paths explicitly declared in environment variables.
 
     Supports:
-    - BUUKUU_LIBRARY_DIR, BUUKUU_LIBRARY_DIRS, LIBRARY_DIR, LIBRARY_DIRS, BUUKUU_BOOKS_DIR, BOOKS_DIR
-    - Numbered variables: DIR1, DIR2, DIR_1, DIR_2, BUUKUU_DIR1, BUUKUU_DIR_1, BUUKUU_LIBRARY_DIR_1, etc.
-    - Named variables: BUUKUU_LIBRARY_DIR_MANGA, BUUKUU_DIR_COMICS, etc.
+    - AARKIB_MEDIA_DIR, AARKIB_MEDIA_DIRS, AARKIB_LIBRARY_DIR, AARKIB_LIBRARY_DIRS, MEDIA_DIR, MEDIA_DIRS, LIBRARY_DIR, LIBRARY_DIRS
+    - Numbered variables: DIR1, DIR2, DIR_1, DIR_2, AARKIB_DIR1, AARKIB_MEDIA_DIR_1, etc.
+    - Named variables: AARKIB_MEDIA_DIR_MANGA, AARKIB_DIR_COMICS, etc.
     - Delimited values (colons, semicolons, commas, newlines).
     """
     target_env = os.environ if env is None else env

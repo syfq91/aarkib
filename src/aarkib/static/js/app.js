@@ -11,7 +11,7 @@ if ("serviceWorker" in navigator) {
 
 // --- Theme Switcher ---
 function initTheme() {
-  const savedTheme = localStorage.getItem("aarkib-theme") || localStorage.getItem("buukuu-theme") || "dark";
+  const savedTheme = localStorage.getItem("aarkib-theme") || "dark";
   document.documentElement.setAttribute("data-theme", savedTheme);
 }
 

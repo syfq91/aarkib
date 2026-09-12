@@ -197,7 +197,7 @@ Then use it everywhere raw metadata is interpolated:
 <div class="book-title" title="${esc(book.title)}">${esc(book.title)}</div>
 ```
 
-Apply the same pattern to `book_detail.html`, `settings.html`, and any other JS that uses
+Apply the same pattern to `media_detail.html`, `settings.html`, and any other JS that uses
 `innerHTML` with data from the API.
 
 **✅ Resolution:** Added an `esc()` helper in `src/aarkib/templates/library.html` and applied it to

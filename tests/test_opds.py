@@ -72,8 +72,11 @@ def test_opds_progression_crud_and_conflicts(client, app):
         db.session.commit()
         book_id = book.id
 
+    # Verify legacy /opds/books/ route is retired (404)
+    assert client.get(f"/opds/books/{book_id}/progression").status_code == 404
+
     # 1. Fetch initial progression (empty)
-    res = client.get(f"/opds/books/{book_id}/progression")
+    res = client.get(f"/opds/media/{book_id}/progression")
     assert res.status_code == 200
     assert res.headers["Content-Type"] == "application/opds-progression+json"
     assert res.get_json() == {}
@@ -89,7 +92,7 @@ def test_opds_progression_crud_and_conflicts(client, app):
         "progression": 0.425,
         "references": ["chapter1.html#:~:text=It%20was%20expected"],
     }
-    res = client.put(f"/opds/books/{book_id}/progression", json=put_payload)
+    res = client.put(f"/opds/media/{book_id}/progression", json=put_payload)
     assert res.status_code == 201
     assert res.headers["Content-Type"] == "application/opds-progression+json"
     data = res.get_json()
@@ -99,7 +102,7 @@ def test_opds_progression_crud_and_conflicts(client, app):
     assert data["references"] == ["chapter1.html#:~:text=It%20was%20expected"]
 
     # 3. GET should now return the updated document
-    res = client.get(f"/opds/books/{book_id}/progression")
+    res = client.get(f"/opds/media/{book_id}/progression")
     assert res.status_code == 200
     data = res.get_json()
     assert data["progression"] == 0.425
@@ -115,13 +118,13 @@ def test_opds_progression_crud_and_conflicts(client, app):
         },
         "progression": 0.1,
     }
-    res = client.put(f"/opds/books/{book_id}/progression", json=older_payload)
+    res = client.put(f"/opds/media/{book_id}/progression", json=older_payload)
     assert res.status_code == 409
     assert res.headers["Content-Type"] == "application/problem+json"
     assert "progression-date" in res.get_json()["type"]
 
     # 5. Invalid payload check
-    res = client.put(f"/opds/books/{book_id}/progression", json={"foo": "bar"})
+    res = client.put(f"/opds/media/{book_id}/progression", json={"foo": "bar"})
     assert res.status_code == 400
     assert res.headers["Content-Type"] == "application/problem+json"
 

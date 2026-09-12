@@ -319,7 +319,7 @@ def test_auth_required_enforcement(client, app, sample_epub):
         prog_record = db.session.scalar(
             select(UserProgress).where(
                 UserProgress.user_id == user_record.id,
-                UserProgress.book_id == book_id,
+                UserProgress.media_item_id == book_id,
             )
         )
         assert prog_record is not None

@@ -395,7 +395,7 @@ def optimize_epub(
 
 
 def get_or_create_optimized_epub(
-    book_id: int,
+    item_id: int,
     file_path: str | Path,
     file_hash: str,
     preset_key: str,
@@ -403,11 +403,11 @@ def get_or_create_optimized_epub(
 ) -> Path:
     """Fetches a cached optimized EPUB or generates it on demand.
 
-    Original source book is never modified.
+    Original source file is never modified.
     """
     optimized_dir.mkdir(parents=True, exist_ok=True)
     clean_preset = preset_key.lower().strip() if preset_key else "generic"
-    cache_filename = f"{book_id}_{file_hash[:12]}_{clean_preset}.epub"
+    cache_filename = f"{item_id}_{file_hash[:12]}_{clean_preset}.epub"
     cached_path = optimized_dir / cache_filename
 
     if cached_path.exists() and cached_path.stat().st_size > 0:
