@@ -204,23 +204,11 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
-    # App Settings
-    AUTO_SCAN_ON_START: bool = (os.getenv("AARKIB_AUTO_SCAN", "true")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    WATCH_LIBRARY: bool = (os.getenv("AARKIB_WATCH_LIBRARY", "true")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    AUTO_ENRICH: bool = (os.getenv("AARKIB_AUTO_ENRICH", "false")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    METADATA_PROVIDER: str = os.getenv("AARKIB_METADATA_PROVIDER", "all")
+    # App Settings (Defaults managed via WebUI & database)
+    AUTO_SCAN_ON_START: bool = True
+    WATCH_LIBRARY: bool = True
+    AUTO_ENRICH: bool = False
+    METADATA_PROVIDER: str = "all"
     TMDB_API_KEY: str | None = os.getenv(
         "AARKIB_TMDB_API_KEY", os.getenv("TMDB_API_KEY")
     )
@@ -230,7 +218,7 @@ class Config:
     MUSICBRAINZ_RATE_LIMIT: float = float(
         os.getenv("AARKIB_MUSICBRAINZ_RATE_LIMIT", "1.0")
     )
-    PAGE_SIZE: int = int(os.getenv("AARKIB_PAGE_SIZE", "24"))
+    PAGE_SIZE: int = 24
 
     # Plugin & Feature Toggles
     ENABLE_OPDS: bool = (os.getenv("AARKIB_ENABLE_OPDS", "true")).lower() in (

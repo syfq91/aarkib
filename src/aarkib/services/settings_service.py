@@ -248,6 +248,7 @@ def get_effective_settings(app: Flask) -> dict[str, Any]:
             "value": current_val,
             "type": spec.type.__name__,
             "is_overridden": is_overridden,
+            "default_value": spec.default,
             "env_default": env_default,
             "display_name": spec.display_name,
             "description": spec.description,
@@ -311,11 +312,10 @@ def update_settings(app: Flask, updates: dict[str, Any]) -> dict[str, Any]:
 
 
 def reset_settings_to_defaults(app: Flask) -> dict[str, Any]:
-    """Deletes all database overrides and restores settings to environment defaults."""
+    """Deletes all database overrides and restores settings to system defaults."""
     from aarkib.services.scanner import start_library_watcher, stop_library_watcher
 
     old_watch_library = app.config.get("WATCH_LIBRARY", True)
-    env_defaults = app.config.get("_ENV_DEFAULTS", {})
 
     # Remove all managed settings from database
     for key in MANAGED_SETTINGS:
@@ -325,9 +325,9 @@ def reset_settings_to_defaults(app: Flask) -> dict[str, Any]:
 
     db.session.commit()
 
-    # Restore in-memory config to env defaults
+    # Restore in-memory config to spec defaults
     for key, spec in MANAGED_SETTINGS.items():
-        app.config[key] = env_defaults.get(key, spec.default)
+        app.config[key] = spec.default
 
     sync_plugins_state(app)
 

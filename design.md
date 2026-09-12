@@ -136,7 +136,7 @@ sequenceDiagram
   - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, `AARKIB_MEDIA_DIR_1`, etc.
   - Named category variables: `AARKIB_MEDIA_DIR_MANGA`, `AARKIB_MEDIA_DIR_MOVIES`, `AARKIB_MEDIA_DIR_VIDEO`.
 - **Deduplication & Integrity**: Every media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading/playback history or metadata customizations.
-- **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `AARKIB_WATCH_LIBRARY=true`.
+- **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `WATCH_LIBRARY` is enabled.
 
 ---
 
@@ -275,14 +275,14 @@ Aarkib decouples runtime application preferences from static environment configu
    - `PAGE_SIZE` (int): Catalog items per page.
 
 2. **Precedence Hierarchy**:
-   `WebUI Settings (Database)` $\to$ `Environment Variables (.env)` $\to$ `Hardcoded Defaults`.
-   If a setting has been modified via the Web UI, its persisted value in the `settings` SQLite table overrides the `.env` value. Unconfigured settings seamlessly fall back to `.env` variables or built-in defaults.
+   `WebUI Settings (Database)` $\to$ `Built-in System Defaults`.
+   If a setting has been modified via the Web UI, its persisted value in the `settings` SQLite table overrides the default value. Unconfigured settings seamlessly fall back to built-in system defaults.
 
 3. **Hot-Reloading & Live Synchronization**:
    - At startup, `load_settings_into_config(app)` injects all database overrides into Flask's `app.config`.
    - Modifying settings via `PATCH /api/settings` immediately commits to SQLite and updates `app.config` in-memory without restarting the server.
    - Toggling `WATCH_LIBRARY` dynamically starts or stops the background `watchdog.Observer` thread on the fly.
-   - Admins can revert all customizations to environment defaults at any time via `POST /api/settings/reset`.
+   - Admins can revert all customizations to system defaults at any time via `POST /api/settings/reset`.
 
 ---
 

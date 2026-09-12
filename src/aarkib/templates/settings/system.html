@@ -13,8 +13,8 @@
       </p>
     </div>
     <div style="display: flex; gap: 0.5rem;">
-      <button type="button" class="btn btn-secondary" onclick="resetSystemSettings()" id="reset-settings-btn" title="Revert all settings to environment variables (.env)">
-        ↺ Reset to .env
+      <button type="button" class="btn btn-secondary" onclick="resetSystemSettings()" id="reset-settings-btn" title="Revert all settings to system defaults">
+        ↺ Reset to Defaults
       </button>
       <button type="button" class="btn btn-primary" onclick="saveSystemSettings()" id="save-settings-btn">
         💾 Save Preferences
@@ -41,7 +41,7 @@
             Automatically scan and index all media folders when the server boots.
           </p>
           {% if system_settings and system_settings.settings.AUTO_SCAN_ON_START.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.AUTO_SCAN_ON_START.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_SCAN_ON_START.default_value if system_settings.settings.AUTO_SCAN_ON_START.default_value is defined else system_settings.settings.AUTO_SCAN_ON_START.env_default }})</span></div>
           {% endif %}
         </div>
 
@@ -55,12 +55,12 @@
             Continuously watch library folders for added, changed, or deleted files. (Disable if on slow network/SMB mounts).
           </p>
           {% if system_settings and system_settings.settings.WATCH_LIBRARY.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.WATCH_LIBRARY.default_value if system_settings.settings.WATCH_LIBRARY.default_value is defined else system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
           {% endif %}
         </div>
       </div>
 
-      <!-- Card 3: Metadata Enrichment -->
+      <!-- Card 2: Metadata Enrichment -->
       <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
         <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
           <span>✨</span> Metadata Enrichment
@@ -76,7 +76,7 @@
             Automatically query online providers for book synopses, genres, and high-res covers during scans.
           </p>
           {% if system_settings and system_settings.settings.AUTO_ENRICH.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.AUTO_ENRICH.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_ENRICH.default_value if system_settings.settings.AUTO_ENRICH.default_value is defined else system_settings.settings.AUTO_ENRICH.env_default }})</span></div>
           {% endif %}
         </div>
 
@@ -92,12 +92,12 @@
             Preferred provider when fetching book metadata and cover art.
           </p>
           {% if system_settings and system_settings.settings.METADATA_PROVIDER.is_overridden %}
-            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.METADATA_PROVIDER.default_value if system_settings.settings.METADATA_PROVIDER.default_value is defined else system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
           {% endif %}
         </div>
       </div>
 
-      <!-- Card 4: Display & Pagination -->
+      <!-- Card 3: Display & Presentation -->
       <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
         <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
           <span>📱</span> Catalog &amp; Presentation
@@ -117,7 +117,7 @@
             Number of media cards displayed per page on library, books, and series catalog views.
           </p>
           {% if system_settings and system_settings.settings.PAGE_SIZE.is_overridden %}
-            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.PAGE_SIZE.env_default }})</span></div>
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.PAGE_SIZE.default_value if system_settings.settings.PAGE_SIZE.default_value is defined else system_settings.settings.PAGE_SIZE.env_default }})</span></div>
           {% endif %}
         </div>
       </div>
@@ -183,7 +183,7 @@ async function saveSystemSettings() {
 }
 
 async function resetSystemSettings() {
-  if (!confirm("Are you sure you want to revert all system preferences to the default values defined in your environment (.env)?")) {
+  if (!confirm("Are you sure you want to revert all system preferences to default values?")) {
     return;
   }
   const resetBtn = document.getElementById("reset-settings-btn");
@@ -199,20 +199,20 @@ async function resetSystemSettings() {
     });
     const data = await res.json();
     if (res.ok && data.status === "success") {
-      showToast("Restored preferences to .env defaults!", "success");
+      showToast("Restored preferences to default settings!", "success");
       setTimeout(() => location.reload(), 900);
     } else {
       showToast(data.error || "Failed to reset preferences", "error");
       if (resetBtn) {
         resetBtn.disabled = false;
-        resetBtn.innerText = "↺ Reset to .env";
+        resetBtn.innerText = "↺ Reset to Defaults";
       }
     }
   } catch (err) {
     showToast("Network error resetting preferences", "error");
     if (resetBtn) {
       resetBtn.disabled = false;
-      resetBtn.innerText = "↺ Reset to .env";
+      resetBtn.innerText = "↺ Reset to Defaults";
     }
   }
 }

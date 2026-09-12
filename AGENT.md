@@ -246,10 +246,10 @@ aarkib/
    * Filesystem watcher and scanner service automatically detect additions, modifications, and deletions without a manual upload web form.
 
 9. **Dynamic System Preferences & Settings Service**:
-   * Runtime options (`AUTO_SCAN_ON_START`, `WATCH_LIBRARY`, `AUTO_ENRICH`, `METADATA_PROVIDER`, `PAGE_SIZE`) are managed via `settings_service.py` backed by the `SystemSetting` table.
-   * Precedence: `Database (WebUI)` > `Environment Variables (.env)` > `Hardcoded Defaults`.
+   * Runtime options (`AUTO_SCAN_ON_START`, `WATCH_LIBRARY`, `AUTO_ENRICH`, `METADATA_PROVIDER`, `PAGE_SIZE`) are WebUI-first and managed via `settings_service.py` backed by the `SystemSetting` table.
+   * Precedence: `Database (WebUI)` > `Built-in System Defaults`.
    * Modifying settings via `PATCH /api/settings` immediately updates in-memory `current_app.config` without restarting the server, and dynamically starts/stops the library watcher thread if `WATCH_LIBRARY` was toggled.
-   * `POST /api/settings/reset` clears database overrides and restores baseline environment values.
+   * `POST /api/settings/reset` clears database overrides and restores default settings.
 
 ---
 

@@ -103,6 +103,11 @@ def test_settings_service_lifecycle(app):
         effective = get_effective_settings(app)
         assert "AUTO_SCAN_ON_START" in effective["settings"]
         assert "PAGE_SIZE" in effective["settings"]
+        assert effective["settings"]["AUTO_SCAN_ON_START"]["default_value"] is True
+        assert effective["settings"]["PAGE_SIZE"]["default_value"] == 24
+        assert effective["settings"]["AUTO_ENRICH"]["default_value"] is False
+        assert effective["settings"]["METADATA_PROVIDER"]["default_value"] == "all"
+        assert effective["settings"]["WATCH_LIBRARY"]["default_value"] is True
 
         # Update settings via service
         updated = update_settings(
@@ -234,6 +239,8 @@ def test_ui_settings_view_for_admin_and_reader(client, app):
     res_system = client.get("/settings/system")
     assert res_system.status_code == 200
     assert b"setting-AUTO_SCAN_ON_START" in res_system.data
+    assert b"Reset to Defaults" in res_system.data
+    assert b"Reset to .env" not in res_system.data
 
     # Admin viewing /settings/plugins should see plugin cards and toggles
     res_plugins = client.get("/settings/plugins")
@@ -313,3 +320,23 @@ def test_plugin_settings_sync_and_api(client, app):
     assert app.config["ENABLE_SUBSONIC"] is True
     assert plugin_registry.get_plugin("opds").enabled is True
     assert plugin_registry.get_plugin("subsonic").enabled is True
+
+
+def test_runtime_settings_defaults_and_env_independence(monkeypatch):
+    """Verifies that runtime settings rely on Python/Config defaults and do not read AARKIB_* env vars."""
+    from aarkib.config import Config
+
+    # Set arbitrary values in environment that previously configured these
+    monkeypatch.setenv("AARKIB_AUTO_SCAN", "false")
+    monkeypatch.setenv("AARKIB_WATCH_LIBRARY", "false")
+    monkeypatch.setenv("AARKIB_AUTO_ENRICH", "true")
+    monkeypatch.setenv("AARKIB_METADATA_PROVIDER", "googlebooks")
+    monkeypatch.setenv("AARKIB_PAGE_SIZE", "99")
+
+    # Config class defaults must remain untouched by environment variables
+    cfg = Config()
+    assert cfg.AUTO_SCAN_ON_START is True
+    assert cfg.WATCH_LIBRARY is True
+    assert cfg.AUTO_ENRICH is False
+    assert cfg.METADATA_PROVIDER == "all"
+    assert cfg.PAGE_SIZE == 24

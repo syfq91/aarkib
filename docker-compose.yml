@@ -11,11 +11,6 @@ services:
       - ./data:/app/data
     environment:
       - AARKIB_DATA_DIR=/app/data
-      - AARKIB_AUTO_SCAN=true
-      - AARKIB_WATCH_LIBRARY=true
-      - AARKIB_AUTO_ENRICH=false
-      - AARKIB_METADATA_PROVIDER=all
-      - AARKIB_PAGE_SIZE=24
       - AARKIB_VAAPI_DEVICE=${AARKIB_VAAPI_DEVICE:-}
       - SECRET_KEY=${SECRET_KEY:-}
     volumes:
