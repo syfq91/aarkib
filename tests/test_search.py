@@ -20,7 +20,9 @@ def test_fts_table_initialization(app):
         success = init_search_fts()
         assert success is True
         row = db.session.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='media_items_fts';")
+            text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='media_items_fts';"
+            )
         ).fetchone()
         assert row is not None
         assert row[0] == "media_items_fts"

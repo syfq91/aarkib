@@ -81,7 +81,9 @@ def init_search_fts(conn_or_session: Any = None) -> bool:
                 conn.execute(text(CREATE_FTS_TABLE_SQL))
         return True
     except Exception as exc:
-        logger.warning("FTS5 table initialization failed (FTS5 may be unavailable): %s", exc)
+        logger.warning(
+            "FTS5 table initialization failed (FTS5 may be unavailable): %s", exc
+        )
         return False
 
 
@@ -101,13 +103,8 @@ def parse_fts_query(raw_query: str) -> str:
         return ""
 
     # Check for balanced explicit phrase search: e.g. "The Matrix"
-    if (
-        q.startswith('"')
-        and q.endswith('"')
-        and len(q) > 1
-        and q.count('"') % 2 == 0
-    ):
-        phrase = q.strip('"').replace('"', ' ').strip()
+    if q.startswith('"') and q.endswith('"') and len(q) > 1 and q.count('"') % 2 == 0:
+        phrase = q.strip('"').replace('"', " ").strip()
         if phrase:
             return f'"{phrase}"'
 
@@ -250,7 +247,9 @@ def search_media_ids(
         ).fetchall()
         return [int(row[0]) for row in rows]
     except Exception as exc:
-        logger.debug("FTS5 query '%s' failed, falling back to ILIKE: %s", clean_query, exc)
+        logger.debug(
+            "FTS5 query '%s' failed, falling back to ILIKE: %s", clean_query, exc
+        )
         return _search_media_ids_fallback_ilike(
             q, media_type=media_type, library_id=library_id, limit=limit, session=sess
         )
@@ -327,13 +326,27 @@ def search_grouped(
                 "library_id": library_id if library_id else None,
             },
         ).fetchall()
-        matching_entries = [(int(r[0]), str(r[1] or "book").lower(), str(r[2] or "").lower()) for r in rows]
+        matching_entries = [
+            (int(r[0]), str(r[1] or "book").lower(), str(r[2] or "").lower())
+            for r in rows
+        ]
     except Exception as exc:
-        logger.debug("FTS5 grouped query '%s' failed, falling back: %s", clean_query, exc)
-        fallback_ids = _search_media_ids_fallback_ilike(q, library_id=library_id, session=sess)
+        logger.debug(
+            "FTS5 grouped query '%s' failed, falling back: %s", clean_query, exc
+        )
+        fallback_ids = _search_media_ids_fallback_ilike(
+            q, library_id=library_id, session=sess
+        )
         if fallback_ids:
             items = sess.scalars(select(Book).where(Book.id.in_(fallback_ids))).all()
-            matching_entries = [(b.id, str(b.media_type or "book").lower(), str(b.file_format or "").lower()) for b in items]
+            matching_entries = [
+                (
+                    b.id,
+                    str(b.media_type or "book").lower(),
+                    str(b.file_format or "").lower(),
+                )
+                for b in items
+            ]
 
     # Map raw media_type/format into standard display categories
     # Groups: video, book, audiobook, comic, music
