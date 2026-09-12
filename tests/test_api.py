@@ -269,3 +269,52 @@ def test_api_bookmark_authorization(client, app, sample_epub):
     # Unauthenticated attempt to delete user1's bookmark should return 401 or 403 without crashing
     res_del_unauth = client.delete(f"/api/bookmarks/{bm_id}")
     assert res_del_unauth.status_code in (401, 403)
+
+
+def test_api_browse_directories(client, app, tmp_path):
+    from aarkib.extensions import db
+    from aarkib.models import User
+
+    # Unauthenticated request returns 401 or 403
+    client.get("/auth/logout")
+    res_unauth = client.get("/api/fs/directories")
+    assert res_unauth.status_code in (302, 401, 403)
+
+    # Login as normal reader
+    reader = User(username="reader_fs", is_admin=False)
+    reader.set_password("readerpass")
+    with app.app_context():
+        db.session.add(reader)
+        db.session.commit()
+    client.post("/auth/login", data={"username": "reader_fs", "password": "readerpass"})
+    res_reader = client.get("/api/fs/directories")
+    assert res_reader.status_code == 403
+
+    # Login as admin
+    client.get("/auth/logout")
+    _login_admin(client, app)
+
+    # Create dummy folder structure in tmp_path
+    parent_dir = tmp_path / "browse_root"
+    parent_dir.mkdir()
+    (parent_dir / "folder_alpha").mkdir()
+    (parent_dir / "folder_beta").mkdir()
+    (parent_dir / ".hidden_folder").mkdir()
+    (parent_dir / "file.txt").write_text("not a folder")
+
+    # Browse parent_dir
+    res = client.get(f"/api/fs/directories?path={parent_dir}")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "success"
+    assert data["current_path"] == str(parent_dir.resolve())
+    assert "parent_path" in data
+    assert "quick_locations" in data
+
+    dir_names = [d["name"] for d in data["directories"]]
+    assert "folder_alpha" in dir_names
+    assert "folder_beta" in dir_names
+    # Hidden folders and files should be excluded
+    assert ".hidden_folder" not in dir_names
+    assert "file.txt" not in dir_names
+

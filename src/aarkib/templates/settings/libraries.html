@@ -95,7 +95,12 @@
     <form id="add-folder-form" onsubmit="handleAddFolder(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto; gap: 0.75rem; align-items: end;">
       <div>
         <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Folder Path *</label>
-        <input type="text" id="new-folder-path" class="input-text" required placeholder="/path/to/media or data/comics" style="width: 100%;">
+        <div style="display: flex; gap: 0.4rem;">
+          <input type="text" id="new-folder-path" class="input-text" required placeholder="/path/to/media or data/comics" style="flex: 1;">
+          <button type="button" class="btn btn-secondary" onclick="openFolderPicker()" style="white-space: nowrap; font-size: 0.8rem; padding: 0.4rem 0.6rem; display: flex; align-items: center; gap: 0.3rem;" title="Browse server filesystem">
+            <span>📂</span> Browse
+          </button>
+        </div>
       </div>
       <div>
         <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Library Name</label>
@@ -165,6 +170,9 @@
           {% if current_user.is_authenticated and current_user.is_admin %}
           <td style="padding: 0.75rem 1rem; text-align: right;">
             <div style="display: flex; gap: 0.4rem; justify-content: flex-end;">
+              <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="openEditLibraryModal('{{ lib.id }}', '{{ lib.name|e }}', '{{ lib.path_str|e }}', '{{ lib.media_type }}')" title="Configure library name &amp; media type">
+                ✏️ Edit
+              </button>
               <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="rescanSingleLibrary('{{ lib.id }}', this)" title="Rescan this folder">
                 🔄 Rescan
               </button>
@@ -182,6 +190,81 @@
     </table>
   </div>
 </div>
+
+{% if current_user.is_authenticated and current_user.is_admin %}
+<!-- Interactive Folder Browser Modal -->
+<div id="folder-picker-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); max-width: 620px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);">
+      <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;">
+        <span>📂</span> Select Media Folder
+      </h4>
+      <button type="button" class="btn btn-secondary" onclick="closeFolderPicker()" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">✕</button>
+    </div>
+
+    <!-- Quick Locations Bar -->
+    <div id="folder-picker-quick" style="display: flex; gap: 0.4rem; padding: 0.5rem 1.25rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); overflow-x: auto; flex-wrap: wrap;"></div>
+
+    <!-- Current Path & Up Navigation -->
+    <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--bg-primary);">
+      <button type="button" id="folder-picker-up-btn" class="btn btn-secondary" onclick="navigateFolderPickerUp()" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" title="Go up one folder">
+        ⬆️ Up
+      </button>
+      <code id="folder-picker-current-path" style="font-size: 0.82rem; word-break: break-all; color: var(--text-primary); flex: 1;"></code>
+    </div>
+
+    <!-- Directory Listing -->
+    <div id="folder-picker-list" style="flex: 1; overflow-y: auto; max-height: 320px; min-height: 150px; padding: 0.5rem 1.25rem;"></div>
+
+    <!-- Modal Footer -->
+    <div style="padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); background: var(--bg-tertiary); display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+      <div style="font-size: 0.8rem; color: var(--text-secondary); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        Selected: <strong id="folder-picker-selected-label" style="color: var(--accent);"></strong>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeFolderPicker()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmFolderPicker()">Select This Folder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Library Modal -->
+<div id="edit-library-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); max-width: 480px; width: 100%; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;">
+      <span>⚙️</span> Configure Media Folder
+    </h4>
+    <form id="edit-library-form" onsubmit="handleSaveLibraryEdit(event)">
+      <input type="hidden" id="edit-lib-id">
+      <div style="margin-bottom: 0.85rem;">
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Folder Path</label>
+        <input type="text" id="edit-lib-path" class="input-text" readonly disabled style="width: 100%; opacity: 0.7; font-size: 0.85rem;">
+      </div>
+      <div style="margin-bottom: 0.85rem;">
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Library Name *</label>
+        <input type="text" id="edit-lib-name" class="input-text" required style="width: 100%;">
+      </div>
+      <div style="margin-bottom: 1.25rem;">
+        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Media Type</label>
+        <select id="edit-lib-type" class="input-text" style="width: 100%;">
+          <option value="all">📁 Mixed / Auto-detect</option>
+          <option value="book">📚 Books Only</option>
+          <option value="comic">🎨 Comics &amp; Manga</option>
+          <option value="video">🎬 Movies &amp; TV Shows</option>
+          <option value="audiobook">🎧 Audiobooks</option>
+          <option value="music">🎵 Music Tracks</option>
+          <option value="audio">🔊 All Audio</option>
+        </select>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeEditLibraryModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btn-save-lib-edit">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -460,6 +543,215 @@ async function deleteLibrary(libId, libName) {
     }
   } catch (err) {
     showToast("Network error removing folder", "error");
+  }
+}
+
+// --- Folder Picker Functionality ---
+let pickerCurrentPath = "";
+let pickerParentPath = null;
+let pickerSelectedPath = "";
+
+function openFolderPicker() {
+  const modal = document.getElementById("folder-picker-modal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  
+  const existingPath = document.getElementById("new-folder-path")?.value.trim() || "";
+  loadFolderPickerDirectories(existingPath);
+}
+
+function closeFolderPicker() {
+  const modal = document.getElementById("folder-picker-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function loadFolderPickerDirectories(targetPath) {
+  const listEl = document.getElementById("folder-picker-list");
+  const pathEl = document.getElementById("folder-picker-current-path");
+  const upBtn = document.getElementById("folder-picker-up-btn");
+  const quickEl = document.getElementById("folder-picker-quick");
+  const labelEl = document.getElementById("folder-picker-selected-label");
+
+  if (listEl) {
+    listEl.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-secondary);">⏳ Loading directories...</div>';
+  }
+
+  try {
+    const url = `/api/fs/directories${targetPath ? `?path=${encodeURIComponent(targetPath)}` : ""}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok || data.status !== "success") {
+      if (listEl) {
+        listEl.innerHTML = `<div style="padding: 1rem; color: var(--danger);">⚠️ ${data.error || "Failed to load directory"}</div>`;
+      }
+      return;
+    }
+
+    pickerCurrentPath = data.current_path;
+    pickerParentPath = data.parent_path;
+    pickerSelectedPath = data.current_path;
+
+    if (pathEl) pathEl.innerText = pickerCurrentPath;
+    if (labelEl) labelEl.innerText = pickerSelectedPath;
+    if (upBtn) {
+      upBtn.disabled = !pickerParentPath;
+      upBtn.style.opacity = pickerParentPath ? "1" : "0.5";
+    }
+
+    // Populate quick locations if available
+    if (quickEl && data.quick_locations) {
+      quickEl.innerHTML = "";
+      data.quick_locations.forEach(loc => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "btn btn-secondary";
+        chip.style.padding = "0.2rem 0.5rem";
+        chip.style.fontSize = "0.75rem";
+        chip.style.whiteSpace = "nowrap";
+        chip.innerText = loc.label;
+        chip.title = loc.path;
+        chip.onclick = () => loadFolderPickerDirectories(loc.path);
+        quickEl.appendChild(chip);
+      });
+    }
+
+    // Populate directory list
+    if (listEl) {
+      listEl.innerHTML = "";
+      if (!data.directories || data.directories.length === 0) {
+        listEl.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">📁 No subdirectories in this folder</div>';
+      } else {
+        const grid = document.createElement("div");
+        grid.style.display = "grid";
+        grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(200px, 1fr))";
+        grid.style.gap = "0.4rem";
+
+        data.directories.forEach(dir => {
+          const item = document.createElement("div");
+          item.style.padding = "0.4rem 0.6rem";
+          item.style.background = "var(--bg-tertiary)";
+          item.style.border = "1px solid var(--border)";
+          item.style.borderRadius = "var(--radius-sm)";
+          item.style.cursor = "pointer";
+          item.style.display = "flex";
+          item.style.alignItems = "center";
+          item.style.gap = "0.4rem";
+          item.style.fontSize = "0.85rem";
+          item.style.transition = "background 0.15s";
+          item.title = dir.path;
+
+          item.onmouseover = () => item.style.background = "rgba(99, 102, 241, 0.15)";
+          item.onmouseout = () => item.style.background = "var(--bg-tertiary)";
+          
+          item.innerHTML = `<span style="font-size: 1.1rem;">📁</span> <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${dir.name}</span>`;
+          item.onclick = () => loadFolderPickerDirectories(dir.path);
+
+          grid.appendChild(item);
+        });
+        listEl.appendChild(grid);
+      }
+    }
+  } catch (err) {
+    if (listEl) {
+      listEl.innerHTML = '<div style="padding: 1rem; color: var(--danger);">Network error loading directories</div>';
+    }
+  }
+}
+
+function navigateFolderPickerUp() {
+  if (pickerParentPath) {
+    loadFolderPickerDirectories(pickerParentPath);
+  }
+}
+
+function confirmFolderPicker() {
+  if (!pickerSelectedPath) return;
+  const pathInput = document.getElementById("new-folder-path");
+  const nameInput = document.getElementById("new-folder-name");
+  const typeSelect = document.getElementById("new-folder-type");
+
+  if (pathInput) {
+    pathInput.value = pickerSelectedPath;
+  }
+
+  // Derive folder basename
+  const parts = pickerSelectedPath.split(/[\\/]/).filter(Boolean);
+  const folderName = parts.length ? parts[parts.length - 1] : "Media";
+
+  // Auto-fill friendly library name if empty
+  if (nameInput && !nameInput.value.trim()) {
+    nameInput.value = folderName.replace(/[_-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // Auto-detect media type if user hasn't changed from 'all'
+  if (typeSelect && typeSelect.value === "all") {
+    const lower = folderName.toLowerCase();
+    if (lower.includes("comic") || lower.includes("manga") || lower.includes("cbz")) {
+      typeSelect.value = "comic";
+    } else if (lower.includes("video") || lower.includes("movie") || lower.includes("film") || lower.includes("tv") || lower.includes("show") || lower.includes("anime")) {
+      typeSelect.value = "video";
+    } else if (lower.includes("audiobook") || lower.includes("m4b")) {
+      typeSelect.value = "audiobook";
+    } else if (lower.includes("music") || lower.includes("song") || lower.includes("album")) {
+      typeSelect.value = "music";
+    } else if (lower.includes("audio")) {
+      typeSelect.value = "audio";
+    } else if (lower.includes("book") || lower.includes("novel") || lower.includes("epub")) {
+      typeSelect.value = "book";
+    }
+  }
+
+  closeFolderPicker();
+}
+
+// --- Edit Library Modal Functionality ---
+function openEditLibraryModal(libId, libName, libPath, libType) {
+  const modal = document.getElementById("edit-library-modal");
+  if (!modal) return;
+  document.getElementById("edit-lib-id").value = libId;
+  document.getElementById("edit-lib-name").value = libName;
+  document.getElementById("edit-lib-path").value = libPath;
+  document.getElementById("edit-lib-type").value = libType;
+  modal.style.display = "flex";
+}
+
+function closeEditLibraryModal() {
+  const modal = document.getElementById("edit-library-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function handleSaveLibraryEdit(event) {
+  event.preventDefault();
+  const libId = document.getElementById("edit-lib-id").value;
+  const name = document.getElementById("edit-lib-name").value.trim();
+  const media_type = document.getElementById("edit-lib-type").value;
+  const btn = document.getElementById("btn-save-lib-edit");
+
+  if (!libId || !name) return;
+  btn.disabled = true;
+  btn.innerText = "Saving...";
+
+  try {
+    const res = await fetch(`/api/libraries/${libId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, media_type })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(`Updated folder '${name}'`, "success");
+      closeEditLibraryModal();
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast(data.error || "Failed to update folder", "error");
+      btn.disabled = false;
+      btn.innerText = "Save Changes";
+    }
+  } catch (err) {
+    showToast("Network error saving folder configuration", "error");
+    btn.disabled = false;
+    btn.innerText = "Save Changes";
   }
 }
 </script>

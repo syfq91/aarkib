@@ -237,9 +237,10 @@ aarkib/
 
 7. **Generic Media Folders & WebUI Configuration**:
    * Media libraries are stored in SQLite `libraries` table ([`Library`](file:///home/syafiq/code/aarkib/src/aarkib/models/library.py) model).
-   * Configured folders can have their `media_type` set to `all` (auto-detect by format), `book` (books only), `comic` (comics & manga), or `video` (movies & TV shows).
+   * Admins can interactively browse server directories using `GET /api/fs/directories` and select folders in the WebUI without manual path typing.
+   * Configured folders can have their `media_type` set to `all` (auto-detect by format), `book` (books only), `comic` (comics & manga), `video` (movies & TV shows), `audiobook`, or `music`.
    * When a folder's `media_type` is changed via WebUI or `PUT /api/libraries/<id>`, all catalog entries under that folder are automatically reclassified.
-   * Folders can be added via `POST /api/libraries` or removed via `DELETE /api/libraries/<id>`.
+   * Folders can be added via `POST /api/libraries`, updated/renamed via `PUT /api/libraries/<id>`, or removed via `DELETE /api/libraries/<id>`.
 
 8. **Folder-Based File Drops (No Upload UI)**:
    * Users manage media by placing files into mounted storage folders (`./data/media`, `./data/books`, NAS mounts).

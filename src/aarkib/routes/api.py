@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import mimetypes
+import os
 import zipfile
 from datetime import UTC, datetime
 from functools import wraps
@@ -359,6 +360,77 @@ def reindex_search():
             "status": "success",
             "message": f"FTS5 search index rebuilt successfully ({count} items indexed).",
             "indexed_count": count,
+        }
+    )
+
+
+@api_bp.route("/fs/directories", methods=["GET"])
+@api_admin_required
+def browse_directories():
+    """Browse server directories for interactive folder selection (Admin only)."""
+    raw_path = request.args.get("path", "").strip()
+    if not raw_path:
+        raw_path = current_app.config.get("DATA_DIR", "data")
+
+    try:
+        p = Path(raw_path).expanduser().resolve()
+        if not p.exists() or not p.is_dir():
+            data_dir = Path(current_app.config.get("DATA_DIR", "data")).resolve()
+            p = data_dir if data_dir.exists() and data_dir.is_dir() else Path("/").resolve()
+    except Exception as e:
+        return jsonify({"error": f"Invalid directory path: {e}"}), 400
+
+    subdirs = []
+    try:
+        with os.scandir(p) as entries:
+            for entry in entries:
+                try:
+                    if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."):
+                        subdirs.append(
+                            {
+                                "name": entry.name,
+                                "path": str(Path(entry.path).resolve()),
+                            }
+                        )
+                except (PermissionError, OSError):
+                    continue
+    except PermissionError:
+        return jsonify({"error": f"Permission denied reading directory: {p}"}), 403
+    except Exception as e:
+        return jsonify({"error": f"Error reading directory: {e}"}), 400
+
+    subdirs.sort(key=lambda x: x["name"].lower())
+
+    parent_path = str(p.parent) if p.parent != p else None
+
+    quick_locations = []
+    data_dir_path = Path(current_app.config.get("DATA_DIR", "data")).resolve()
+    media_dir_path = Path(current_app.config.get("MEDIA_DIR", data_dir_path / "media")).resolve()
+
+    candidates = [
+        ("Data Root", data_dir_path),
+        ("Media Folder", media_dir_path),
+        ("System Root (/)", Path("/").resolve()),
+        ("Mounted Media (/media)", Path("/media").resolve()),
+        ("Mounts (/mnt)", Path("/mnt").resolve()),
+        ("App Data (/app/data)", Path("/app/data").resolve()),
+    ]
+    for label, candidate_path in candidates:
+        try:
+            if candidate_path.exists() and candidate_path.is_dir():
+                path_str = str(candidate_path)
+                if not any(loc["path"] == path_str for loc in quick_locations):
+                    quick_locations.append({"label": label, "path": path_str})
+        except Exception:
+            continue
+
+    return jsonify(
+        {
+            "status": "success",
+            "current_path": str(p),
+            "parent_path": parent_path,
+            "directories": subdirs,
+            "quick_locations": quick_locations,
         }
     )
 

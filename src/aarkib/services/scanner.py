@@ -15,10 +15,8 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from aarkib.config import (
-    NAMED_DIR_REGEX,
     Config,
     get_env_media_dirs,
-    split_path_string,
 )
 from aarkib.extensions import db
 from aarkib.models import (
@@ -144,24 +142,20 @@ def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
     seen: set[str] = set()
 
     for item in raw_candidates:
-        if isinstance(item, Path):
-            path_strs = [str(item)]
-        elif isinstance(item, str):
-            path_strs = split_path_string(item)
-        elif isinstance(item, (list, tuple, set)):
-            path_strs = []
-            for sub in item:
-                if isinstance(sub, Path):
-                    path_strs.append(str(sub))
-                elif isinstance(sub, str):
-                    path_strs.extend(split_path_string(sub))
+        if isinstance(item, (list, tuple, set)):
+            path_objs = [
+                Path(sub).expanduser() if not isinstance(sub, Path) else sub
+                for sub in item
+                if sub
+            ]
+        elif item:
+            path_objs = [
+                Path(item).expanduser() if not isinstance(item, Path) else item
+            ]
         else:
-            path_strs = [str(item)]
+            path_objs = []
 
-        for p_str in path_strs:
-            if not p_str or not p_str.strip():
-                continue
-            path_obj = Path(p_str).expanduser()
+        for path_obj in path_objs:
             try:
                 norm_key = str(path_obj.resolve())
             except Exception:
@@ -238,26 +232,6 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
                 "Failed to resolve library path %s: %s", lib.path, exc_info=True
             )
 
-    # Named environment map for friendly names (e.g. AARKIB_MEDIA_DIR_MANGA)
-    named_map: dict[str, str] = {}
-    for k, v in os.environ.items():
-        m = NAMED_DIR_REGEX.match(k)
-        if m:
-            suffix = m.group(1)
-            if not suffix.isdigit():
-                display_name = suffix.replace("_", " ").title()
-                for p_str in split_path_string(v):
-                    if p_str.strip():
-                        try:
-                            norm = str(Path(p_str).expanduser().resolve())
-                            named_map[norm] = display_name
-                        except Exception:
-                            logger.debug(
-                                "Failed to resolve named dir %s: %s",
-                                p_str,
-                                exc_info=True,
-                            )
-
     has_new = False
     for p in target_dirs:
         p_expanded = p.expanduser()
@@ -271,20 +245,15 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
             continue
 
         # Determine display name
-        if p_res in named_map:
-            name = named_map[p_res]
-        elif p_raw in named_map:
-            name = named_map[p_raw]
+        folder_name = p_expanded.name
+        if not folder_name or folder_name in (".", "/", "data"):
+            name = (
+                "Media"
+                if not existing_libs
+                else f"Library {len(existing_libs) + 1}"
+            )
         else:
-            folder_name = p_expanded.name
-            if not folder_name or folder_name in (".", "/", "data"):
-                name = (
-                    "Media"
-                    if not existing_libs
-                    else f"Library {len(existing_libs) + 1}"
-                )
-            else:
-                name = folder_name.replace("_", " ").replace("-", " ").title()
+            name = folder_name.replace("_", " ").replace("-", " ").title()
 
         # Determine default media_type based on folder/name context
         lower_name = (folder_name or name or "").lower()

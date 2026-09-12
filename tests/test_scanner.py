@@ -9,13 +9,12 @@ from aarkib.services.scanner import get_library_dirs, scan_library
 
 def test_get_library_dirs(tmp_path):
     class Config1(TestConfig):
-        MEDIA_DIR = f"{tmp_path}/dir1:{tmp_path}/dir2"
+        MEDIA_DIR = f"{tmp_path}/dir1"
 
     app1 = create_app(Config1)
     dirs1 = get_library_dirs(app1)
-    assert len(dirs1) == 2
+    assert len(dirs1) == 1
     assert dirs1[0] == Path(f"{tmp_path}/dir1")
-    assert dirs1[1] == Path(f"{tmp_path}/dir2")
 
     class Config2(TestConfig):
         MEDIA_DIR = [tmp_path / "a", tmp_path / "b"]
@@ -41,7 +40,8 @@ def test_scan_multiple_directories(tmp_path, sample_epub, sample_cbz):
 
     class MultiDirConfig(TestConfig):
         DATA_DIR = tmp_path / "data"
-        MEDIA_DIR = f"{dir1}:{dir2}"
+        MEDIA_DIRS = [dir1, dir2]
+        MEDIA_DIR = dir1
         COVERS_DIR = tmp_path / "data" / "covers"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path}/multi_test.db"
 
@@ -78,11 +78,7 @@ def test_scan_symlinked_directory(tmp_path, sample_epub):
 
 
 def test_get_env_library_dirs(tmp_path):
-    from aarkib.config import get_env_media_dirs, split_path_string
-
-    # Test split_path_string
-    assert split_path_string("/a:/b;/c,/d\n/e") == ["/a", "/b", "/c", "/d", "/e"]
-    assert split_path_string("C:\\books;D:\\comics") == ["C:\\books", "D:\\comics"]
+    from aarkib.config import get_env_media_dirs
 
     # Verify retired variations are ignored
     assert get_env_media_dirs(env={"AARKIB_LIBRARY_DIR": f"{tmp_path}/ignored"}) == []
@@ -91,7 +87,7 @@ def test_get_env_library_dirs(tmp_path):
     assert get_env_media_dirs(env={"MEDIA_DIRS": f"{tmp_path}/ignored"}) == []
     assert get_env_media_dirs(env={"DIR1": f"{tmp_path}/ignored"}) == []
 
-    # Test numbered and named environment variables in custom dict
+    # Test numbered environment variables in custom dict; named categories are ignored
     mock_env = {
         "AARKIB_MEDIA_DIR": f"{tmp_path}/main",
         "AARKIB_MEDIA_DIR1": f"{tmp_path}/manga",
@@ -112,8 +108,8 @@ def test_get_env_library_dirs(tmp_path):
     assert str(tmp_path / "novels") in path_strs
     assert str(tmp_path / "audiobooks") in path_strs
     assert str(tmp_path / "extra10") in path_strs
-    # Named match
-    assert str(tmp_path / "ln") in path_strs
+    # Named category match is ignored
+    assert str(tmp_path / "ln") not in path_strs
     # Ordering verification: index 1 < index 2 < index 3 < index 4 < index 10
     idx_manga = path_strs.index(str(tmp_path / "manga"))
     idx_comics = path_strs.index(str(tmp_path / "comics"))

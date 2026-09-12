@@ -131,10 +131,10 @@ sequenceDiagram
   - **Dynamic WebUI & API Control**: Users can configure, inspect item counts, change media types, rescan, or add/delete folders via the WebUI Settings page or REST API (`/api/libraries`). Changing a folder's `media_type` automatically re-classifies all existing items in the database.
 - **Direct Folder Drops (No Upload UI)**:
   - Users add media simply by copying or mounting files into storage folders (`./data/media`, `./data/books`, external drives). The scanner and filesystem watcher handle indexing automatically without requiring web upload forms.
-- **Multi-Directory Discovery**: Supported via namespaced environment conventions:
-  - Canonical: `AARKIB_MEDIA_DIR` (supports colon, semicolon, comma, or newline delimiters).
-  - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, `AARKIB_MEDIA_DIR_1`, etc.
-  - Named category variables: `AARKIB_MEDIA_DIR_MANGA`, `AARKIB_MEDIA_DIR_MOVIES`, `AARKIB_MEDIA_DIR_VIDEO`.
+- **Multi-Directory Discovery & WebUI Management**:
+  - Canonical: `AARKIB_MEDIA_DIR` (single folder path).
+  - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, etc.
+  - Interactive WebUI Selection: Administrators can browse the server filesystem via `GET /api/fs/directories` and configure folders, library names, and media types directly from the WebUI.
 - **Deduplication & Integrity**: Every media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading/playback history or metadata customizations.
 - **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `WATCH_LIBRARY` is enabled.
 

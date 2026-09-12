@@ -87,7 +87,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 | :--- | :--- | :--- |
 | `SECRET_KEY` | Auto-generated in `<DATA_DIR>/secret_key` | Secret key for session security & signing. Auto-generated and persisted on first boot if omitted. |
 | `AARKIB_DATA_DIR` | `./data` | Base storage directory. |
-| `AARKIB_MEDIA_DIR` | `./data/media` | Primary media folder (or delimited list: `/dir1:/dir2`). |
+| `AARKIB_MEDIA_DIR` | `./data/media` | Primary media folder. |
 | `AARKIB_MEDIA_DIR1`, `DIR2`, ... | *(none)* | Additional numbered media folders (`AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, etc.). |
 | `AARKIB_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
 | `AARKIB_OPTIMIZED_DIR` | `./data/optimized` | Cache directory for on-demand e-ink optimized EPUBs. |
@@ -102,12 +102,14 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 >   - **Auto-Enrich Metadata on Scan** & **Preferred Online Metadata Provider**
 >   - **Catalog Items Per Page**
 > - **WebUI-First Management**: System preferences and plugin toggles are persisted in the database with built-in defaults and can be modified or reverted in the UI without touching `.env` or Docker Compose.
-> - **Media Folders Management**: Head to **Settings → 📁 Media Folders & Libraries** in the web interface to view all folders, add new media directories, and customize each folder's media type:
->   - **Mixed / Auto-detect (`all`)**: Automatically detects books (`.epub`), comics/manga (`.cbz`, `.cbr`, `.zip`), and videos (`.mp4`, `.mkv`, etc.).
+> - **Media Folders Management**: Head to **Settings → 📁 Media Folders & Libraries** in the web interface to browse server folders, add new media directories, and customize each folder's library name and media type:
+>   - **Interactive Folder Browser**: Click **Browse** in the WebUI to select any mounted or local folder on the server without typing manual paths.
+>   - **Mixed / Auto-detect (`all`)**: Automatically detects books (`.epub`), comics/manga (`.cbz`, `.cbr`, `.zip`), videos (`.mp4`, `.mkv`), audiobooks, and music.
 >   - **Books Only (`book`)**: Catalogs files inside as books.
 >   - **Comics & Manga (`comic`)**: Catalogs files inside as comics/manga.
 >   - **Movies & TV Shows (`video`)**: Catalogs video media files inside as movies & shows.
-> - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, delimited paths `AARKIB_MEDIA_DIR=/media/movies:/media/books`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies`, or named category variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
+>   - **Audiobooks (`audiobook`)** & **Music Tracks (`music`)**: Catalogs dedicated audio formats.
+> - **Environment Configuration**: A default media directory can be set via `AARKIB_MEDIA_DIR=/media/storage`, with optional numbered mount variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`. All media types and additional directories are configured cleanly via the WebUI.
 
 ---
 

@@ -9,65 +9,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 PRIMARY_DIR_VARS: tuple[str, ...] = ("AARKIB_MEDIA_DIR",)
 
 NUMBERED_DIR_REGEX = re.compile(r"^AARKIB_MEDIA_DIR_?(\d+)$", re.IGNORECASE)
-NAMED_DIR_REGEX = re.compile(r"^AARKIB_MEDIA_DIR_([A-Za-z0-9_]+)$", re.IGNORECASE)
-
-
-def split_path_string(val: str) -> list[str]:
-    """Splits a delimited string into distinct path strings.
-
-    Supports delimiters: newline, semicolon, comma, and colon (safe for Windows drive letters).
-    """
-    if not val or not isinstance(val, str):
-        return []
-    val = val.strip()
-    if not val:
-        return []
-
-    # Handle newlines
-    if "\n" in val:
-        results: list[str] = []
-        for line in val.splitlines():
-            results.extend(split_path_string(line))
-        return results
-
-    # Handle semicolon
-    if ";" in val:
-        parts: list[str] = []
-        for p in val.split(";"):
-            parts.extend(split_path_string(p))
-        return [p for p in parts if p]
-
-    # Handle comma
-    if "," in val:
-        parts = []
-        for p in val.split(","):
-            parts.extend(split_path_string(p))
-        return [p for p in parts if p]
-
-    # Handle colon (with care for Windows drive letters like C:\ or D:/)
-    if ":" in val:
-        if len(val) >= 2 and val[1] == ":" and val[0].isalpha():
-            parts = [
-                p.strip().strip("'\"")
-                for p in re.split(r"(?<!^[a-zA-Z]):(?![\\/])", val)
-                if p.strip()
-            ]
-            if len(parts) > 1:
-                return parts
-            return [val.strip().strip("'\"")]
-        else:
-            return [p.strip().strip("'\"") for p in val.split(":") if p.strip()]
-
-    return [val.strip().strip("'\"")]
 
 
 def get_env_media_dirs(env: dict[str, str] | None = None) -> list[Path]:
     """Collects all media directory paths explicitly declared in environment variables.
 
     Supports:
-    - Canonical: AARKIB_MEDIA_DIR (single path or delimited by :, ;, ,, \n)
+    - Canonical: AARKIB_MEDIA_DIR (single path)
     - Numbered: AARKIB_MEDIA_DIR1, AARKIB_MEDIA_DIR2, AARKIB_MEDIA_DIR_1, etc.
-    - Named categories: AARKIB_MEDIA_DIR_MANGA, AARKIB_MEDIA_DIR_MOVIES, etc.
     """
     target_env = os.environ if env is None else env
     collected_raw: list[str] = []
@@ -75,12 +24,10 @@ def get_env_media_dirs(env: dict[str, str] | None = None) -> list[Path]:
     # 1. Primary vars in specified order
     for var in PRIMARY_DIR_VARS:
         if var in target_env and target_env[var].strip():
-            collected_raw.append(target_env[var])
+            collected_raw.append(target_env[var].strip().strip("'\""))
 
     # 2. Numbered variables sorted by integer index
     numbered_matches: list[tuple[int, str, str]] = []
-    # 3. Named variables sorted alphabetically
-    named_matches: list[tuple[str, str]] = []
 
     for key, value in target_env.items():
         if not value or not value.strip():
@@ -91,41 +38,28 @@ def get_env_media_dirs(env: dict[str, str] | None = None) -> list[Path]:
         num_m = NUMBERED_DIR_REGEX.match(key)
         if num_m and num_m.group(1).isdigit():
             index = int(num_m.group(1))
-            numbered_matches.append((index, key, value))
-            continue
-
-        named_m = NAMED_DIR_REGEX.match(key)
-        if named_m:
-            suffix = named_m.group(1).upper()
-            if not suffix.isdigit():
-                named_matches.append((suffix, value))
+            numbered_matches.append((index, key, value.strip().strip("'\"")))
 
     # Sort numbered matches: first by index (1, 2, ...), then key name
     numbered_matches.sort(key=lambda x: (x[0], x[1]))
     for _, _, val in numbered_matches:
         collected_raw.append(val)
 
-    # Sort named matches alphabetically
-    named_matches.sort(key=lambda x: x[0])
-    for _, val in named_matches:
-        collected_raw.append(val)
-
     parsed_paths: list[Path] = []
     seen: set[str] = set()
 
     for item in collected_raw:
-        for p_str in split_path_string(item):
-            if not p_str:
-                continue
-            path_obj = Path(p_str).expanduser()
-            try:
-                norm_key = str(path_obj.resolve())
-            except Exception:
-                norm_key = str(path_obj)
+        if not item:
+            continue
+        path_obj = Path(item).expanduser()
+        try:
+            norm_key = str(path_obj.resolve())
+        except Exception:
+            norm_key = str(path_obj)
 
-            if norm_key not in seen:
-                seen.add(norm_key)
-                parsed_paths.append(path_obj)
+        if norm_key not in seen:
+            seen.add(norm_key)
+            parsed_paths.append(path_obj)
 
     return parsed_paths
 
