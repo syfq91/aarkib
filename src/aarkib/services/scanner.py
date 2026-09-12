@@ -247,11 +247,7 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
         # Determine display name
         folder_name = p_expanded.name
         if not folder_name or folder_name in (".", "/", "data"):
-            name = (
-                "Media"
-                if not existing_libs
-                else f"Library {len(existing_libs) + 1}"
-            )
+            name = "Media" if not existing_libs else f"Library {len(existing_libs) + 1}"
         else:
             name = folder_name.replace("_", " ").replace("-", " ").title()
 

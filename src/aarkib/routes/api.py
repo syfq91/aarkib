@@ -376,7 +376,11 @@ def browse_directories():
         p = Path(raw_path).expanduser().resolve()
         if not p.exists() or not p.is_dir():
             data_dir = Path(current_app.config.get("DATA_DIR", "data")).resolve()
-            p = data_dir if data_dir.exists() and data_dir.is_dir() else Path("/").resolve()
+            p = (
+                data_dir
+                if data_dir.exists() and data_dir.is_dir()
+                else Path("/").resolve()
+            )
     except Exception as e:
         return jsonify({"error": f"Invalid directory path: {e}"}), 400
 
@@ -385,14 +389,16 @@ def browse_directories():
         with os.scandir(p) as entries:
             for entry in entries:
                 try:
-                    if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."):
+                    if entry.is_dir(
+                        follow_symlinks=False
+                    ) and not entry.name.startswith("."):
                         subdirs.append(
                             {
                                 "name": entry.name,
                                 "path": str(Path(entry.path).resolve()),
                             }
                         )
-                except (PermissionError, OSError):
+                except PermissionError, OSError:
                     continue
     except PermissionError:
         return jsonify({"error": f"Permission denied reading directory: {p}"}), 403
@@ -405,7 +411,9 @@ def browse_directories():
 
     quick_locations = []
     data_dir_path = Path(current_app.config.get("DATA_DIR", "data")).resolve()
-    media_dir_path = Path(current_app.config.get("MEDIA_DIR", data_dir_path / "media")).resolve()
+    media_dir_path = Path(
+        current_app.config.get("MEDIA_DIR", data_dir_path / "media")
+    ).resolve()
 
     candidates = [
         ("Data Root", data_dir_path),

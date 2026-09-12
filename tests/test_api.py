@@ -317,4 +317,3 @@ def test_api_browse_directories(client, app, tmp_path):
     # Hidden folders and files should be excluded
     assert ".hidden_folder" not in dir_names
     assert "file.txt" not in dir_names
-
