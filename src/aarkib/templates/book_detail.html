@@ -8,7 +8,7 @@
 
 <div class="detail-layout">
   <div>
-    <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="detail-cover">
+    <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="detail-cover">
     
     <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
       {% if book.is_video %}
@@ -45,7 +45,7 @@
 
       {% if book.file_format == 'epub' %}
       <div style="position: relative; display: flex; width: 100%;">
-        <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
+        <a href="/api/media/{{ book.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
           <span>⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)</span>
         </a>
         <button id="eink-dropdown-btn" class="btn btn-secondary" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); padding: 0 0.85rem; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="toggleEinkDropdown(event)" title="Choose E-Ink Optimized Preset">
@@ -55,25 +55,25 @@
           <div style="padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); letter-spacing: 0.5px;">
             ⚡ E-Ink Optimized Downloads
           </div>
-          <a href="/api/books/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X4</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">480×800 • Grayscale Dithered</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X3</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">528×792 • Grayscale Dithered</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kindle</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1072×1448 • Grayscale</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kobo</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1264×1680 • Grayscale</span>
           </a>
-          <a href="/api/books/{{ book.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
+          <a href="/api/media/{{ book.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
             <strong>⚡ Generic E-Ink</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1200×1600 • Grayscale & No Fonts</span>
           </a>
         </div>
       </div>
       {% else %}
-      <a href="/api/books/{{ book.id }}/download" class="btn btn-secondary">
+      <a href="/api/media/{{ book.id }}/download" class="btn btn-secondary">
         ⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)
       </a>
       {% endif %}
@@ -526,7 +526,7 @@ async function saveMetadata(e) {
   };
 
   try {
-    const res = await fetch("/api/books/{{ book.id }}/edit", {
+    const res = await fetch("/api/media/{{ book.id }}/edit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -588,7 +588,7 @@ document.addEventListener("click", () => {
 
 async function setBookProgress(percentage) {
   try {
-    const res = await fetch("/api/books/{{ book.id }}/progress", {
+    const res = await fetch("/api/media/{{ book.id }}/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

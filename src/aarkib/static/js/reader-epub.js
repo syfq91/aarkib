@@ -410,7 +410,7 @@ function showError(msg) {
         <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div>
         <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">Failed to load EPUB</div>
         <div style="color: #94a3b8; font-size: 0.9rem; max-width: 380px; margin-bottom: 1.5rem;">${msg}</div>
-        <a href="/book/${BOOK_ID}" class="btn btn-secondary">← Back to Book Details</a>
+        <a href="/media/${BOOK_ID}" class="btn btn-secondary">← Back to Details</a>
       </div>
     `;
   }
@@ -433,7 +433,7 @@ function getEpubBookUrl() {
   if (typeof BOOK_URL !== "undefined" && BOOK_URL) return BOOK_URL;
   if (typeof window !== "undefined" && window.BOOK_URL) return window.BOOK_URL;
   const bookId = getEpubBookId();
-  if (bookId) return `/api/books/${bookId}/book.epub`;
+  if (bookId) return `/api/media/${bookId}/file`;
   return null;
 }
 
@@ -1017,7 +1017,7 @@ function syncProgressDebounced(location) {
     const percent = getPercentage(location);
 
     try {
-      await fetch(`/api/books/${bookId}/progress`, {
+      await fetch(`/api/media/${bookId}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1046,7 +1046,7 @@ window.addEventListener("pagehide", () => {
           is_completed: percent >= 99.0
         });
         if (navigator.sendBeacon) {
-          navigator.sendBeacon(`/api/books/${bookId}/progress`, new Blob([data], { type: "application/json" }));
+          navigator.sendBeacon(`/api/media/${bookId}/progress`, new Blob([data], { type: "application/json" }));
         }
       }
     }
@@ -1123,7 +1123,7 @@ async function addCurrentBookmark() {
 
   const progressText = document.getElementById("progress-text") ? document.getElementById("progress-text").innerText : "";
   try {
-    const res = await fetch(`/api/books/${bookId}/bookmarks`, {
+    const res = await fetch(`/api/media/${bookId}/bookmarks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

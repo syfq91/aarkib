@@ -129,10 +129,8 @@ def get_job(job_id: str):
     return jsonify(job.to_dict())
 
 
-@api_bp.route("/books", methods=["GET"])
-@api_bp.route("/items", methods=["GET"])
 @api_bp.route("/media", methods=["GET"])
-def list_books():
+def list_media():
     """List catalog items with filtering (q, media_type, library), pagination, and progress."""
     q = request.args.get("q", "").strip()
     author_id = request.args.get("author_id", type=int)
@@ -272,12 +270,16 @@ def list_books():
                 "id": b.id,
                 "title": b.title,
                 "media_type": b.media_type,
+                "creators": [a.name for a in b.creators],
+                "creators_display": b.creators_display,
                 "authors": [a.name for a in b.authors],
                 "authors_display": b.authors_display,
                 "file_format": b.file_format,
                 "file_size": b.file_size,
-                "cover_url": f"/api/books/{b.id}/cover",
+                "cover_url": f"/api/media/{b.id}/cover",
                 "player_url": b.player_url,
+                "collection": b.collection.name if b.collection else None,
+                "collection_id": b.collection_id,
                 "series": b.series.name if b.series else None,
                 "series_index": b.series_index,
                 "tags": [t.name for t in b.tags],
@@ -306,7 +308,7 @@ def list_books():
 
     return jsonify(
         {
-            "books": items,
+            "items": items,
             "page": pagination.page,
             "pages": pagination.pages,
             "total": pagination.total,
@@ -569,22 +571,20 @@ def scan_single_library(identifier: str):
     )
 
 
-@api_bp.route("/books/<int:book_id>", methods=["GET"])
-@api_bp.route("/items/<int:book_id>", methods=["GET"])
-@api_bp.route("/media/<int:book_id>", methods=["GET"])
-def get_book(book_id: int):
+@api_bp.route("/media/<int:item_id>", methods=["GET"])
+def get_media_item(item_id: int):
     """Return full item details, including user progress, for a single catalog item."""
     book = db.session.scalar(
         select(Book)
         .options(
-            selectinload(Book.authors),
-            selectinload(Book.series),
+            selectinload(Book.creators),
+            selectinload(Book.collection),
             selectinload(Book.tags),
         )
-        .where(Book.id == book_id)
+        .where(Book.id == item_id)
     )
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
     user_cond = (
@@ -609,6 +609,8 @@ def get_book(book_id: int):
             "id": book.id,
             "title": book.title,
             "media_type": book.media_type,
+            "creators": [a.name for a in book.creators],
+            "creators_display": book.creators_display,
             "authors": [a.name for a in book.authors],
             "authors_display": book.authors_display,
             "description": book.description,
@@ -618,6 +620,8 @@ def get_book(book_id: int):
             "publication_date": book.publication_date,
             "file_format": book.file_format,
             "file_size": book.file_size,
+            "collection": book.collection.name if book.collection else None,
+            "collection_id": book.collection_id,
             "series": book.series.name if book.series else None,
             "series_index": book.series_index,
             "tags": [t.name for t in book.tags],
@@ -642,9 +646,9 @@ def get_book(book_id: int):
             "track_number": getattr(book, "track_number", None),
             "disc_number": getattr(book, "disc_number", None),
             "is_compilation": getattr(book, "is_compilation", False),
-            "cover_url": f"/api/books/{book.id}/cover",
-            "download_url": f"/api/books/{book.id}/download",
-            "file_url": f"/api/books/{book.id}/file",
+            "cover_url": f"/api/media/{book.id}/cover",
+            "download_url": f"/api/media/{book.id}/download",
+            "file_url": f"/api/media/{book.id}/file",
             "player_url": book.player_url,
             "progress": prog,
             "created_at": book.created_at.isoformat() if book.created_at else None,
@@ -652,12 +656,10 @@ def get_book(book_id: int):
     )
 
 
-@api_bp.route("/books/<int:book_id>/cover", methods=["GET"])
-@api_bp.route("/items/<int:book_id>/cover", methods=["GET"])
-@api_bp.route("/media/<int:book_id>/cover", methods=["GET"])
-def get_book_cover(book_id: int):
+@api_bp.route("/media/<int:item_id>/cover", methods=["GET"])
+def get_media_cover(item_id: int):
     """Serve the cached WebP cover/poster image for a media item."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         abort(404)
 
@@ -716,21 +718,14 @@ def get_book_cover(book_id: int):
     )
 
 
-@api_bp.route("/books/<int:book_id>/file", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/file/<path:filename>", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/book.epub", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/stream", methods=["GET"])
-@api_bp.route("/items/<int:book_id>/file", methods=["GET"])
-@api_bp.route("/items/<int:book_id>/file/<path:filename>", methods=["GET"])
-@api_bp.route("/items/<int:book_id>/stream", methods=["GET"])
-@api_bp.route("/media/<int:book_id>/file", methods=["GET"])
-@api_bp.route("/media/<int:book_id>/file/<path:filename>", methods=["GET"])
-@api_bp.route("/media/<int:book_id>/stream", methods=["GET"])
-def get_book_file(book_id: int, filename: str | None = None):
+@api_bp.route("/media/<int:item_id>/file", methods=["GET"])
+@api_bp.route("/media/<int:item_id>/file/<path:filename>", methods=["GET"])
+@api_bp.route("/media/<int:item_id>/stream", methods=["GET"])
+def get_media_file(item_id: int, filename: str | None = None):
     """Stream the original media file with HTTP 206 byte-range support."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     file_path = Path(book.original_file_path)
     if not file_path.exists():
@@ -774,11 +769,11 @@ def get_book_file(book_id: int, filename: str | None = None):
 # ---------------------------------------------------------------------------
 
 
-@api_bp.route("/stream/<int:book_id>/info", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/stream/info", methods=["GET"])
-def get_stream_info(book_id: int):
+@api_bp.route("/media/<int:item_id>/stream/info", methods=["GET"])
+@api_bp.route("/stream/<int:item_id>/info", methods=["GET"])
+def get_stream_info(item_id: int):
     """Returns technical stream metadata, codecs, tracks, and recommended playback strategy."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         return api_error("Media item not found", 404)
 
@@ -802,18 +797,18 @@ def get_stream_info(book_id: int):
             "original_file_path": str(file_path),
             "streams": streams,
             "evaluation": eval_res,
-            "direct_url": f"/api/books/{book.id}/file",
-            "remux_url": f"/api/stream/{book.id}/remux",
-            "hls_url": f"/api/stream/{book.id}/hls/master.m3u8",
+            "direct_url": f"/api/media/{book.id}/file",
+            "remux_url": f"/api/media/{book.id}/stream/remux",
+            "hls_url": f"/api/media/{book.id}/stream/hls/master.m3u8",
         }
     )
 
 
-@api_bp.route("/stream/<int:book_id>/remux", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/stream/remux", methods=["GET"])
-def stream_remux_video(book_id: int):
+@api_bp.route("/media/<int:item_id>/stream/remux", methods=["GET"])
+@api_bp.route("/stream/<int:item_id>/remux", methods=["GET"])
+def stream_remux_video(item_id: int):
     """Progressive on-the-fly container remux (e.g. MKV -> fragmented MP4) via FFmpeg pipe."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         return api_error("Media item not found", 404)
 
@@ -843,11 +838,11 @@ def stream_remux_video(book_id: int):
     )
 
 
-@api_bp.route("/stream/<int:book_id>/hls/master.m3u8", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/stream/hls/master.m3u8", methods=["GET"])
-def get_hls_master_playlist(book_id: int):
+@api_bp.route("/media/<int:item_id>/stream/hls/master.m3u8", methods=["GET"])
+@api_bp.route("/stream/<int:item_id>/hls/master.m3u8", methods=["GET"])
+def get_hls_master_playlist(item_id: int):
     """Spawns/attaches to an HLS transcode session and returns the master playlist."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         return api_error("Media item not found", 404)
 
@@ -884,7 +879,7 @@ def get_hls_master_playlist(book_id: int):
         "#EXTM3U\n"
         "#EXT-X-VERSION:7\n"
         f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},NAME="{resolution}"\n'
-        f"/api/stream/{book.id}/hls/{session.session_id}/playlist.m3u8\n"
+        f"/api/media/{book.id}/stream/hls/{session.session_id}/playlist.m3u8\n"
     )
 
     return Response(
@@ -897,6 +892,9 @@ def get_hls_master_playlist(book_id: int):
     )
 
 
+@api_bp.route(
+    "/media/<int:book_id>/stream/hls/<session_id>/playlist.m3u8", methods=["GET"]
+)
 @api_bp.route("/stream/<int:book_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
 def get_hls_session_playlist(book_id: int, session_id: str):
     """Serves the HLS playlist generated by an active transcode session."""
@@ -915,6 +913,9 @@ def get_hls_session_playlist(book_id: int, session_id: str):
     return send_file(playlist_path, mimetype="application/vnd.apple.mpegurl")
 
 
+@api_bp.route(
+    "/media/<int:book_id>/stream/hls/<session_id>/<path:segment_name>", methods=["GET"]
+)
 @api_bp.route(
     "/stream/<int:book_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
 )
@@ -943,6 +944,9 @@ def get_hls_segment(book_id: int, session_id: str, segment_name: str):
     return send_file(segment_path, mimetype=mimetype)
 
 
+@api_bp.route(
+    "/media/<int:book_id>/stream/hls/<session_id>/heartbeat", methods=["POST"]
+)
 @api_bp.route("/stream/<int:book_id>/hls/<session_id>/heartbeat", methods=["POST"])
 def hls_heartbeat(book_id: int, session_id: str):
     """Client heartbeat ping to keep an active HLS transcode session alive."""
@@ -956,6 +960,7 @@ def hls_heartbeat(book_id: int, session_id: str):
     return jsonify({"status": "ok", "session_id": session_id})
 
 
+@api_bp.route("/media/<int:book_id>/stream/hls/<session_id>/stop", methods=["POST"])
 @api_bp.route("/stream/<int:book_id>/hls/<session_id>/stop", methods=["POST"])
 def stop_hls_session(book_id: int, session_id: str):
     """Explicitly stops a transcode session and prunes its scratch directory."""
@@ -965,11 +970,11 @@ def stop_hls_session(book_id: int, session_id: str):
     return jsonify({"status": "stopped", "session_id": session_id})
 
 
-@api_bp.route("/stream/<int:book_id>/subtitles", methods=["GET"])
-@api_bp.route("/books/<int:book_id>/stream/subtitles", methods=["GET"])
-def list_subtitles(book_id: int):
+@api_bp.route("/media/<int:item_id>/stream/subtitles", methods=["GET"])
+@api_bp.route("/stream/<int:item_id>/subtitles", methods=["GET"])
+def list_subtitles(item_id: int):
     """Returns list of embedded subtitle tracks for a media item."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         return api_error("Media item not found", 404)
 
@@ -988,13 +993,13 @@ def list_subtitles(book_id: int):
     )
 
 
-@api_bp.route("/stream/<int:book_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
 @api_bp.route(
-    "/books/<int:book_id>/stream/subtitles/<int:track_index>.vtt", methods=["GET"]
+    "/media/<int:item_id>/stream/subtitles/<int:track_index>.vtt", methods=["GET"]
 )
-def get_subtitle_vtt(book_id: int, track_index: int):
+@api_bp.route("/stream/<int:item_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
+def get_subtitle_vtt(item_id: int, track_index: int):
     """Extracts and converts the requested embedded subtitle track to WebVTT."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
         return api_error("Media item not found", 404)
 
@@ -1012,16 +1017,16 @@ def get_subtitle_vtt(book_id: int, track_index: int):
     )
 
 
-@api_bp.route("/books/<int:book_id>/download", methods=["GET"])
+@api_bp.route("/media/<int:item_id>/download", methods=["GET"])
 @api_bp.route(
-    "/books/<int:book_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",
+    "/media/<int:item_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",
     methods=["GET"],
 )
-def download_book_file(book_id: int, preset: str | None = None):
-    """Download a book file, optionally served from a precomputed e-ink optimized EPUB."""
-    book = db.session.get(Book, book_id)
+def download_media_file(item_id: int, preset: str | None = None):
+    """Download a media file, optionally served from a precomputed e-ink optimized EPUB."""
+    book = db.session.get(Book, item_id)
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
     file_path = Path(book.original_file_path)
@@ -1073,13 +1078,13 @@ def get_optimizer_presets():
     return jsonify(DEVICE_PRESETS)
 
 
-@api_bp.route("/books/<int:book_id>/optimize", methods=["POST"])
+@api_bp.route("/media/<int:item_id>/optimize", methods=["POST"])
 @api_admin_required
-def precompute_book_optimization(book_id: int):
-    """Pre-generate optimized EPUB cache for a book."""
-    book = db.session.get(Book, book_id)
+def precompute_media_optimization(item_id: int):
+    """Pre-generate optimized EPUB cache for a media item."""
+    book = db.session.get(Book, item_id)
     if not book or book.file_format != "epub":
-        return api_error("Book is not an EPUB", 404)
+        return api_error("Item is not an EPUB", 400)
 
     data = request.get_json(silent=True) or {}
     preset_arg = str(data.get("preset", "generic"))
@@ -1109,12 +1114,14 @@ def precompute_book_optimization(book_id: int):
         return jsonify(
             {
                 "status": "success",
+                "id": book.id,
+                "item_id": book.id,
                 "book_id": book.id,
                 "preset": preset_arg,
                 "original_size": orig_size,
                 "optimized_size": opt_size,
                 "reduction_percent": reduction,
-                "download_url": f"/api/books/{book.id}/download/optimized/{preset_arg}",
+                "download_url": f"/api/media/{book.id}/download/optimized/{preset_arg}",
             }
         )
     except Exception as e:
@@ -1122,12 +1129,12 @@ def precompute_book_optimization(book_id: int):
         return api_error(f"Optimization failed: {e}", 500)
 
 
-@api_bp.route("/books/<int:book_id>/pages", methods=["GET"])
-def get_cbz_pages(book_id: int):
+@api_bp.route("/media/<int:item_id>/pages", methods=["GET"])
+def get_cbz_pages(item_id: int):
     """List page metadata (path, width, height) for a CBZ comic."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book or book.file_format not in ("cbz", "zip", "cbr"):
-        return api_error("Book is not a CBZ comic", 404)
+        return api_error("Item is not a CBZ comic", 400)
 
     file_path = Path(book.original_file_path)
     if not file_path.exists():
@@ -1150,18 +1157,26 @@ def get_cbz_pages(book_id: int):
     pages = [
         {
             "page_number": idx + 1,
-            "url": f"/api/books/{book.id}/page/{idx + 1}",
+            "url": f"/api/media/{book.id}/page/{idx + 1}",
             "filename": Path(name).name,
         }
         for idx, name in enumerate(image_names)
     ]
-    return jsonify({"book_id": book.id, "total_pages": len(pages), "pages": pages})
+    return jsonify(
+        {
+            "id": book.id,
+            "item_id": book.id,
+            "book_id": book.id,
+            "total_pages": len(pages),
+            "pages": pages,
+        }
+    )
 
 
-@api_bp.route("/books/<int:book_id>/page/<int:page_num>", methods=["GET"])
-def get_cbz_page_image(book_id: int, page_num: int):
+@api_bp.route("/media/<int:item_id>/page/<int:page_num>", methods=["GET"])
+def get_cbz_page_image(item_id: int, page_num: int):
     """Serve a single page image from a CBZ comic archive."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book or book.file_format not in ("cbz", "zip", "cbr"):
         abort(404)
 
@@ -1206,19 +1221,17 @@ def get_cbz_page_image(book_id: int, page_num: int):
             )
     except Exception as e:
         current_app.logger.error(
-            "Error serving page %s for book %s: %s", page_num, book_id, e
+            "Error serving page %s for book %s: %s", page_num, item_id, e
         )
         abort(500, description=f"Unable to read comic page: {e}")
 
 
-@api_bp.route("/books/<int:book_id>/progress", methods=["GET", "POST"])
-@api_bp.route("/items/<int:book_id>/progress", methods=["GET", "POST"])
-@api_bp.route("/media/<int:book_id>/progress", methods=["GET", "POST"])
-def book_progress(book_id: int):
-    """Fetch or update reading/video progress for a book or media item."""
-    book = db.session.get(Book, book_id)
+@api_bp.route("/media/<int:item_id>/progress", methods=["GET", "POST"])
+def media_progress(item_id: int):
+    """Fetch or update reading/video progress for a media item."""
+    book = db.session.get(Book, item_id)
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
     user_cond = (
@@ -1284,14 +1297,12 @@ def book_progress(book_id: int):
     return jsonify({"percentage": 0.0, "location": "0", "is_completed": False})
 
 
-@api_bp.route("/books/<int:book_id>/bookmarks", methods=["GET", "POST"])
-@api_bp.route("/items/<int:book_id>/bookmarks", methods=["GET", "POST"])
-@api_bp.route("/media/<int:book_id>/bookmarks", methods=["GET", "POST"])
-def bookmarks(book_id: int):
-    """List or create bookmarks for a book or media item."""
-    book = db.session.get(Book, book_id)
+@api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])
+def bookmarks(item_id: int):
+    """List or create bookmarks for a media item."""
+    book = db.session.get(Book, item_id)
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
 
@@ -1382,13 +1393,11 @@ def trigger_scan():
     )
 
 
-@api_bp.route("/books/<int:book_id>/enrich", methods=["POST"])
-@api_bp.route("/items/<int:book_id>/enrich", methods=["POST"])
-@api_bp.route("/media/<int:book_id>/enrich", methods=["POST"])
+@api_bp.route("/media/<int:item_id>/enrich", methods=["POST"])
 @api_admin_required
-def enrich_single_book(book_id: int):
+def enrich_media_item(item_id: int):
     """Fetch online metadata for a single media item (books, video, music)."""
-    item = db.session.get(MediaItem, book_id)
+    item = db.session.get(MediaItem, item_id)
     if not item:
         return api_error("Media item not found", 404)
 
@@ -1399,14 +1408,12 @@ def enrich_single_book(book_id: int):
     )
 
     covers_dir = Path(current_app.config["COVERS_DIR"])
-    from aarkib.services.enricher import enrich_media_item
+    from aarkib.services.enricher import enrich_media_item as run_enrich
 
-    result = enrich_media_item(item, covers_dir, overwrite=overwrite, provider=provider)
+    result = run_enrich(item, covers_dir, overwrite=overwrite, provider=provider)
     return jsonify(result)
 
 
-@api_bp.route("/books/<int:item_id>/metadata/search", methods=["GET"])
-@api_bp.route("/items/<int:item_id>/metadata/search", methods=["GET"])
 @api_bp.route("/media/<int:item_id>/metadata/search", methods=["GET"])
 @api_admin_required
 def search_metadata_candidates(item_id: int):
@@ -1444,8 +1451,6 @@ def search_metadata_candidates(item_id: int):
     )
 
 
-@api_bp.route("/books/<int:item_id>/metadata/apply", methods=["POST"])
-@api_bp.route("/items/<int:item_id>/metadata/apply", methods=["POST"])
 @api_bp.route("/media/<int:item_id>/metadata/apply", methods=["POST"])
 @api_admin_required
 def apply_metadata_candidate(item_id: int):
@@ -1463,9 +1468,9 @@ def apply_metadata_candidate(item_id: int):
         return api_error("Both 'provider' and 'external_id' are required", 400)
 
     covers_dir = Path(current_app.config["COVERS_DIR"])
-    from aarkib.services.enricher import enrich_media_item
+    from aarkib.services.enricher import enrich_media_item as run_enrich
 
-    result = enrich_media_item(
+    result = run_enrich(
         item,
         covers_dir=covers_dir,
         overwrite=True,
@@ -1496,6 +1501,7 @@ def apply_metadata_candidate(item_id: int):
             "item": {
                 "id": item.id,
                 "title": item.title,
+                "creators": [a.name for a in item.creators],
                 "authors": [a.name for a in item.authors],
                 "description": item.description,
                 "cover_image_path": item.cover_image_path,
@@ -1505,8 +1511,6 @@ def apply_metadata_candidate(item_id: int):
     )
 
 
-@api_bp.route("/books/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
-@api_bp.route("/items/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
 @api_bp.route("/media/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
 @api_admin_required
 def manage_locked_fields(item_id: int):
@@ -1595,18 +1599,14 @@ def enrich_library():
     )
 
 
-@api_bp.route("/books/<int:book_id>/edit", methods=["POST"])
-@api_bp.route("/books/<int:book_id>", methods=["PATCH"])
-@api_bp.route("/items/<int:book_id>/edit", methods=["POST"])
-@api_bp.route("/items/<int:book_id>", methods=["PATCH"])
-@api_bp.route("/media/<int:book_id>/edit", methods=["POST"])
-@api_bp.route("/media/<int:book_id>", methods=["PATCH"])
+@api_bp.route("/media/<int:item_id>", methods=["PATCH"])
+@api_bp.route("/media/<int:item_id>/edit", methods=["POST"])
 @api_admin_required
-def edit_book_metadata(book_id: int):
+def edit_media_metadata(item_id: int):
     """Manually edit a media item's title, creators, series, tags, and descriptive fields."""
-    book = db.session.get(Book, book_id)
+    book = db.session.get(Book, item_id)
     if not book:
-        return api_error("Book not found", 404)
+        return api_error("Media item not found", 404)
 
     from aarkib.services.media_service import edit_media_metadata as apply_edits
 
@@ -1618,19 +1618,26 @@ def edit_book_metadata(book_id: int):
 
     sync_media_item_fts(book.id)
 
+    item_dict = {
+        "id": book.id,
+        "title": book.title,
+        "collection": book.collection.name if book.collection else None,
+        "collection_id": book.collection_id,
+        "series": book.series.name if book.series else None,
+        "series_index": book.series_index,
+        "creators": [a.name for a in book.creators],
+        "creators_display": book.creators_display,
+        "authors": [a.name for a in book.authors],
+        "tags": [t.name for t in book.tags],
+        "locked_fields": book.get_locked_fields(),
+    }
+
     return jsonify(
         {
             "status": "success",
             "message": "Metadata updated successfully",
-            "book": {
-                "id": book.id,
-                "title": book.title,
-                "series": book.series.name if book.series else None,
-                "series_index": book.series_index,
-                "authors": [a.name for a in book.authors],
-                "tags": [t.name for t in book.tags],
-                "locked_fields": book.get_locked_fields(),
-            },
+            "item": item_dict,
+            "book": item_dict,
         }
     )
 
@@ -1717,7 +1724,7 @@ def get_favorites():
                     "media_type": f.media_item.media_type,
                     "file_format": f.media_item.file_format,
                     "creators": f.media_item.creators_display,
-                    "cover_url": f"/api/books/{f.media_item.id}/cover",
+                    "cover_url": f"/api/media/{f.media_item.id}/cover",
                     "player_url": f.media_item.player_url,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
                 }

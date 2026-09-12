@@ -11,27 +11,17 @@ PRIMARY_DIR_VARS: tuple[str, ...] = (
     "AARKIB_MEDIA_DIRS",
     "AARKIB_LIBRARY_DIR",
     "AARKIB_LIBRARY_DIRS",
-    "AARKIB_BOOKS_DIR",
-    "AARKIB_BOOKS_DIRS",
     "MEDIA_DIR",
     "MEDIA_DIRS",
-    "BUUKUU_LIBRARY_DIR",
-    "BUUKU_LIBRARY_DIR",
-    "BUUKUU_LIBRARY_DIRS",
-    "BUUKU_LIBRARY_DIRS",
-    "BUUKUU_BOOKS_DIR",
-    "BUUKUU_BOOKS_DIRS",
     "LIBRARY_DIR",
     "LIBRARY_DIRS",
-    "BOOKS_DIR",
-    "BOOKS_DIRS",
 )
 
 NUMBERED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_|MEDIA_)?DIR_?(\d+)$", re.IGNORECASE
+    r"^(?:AARKIB_)?(?:LIBRARY_|MEDIA_)?DIR_?(\d+)$", re.IGNORECASE
 )
 NAMED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_|BUUKU{1,2}_)?(?:LIBRARY_|BOOKS_|MEDIA_)?DIR_([A-Za-z0-9_]+)$",
+    r"^(?:AARKIB_)?(?:LIBRARY_|MEDIA_)?DIR_([A-Za-z0-9_]+)$",
     re.IGNORECASE,
 )
 
@@ -190,9 +180,7 @@ class Config:
             '`python -c "import secrets; print(secrets.token_hex(32))"`.'
         )
 
-    DATA_DIR: Path = Path(
-        os.getenv("AARKIB_DATA_DIR", os.getenv("BUUKUU_DATA_DIR", BASE_DIR / "data"))
-    )
+    DATA_DIR: Path = Path(os.getenv("AARKIB_DATA_DIR", BASE_DIR / "data"))
     if "SECRET_KEY" not in locals():
         # Persist a generated key so sessions survive restarts (dev convenience).
         _key_path = DATA_DIR / "secret_key"
@@ -209,24 +197,13 @@ class Config:
             except OSError:
                 pass
     LIBRARY_DIRS: list[Path] = discover_library_dirs(DATA_DIR)
-    LIBRARY_DIR: Path = LIBRARY_DIRS[0] if LIBRARY_DIRS else (DATA_DIR / "books")
-    COVERS_DIR: Path = Path(
-        os.getenv(
-            "AARKIB_COVERS_DIR",
-            os.getenv("BUUKUU_COVERS_DIR", DATA_DIR / "covers"),
-        )
-    )
+    LIBRARY_DIR: Path = LIBRARY_DIRS[0] if LIBRARY_DIRS else (DATA_DIR / "media")
+    COVERS_DIR: Path = Path(os.getenv("AARKIB_COVERS_DIR", DATA_DIR / "covers"))
     OPTIMIZED_DIR: Path = Path(
-        os.getenv(
-            "AARKIB_OPTIMIZED_DIR",
-            os.getenv("BUUKUU_OPTIMIZED_DIR", DATA_DIR / "optimized"),
-        )
+        os.getenv("AARKIB_OPTIMIZED_DIR", DATA_DIR / "optimized")
     )
     TRANSCODE_DIR: Path = Path(
-        os.getenv(
-            "AARKIB_TRANSCODE_DIR",
-            os.getenv("BUUKUU_TRANSCODE_DIR", DATA_DIR / "transcode"),
-        )
+        os.getenv("AARKIB_TRANSCODE_DIR", DATA_DIR / "transcode")
     )
     VAAPI_DEVICE: str | None = os.getenv("AARKIB_VAAPI_DEVICE")
 
@@ -237,45 +214,34 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
     # App Settings
-    AUTH_REQUIRED: bool = (
-        os.getenv("AARKIB_AUTH_REQUIRED") or os.getenv("BUUKUU_AUTH_REQUIRED", "true")
-    ).lower() in (
+    AUTH_REQUIRED: bool = (os.getenv("AARKIB_AUTH_REQUIRED", "true")).lower() in (
         "true",
         "1",
         "yes",
     )
     ALLOW_REGISTRATION: bool = (
-        os.getenv("AARKIB_ALLOW_REGISTRATION")
-        or os.getenv("BUUKUU_ALLOW_REGISTRATION", "true")
+        os.getenv("AARKIB_ALLOW_REGISTRATION", "true")
     ).lower() in (
         "true",
         "1",
         "yes",
     )
-    AUTO_SCAN_ON_START: bool = (
-        os.getenv("AARKIB_AUTO_SCAN") or os.getenv("BUUKUU_AUTO_SCAN", "true")
-    ).lower() in (
+    AUTO_SCAN_ON_START: bool = (os.getenv("AARKIB_AUTO_SCAN", "true")).lower() in (
         "true",
         "1",
         "yes",
     )
-    WATCH_LIBRARY: bool = (
-        os.getenv("AARKIB_WATCH_LIBRARY") or os.getenv("BUUKUU_WATCH_LIBRARY", "true")
-    ).lower() in (
+    WATCH_LIBRARY: bool = (os.getenv("AARKIB_WATCH_LIBRARY", "true")).lower() in (
         "true",
         "1",
         "yes",
     )
-    AUTO_ENRICH: bool = (
-        os.getenv("AARKIB_AUTO_ENRICH") or os.getenv("BUUKUU_AUTO_ENRICH", "false")
-    ).lower() in (
+    AUTO_ENRICH: bool = (os.getenv("AARKIB_AUTO_ENRICH", "false")).lower() in (
         "true",
         "1",
         "yes",
     )
-    METADATA_PROVIDER: str = os.getenv(
-        "AARKIB_METADATA_PROVIDER", os.getenv("BUUKUU_METADATA_PROVIDER", "all")
-    )
+    METADATA_PROVIDER: str = os.getenv("AARKIB_METADATA_PROVIDER", "all")
     TMDB_API_KEY: str | None = os.getenv(
         "AARKIB_TMDB_API_KEY", os.getenv("TMDB_API_KEY")
     )
@@ -285,9 +251,7 @@ class Config:
     MUSICBRAINZ_RATE_LIMIT: float = float(
         os.getenv("AARKIB_MUSICBRAINZ_RATE_LIMIT", "1.0")
     )
-    PAGE_SIZE: int = int(
-        os.getenv("AARKIB_PAGE_SIZE", os.getenv("BUUKUU_PAGE_SIZE", "24"))
-    )
+    PAGE_SIZE: int = int(os.getenv("AARKIB_PAGE_SIZE", "24"))
 
     # Maximum request payload limit (16 MB)
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024

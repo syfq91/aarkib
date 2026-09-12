@@ -273,6 +273,8 @@ def _resolve_progression_conflict(progress, modified_dt, user) -> Response | Non
     return None
 
 
+@opds_bp.route("/media/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
+@opds_bp.route("/v2/media/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 @opds_bp.route("/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 @opds_bp.route("/v2/books/<int:book_id>/progression", methods=["GET", "PUT", "POST"])
 def opds_book_progression(book_id: int):
@@ -435,9 +437,9 @@ def opds2_recent(preset: str | None = None):
     publications = []
     for b in books:
         if preset and b.file_format == "epub":
-            acq_href = f"{base_url}/api/books/{b.id}/download/optimized/{preset}"
+            acq_href = f"{base_url}/api/media/{b.id}/download/optimized/{preset}"
         else:
-            acq_href = f"{base_url}/api/books/{b.id}/download"
+            acq_href = f"{base_url}/api/media/{b.id}/download"
 
         pub: dict[str, Any] = {
             "metadata": {
@@ -452,7 +454,7 @@ def opds2_recent(preset: str | None = None):
             "links": [
                 {
                     "rel": "http://opds-spec.org/image",
-                    "href": f"{base_url}/api/books/{b.id}/cover",
+                    "href": f"{base_url}/api/media/{b.id}/cover",
                     "type": "image/webp",
                 },
                 {
@@ -464,7 +466,7 @@ def opds2_recent(preset: str | None = None):
                 },
                 {
                     "rel": "http://opds-spec.org/progression",
-                    "href": f"{base_url}/opds/books/{b.id}/progression",
+                    "href": f"{base_url}/opds/media/{b.id}/progression",
                     "type": OPDS_PROGRESSION_TYPE,
                 },
             ],

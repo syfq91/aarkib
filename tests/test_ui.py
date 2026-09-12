@@ -29,7 +29,7 @@ def test_book_detail_page(client, app, sample_epub):
         assert book is not None
         book_id = book.id
 
-    response = client.get(f"/book/{book_id}")
+    response = client.get(f"/media/{book_id}")
     assert response.status_code == 200
     assert b"Sample Test Book" in response.data
     assert b"Read in Browser (EPUB)" in response.data
@@ -52,10 +52,10 @@ def test_reader_epub_page(client, app, sample_epub):
     assert b"reader-epub.js" in response.data
     assert b"epub.min.js" in response.data
     assert b"jszip.min.js" in response.data
-    assert b"book.epub" in response.data
+    assert b"/file" in response.data
 
     # Also test file route
-    file_res = client.get(f"/api/books/{book_id}/book.epub")
+    file_res = client.get(f"/api/media/{book_id}/file")
     assert file_res.status_code == 200
     assert file_res.headers["Content-Type"] == "application/epub+zip"
 
@@ -73,7 +73,7 @@ def test_reader_epub_resume_progress(client, app, sample_epub):
     # Save progress via API
     cfi = "epubcfi(/6/2[chapter1]!/4/2/14)"
     res = client.post(
-        f"/api/books/{book_id}/progress", json={"location": cfi, "percentage": 35.0}
+        f"/api/media/{book_id}/progress", json={"location": cfi, "percentage": 35.0}
     )
     assert res.status_code == 200
 
@@ -83,7 +83,7 @@ def test_reader_epub_resume_progress(client, app, sample_epub):
     assert cfi.encode("utf-8") in reader_res.data
 
     # Book detail page should show Continue Reading
-    detail_res = client.get(f"/book/{book_id}")
+    detail_res = client.get(f"/media/{book_id}")
     assert detail_res.status_code == 200
     assert b"Continue Reading (35%)" in detail_res.data
 
@@ -105,7 +105,7 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
 
     # Save progress via API (e.g. Page 2)
     res = client.post(
-        f"/api/books/{book_id}/progress", json={"location": "2", "percentage": 50.0}
+        f"/api/media/{book_id}/progress", json={"location": "2", "percentage": 50.0}
     )
     assert res.status_code == 200
 
@@ -116,7 +116,7 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
     assert b"INITIAL_PAGE = 2" in reader_res.data
 
     # Book detail page should show Continue Reading
-    detail_res = client.get(f"/book/{book_id}")
+    detail_res = client.get(f"/media/{book_id}")
     assert detail_res.status_code == 200
     assert b"Continue Reading (50%)" in detail_res.data
 
@@ -149,18 +149,18 @@ def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
         book = index_single_book(sample_epub, covers_dir)
         book_id = book.id
 
-    res = client.get(f"/book/{book_id}")
+    res = client.get(f"/media/{book_id}")
     assert res.status_code == 200
     # Original download link
-    assert f'href="/api/books/{book_id}/download"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download"'.encode() in res.data
     # E-Ink dropdown trigger
     assert b'id="eink-dropdown-btn"' in res.data
     # Optimized preset links
-    assert f'href="/api/books/{book_id}/download/optimized/x4"'.encode() in res.data
-    assert f'href="/api/books/{book_id}/download/optimized/x3"'.encode() in res.data
-    assert f'href="/api/books/{book_id}/download/optimized/kindle"'.encode() in res.data
-    assert f'href="/api/books/{book_id}/download/optimized/kobo"'.encode() in res.data
-    assert f'href="/api/books/{book_id}/download/optimized/eink"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download/optimized/x4"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download/optimized/x3"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download/optimized/kindle"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download/optimized/kobo"'.encode() in res.data
+    assert f'href="/api/media/{book_id}/download/optimized/eink"'.encode() in res.data
 
 
 def test_settings_page_displays_multiple_directories(tmp_path):
@@ -228,7 +228,7 @@ def test_homepage_in_progress_row(client, app, sample_epub):
 
     # Save 45% progress
     res_prog = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "cfi_step_1", "percentage": 45.0, "is_completed": False},
     )
     assert res_prog.status_code == 200
@@ -242,7 +242,7 @@ def test_homepage_in_progress_row(client, app, sample_epub):
 
     # Complete book (100%)
     client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "end", "percentage": 100.0, "is_completed": True},
     )
     res_completed = client.get("/")

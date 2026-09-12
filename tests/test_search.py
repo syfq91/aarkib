@@ -285,7 +285,7 @@ def test_search_grouped_api(client, app):
 
 
 def test_api_media_search_endpoint(client, app):
-    """Verify /api/media and /api/books with ?q= uses FTS5 and BM25 relevance sorting."""
+    """Verify /api/media with ?q= uses FTS5 and BM25 relevance sorting."""
     with app.app_context():
         # Clear items
         db.session.execute(text("DELETE FROM media_creators;"))
@@ -315,13 +315,13 @@ def test_api_media_search_endpoint(client, app):
         db.session.commit()
         rebuild_search_index()
 
-    res = client.get("/api/books?q=Solaris")
+    res = client.get("/api/media?q=Solaris")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["books"]) == 2
+    assert len(data["items"]) == 2
     # Title match ("Solaris") ranks before description match ("Fiasco")
-    assert data["books"][0]["title"] == "Solaris"
-    assert data["books"][1]["title"] == "Fiasco"
+    assert data["items"][0]["title"] == "Solaris"
+    assert data["items"][1]["title"] == "Fiasco"
 
 
 def test_opds_search_integration(client, app):

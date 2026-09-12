@@ -182,20 +182,20 @@ def test_api_download_optimized(client, app, sample_epub, tmp_path):
     assert "x3" in data
 
     # Test download optimized route for Xteink X4
-    res_x4 = client.get(f"/api/books/{book_id}/download/optimized/x4")
+    res_x4 = client.get(f"/api/media/{book_id}/download/optimized/x4")
     assert res_x4.status_code == 200
     assert "application/epub+zip" in res_x4.headers["Content-Type"]
     assert "attachment" in res_x4.headers.get("Content-Disposition", "")
     assert "X4" in res_x4.headers.get("Content-Disposition", "")
 
     # Test download with query param preset=x3
-    res_x3 = client.get(f"/api/books/{book_id}/download?preset=x3")
+    res_x3 = client.get(f"/api/media/{book_id}/download?preset=x3")
     assert res_x3.status_code == 200
     assert "X3" in res_x3.headers.get("Content-Disposition", "")
 
     # Test precompute optimize API
     opt_api_res = client.post(
-        f"/api/books/{book_id}/optimize", json={"preset": "kindle"}
+        f"/api/media/{book_id}/optimize", json={"preset": "kindle"}
     )
     assert opt_api_res.status_code == 200
     opt_data = opt_api_res.get_json()
@@ -216,15 +216,15 @@ def test_opds_preset_feeds(client, app, sample_epub):
     assert b"X4" in res_root.data
     assert b"/opds/x4/recent" in res_root.data
 
-    # 2. OPDS 1.2 X4 Recent Feed -> acquisition links must point to /api/books/{id}/download/optimized/x4
+    # 2. OPDS 1.2 X4 Recent Feed -> acquisition links must point to /api/media/{id}/download/optimized/x4
     res_recent = client.get("/opds/x4/recent")
     assert res_recent.status_code == 200
-    assert f"/api/books/{book_id}/download/optimized/x4".encode() in res_recent.data
+    assert f"/api/media/{book_id}/download/optimized/x4".encode() in res_recent.data
 
     # 3. OPDS 1.2 X3 Feed
     res_x3 = client.get("/opds/x3/recent")
     assert res_x3.status_code == 200
-    assert f"/api/books/{book_id}/download/optimized/x3".encode() in res_x3.data
+    assert f"/api/media/{book_id}/download/optimized/x3".encode() in res_x3.data
 
     # 4. OPDS 2.0 JSON X4 Feed
     res_v2 = client.get("/opds/x4/v2/recent.json")
@@ -236,5 +236,5 @@ def test_opds_preset_feeds(client, app, sample_epub):
         for link in v2_data["publications"][0]["links"]
         if link["rel"] == "http://opds-spec.org/acquisition"
     )
-    assert "/api/books/" in acq_link["href"]
+    assert "/api/media/" in acq_link["href"]
     assert "/download/optimized/x4" in acq_link["href"]

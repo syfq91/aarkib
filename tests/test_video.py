@@ -168,57 +168,57 @@ def test_index_and_api_video_lifecycle(client, app, tmp_path):
         assert book.player_url == f"/reader/video/{book.id}"
         book_id = book.id
 
-    # Test GET /api/books with media_type=video filter
-    res = client.get("/api/books?media_type=video")
+    # Test GET /api/media with media_type=video filter
+    res = client.get("/api/media?media_type=video")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["books"]) >= 1
-    found = next((b for b in data["books"] if b["id"] == book_id), None)
+    assert len(data["items"]) >= 1
+    found = next((b for b in data["items"] if b["id"] == book_id), None)
     assert found is not None
     assert found["media_type"] == "video"
     assert found["resolution_height"] == 1080
 
-    # Test GET /api/books/<id>
-    res = client.get(f"/api/books/{book_id}")
+    # Test GET /api/media/<id>
+    res = client.get(f"/api/media/{book_id}")
     assert res.status_code == 200
     detail = res.get_json()
     assert detail["title"] == "Inception"
     assert detail["formatted_duration"] == "2h 28m"
     assert detail["player_url"] == f"/reader/video/{book_id}"
 
-    # Test GET /api/books/<id>/cover (returns fallback SVG for video)
-    res = client.get(f"/api/books/{book_id}/cover")
+    # Test GET /api/media/<id>/cover (returns fallback SVG for video)
+    res = client.get(f"/api/media/{book_id}/cover")
     assert res.status_code == 200
     assert "image/svg+xml" in res.content_type
     assert b"AARKIB VIDEO" in res.data
 
-    # Test GET /api/books/<id>/file with byte range request (HTTP 206 Partial Content)
+    # Test GET /api/media/<id>/file with byte range request (HTTP 206 Partial Content)
     res = client.get(
-        f"/api/books/{book_id}/file",
+        f"/api/media/{book_id}/file",
         headers={"Range": "bytes=0-100"},
     )
     assert res.status_code == 206
     assert "bytes 0-100/" in res.headers.get("Content-Range", "")
     assert res.content_type == "video/mp4"
 
-    # Test GET /book/<id> detail page rendering (before progress)
-    res = client.get(f"/book/{book_id}")
+    # Test GET /media/<id> detail page rendering (before progress)
+    res = client.get(f"/media/{book_id}")
     assert res.status_code == 200
     assert b"Watch Video" in res.data
 
     # Test saving video playback progress
     res = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "1250.5", "percentage": 14.1},
     )
     assert res.status_code == 200
 
-    res = client.get(f"/api/books/{book_id}/progress")
+    res = client.get(f"/api/media/{book_id}/progress")
     assert res.status_code == 200
     assert res.get_json()["location"] == "1250.5"
 
-    # Test GET /book/<id> detail page rendering (after progress -> Resume Watching)
-    res = client.get(f"/book/{book_id}")
+    # Test GET /media/<id> detail page rendering (after progress -> Resume Watching)
+    res = client.get(f"/media/{book_id}")
     assert res.status_code == 200
     assert b"Resume Watching" in res.data
     assert b"14%" in res.data

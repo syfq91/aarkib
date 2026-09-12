@@ -33,15 +33,15 @@ def test_api_books_and_progress(client, app, sample_epub):
         assert book is not None
         book_id = book.id
 
-    # List books
-    res = client.get("/api/books")
+    # List media
+    res = client.get("/api/media")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["books"]) >= 1
-    assert data["books"][0]["title"] == "Sample Test Book"
+    assert len(data["items"]) >= 1
+    assert data["items"][0]["title"] == "Sample Test Book"
 
     # Detail
-    res = client.get(f"/api/books/{book_id}")
+    res = client.get(f"/api/media/{book_id}")
     assert res.status_code == 200
     data = res.get_json()
     assert data["title"] == "Sample Test Book"
@@ -49,7 +49,7 @@ def test_api_books_and_progress(client, app, sample_epub):
     # Edit metadata and assign series (admin only)
     _login_admin(client, app)
     res = client.post(
-        f"/api/books/{book_id}/edit",
+        f"/api/media/{book_id}/edit",
         json={
             "title": "Updated Sample Title",
             "series": "Sample Chronicles",
@@ -61,34 +61,34 @@ def test_api_books_and_progress(client, app, sample_epub):
     assert res.status_code == 200
     edit_data = res.get_json()
     assert edit_data["status"] == "success"
-    assert edit_data["book"]["series"] == "Sample Chronicles"
-    assert edit_data["book"]["series_index"] == 1.5
-    assert len(edit_data["book"]["authors"]) == 2
+    assert edit_data["item"]["series"] == "Sample Chronicles"
+    assert edit_data["item"]["series_index"] == 1.5
+    assert len(edit_data["item"]["authors"]) == 2
 
     # Verify series in UI / API
-    res = client.get(f"/api/books/{book_id}")
+    res = client.get(f"/api/media/{book_id}")
     assert res.status_code == 200
     assert res.get_json()["series"] == "Sample Chronicles"
     assert res.get_json()["media_type"] == "book"
 
-    # Verify media_type filtering in list_books
-    res = client.get("/api/books?media_type=book")
+    # Verify media_type filtering in list_media
+    res = client.get("/api/media?media_type=book")
     assert res.status_code == 200
-    assert len(res.get_json()["books"]) >= 1
-    res = client.get("/api/books?media_type=video")
+    assert len(res.get_json()["items"]) >= 1
+    res = client.get("/api/media?media_type=video")
     assert res.status_code == 200
-    assert len(res.get_json()["books"]) == 0
+    assert len(res.get_json()["items"]) == 0
 
     # Save Progress
     res = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "epubcfi(/6/2[chapter1]!/4/2/10)", "percentage": 42.5},
     )
     assert res.status_code == 200
     assert res.get_json()["percentage"] == 42.5
 
     # Get Progress
-    res = client.get(f"/api/books/{book_id}/progress")
+    res = client.get(f"/api/media/{book_id}/progress")
     assert res.status_code == 200
     assert res.get_json()["percentage"] == 42.5
 
@@ -111,11 +111,11 @@ def test_api_libraries_and_library_filter(client, app, sample_epub):
     assert "path" in lib
     assert "count" in lib
 
-    # Test GET /api/books?library=
-    res = client.get(f"/api/books?library={lib['id']}")
+    # Test GET /api/media?library=
+    res = client.get(f"/api/media?library={lib['id']}")
     assert res.status_code == 200
     books_data = res.get_json()
-    assert "books" in books_data
+    assert "items" in books_data
 
 
 def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample_epub):
@@ -147,11 +147,11 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
     db_id = add_data["library"]["db_id"]
 
     # Verify that the book scanned in this folder inherited media_type="comic"
-    books_res = client.get(f"/api/books?library={lib_id}")
+    books_res = client.get(f"/api/media?library={lib_id}")
     assert books_res.status_code == 200
-    books = books_res.get_json()["books"]
-    assert len(books) == 1
-    assert books[0]["media_type"] == "comic"
+    items = books_res.get_json()["items"]
+    assert len(items) == 1
+    assert items[0]["media_type"] == "comic"
 
     # 2. GET /api/libraries/<identifier>
     info_res = client.get(f"/api/libraries/{lib_id}")
@@ -174,7 +174,7 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
     assert put_res.get_json()["library"]["name"] == "My Videos"
 
     # Verify that book in that folder was updated to "video"
-    book_check = client.get(f"/api/books/{books[0]['id']}")
+    book_check = client.get(f"/api/media/{items[0]['id']}")
     assert book_check.status_code == 200
     assert book_check.get_json()["media_type"] == "video"
 
@@ -195,35 +195,35 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
     assert lib_id not in ids
 
 
-def test_api_media_and_items_route_aliases(client, app, sample_epub):
+def test_api_media_and_legacy_routes(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
         book = index_single_book(sample_epub, covers_dir)
         book_id = book.id
 
-    # Test /api/media and /api/items aliases
+    # Test standardized /api/media endpoint
     res_media = client.get("/api/media")
     assert res_media.status_code == 200
-    assert len(res_media.get_json()["books"]) >= 1
+    assert len(res_media.get_json()["items"]) >= 1
 
-    res_items = client.get("/api/items")
-    assert res_items.status_code == 200
-    assert len(res_items.get_json()["books"]) >= 1
+    # Obsolete /api/books and /api/items routes return 404
+    assert client.get("/api/books").status_code == 404
+    assert client.get("/api/items").status_code == 404
 
-    # Test item detail aliases
-    res_item = client.get(f"/api/items/{book_id}")
-    assert res_item.status_code == 200
-    assert res_item.get_json()["id"] == book_id
-
+    # Detail endpoints
     res_med = client.get(f"/api/media/{book_id}")
     assert res_med.status_code == 200
     assert res_med.get_json()["id"] == book_id
+    assert client.get(f"/api/books/{book_id}").status_code == 404
+    assert client.get(f"/api/items/{book_id}").status_code == 404
 
-    # Test file & cover aliases
+    # File & cover endpoints
     res_file = client.get(f"/api/media/{book_id}/file")
     assert res_file.status_code == 200
+    res_cover = client.get(f"/api/media/{book_id}/cover")
+    assert res_cover.status_code in (200, 302)
 
-    # Test progress alias
+    # Progress endpoint
     res_prog = client.post(
         f"/api/media/{book_id}/progress",
         json={"location": "0.5", "percentage": 50.0},
@@ -231,19 +231,23 @@ def test_api_media_and_items_route_aliases(client, app, sample_epub):
     assert res_prog.status_code == 200
     assert res_prog.get_json()["percentage"] == 50.0
 
-    # Test UI route alias /media/<id> and /item/<id>
-    ui_item = client.get(f"/item/{book_id}")
-    assert ui_item.status_code == 200
-    ui_media = client.get(f"/media/{book_id}")
-    assert ui_media.status_code == 200
-
-    # Test /stream route aliases
+    # Stream endpoint
     res_stream_media = client.get(f"/api/media/{book_id}/stream")
     assert res_stream_media.status_code == 200
     assert res_stream_media.headers["Content-Type"].startswith("application/epub+zip")
+    assert client.get(f"/api/books/{book_id}/stream").status_code == 404
 
-    res_stream_book = client.get(f"/api/books/{book_id}/stream")
-    assert res_stream_book.status_code == 200
+    # UI routes: /media/<id> gives 200, /book/<id> and /item/<id> 301 redirect to /media/<id>
+    ui_media = client.get(f"/media/{book_id}")
+    assert ui_media.status_code == 200
+
+    ui_book = client.get(f"/book/{book_id}", follow_redirects=False)
+    assert ui_book.status_code == 301
+    assert ui_book.headers["Location"].endswith(f"/media/{book_id}")
+
+    ui_item = client.get(f"/item/{book_id}", follow_redirects=False)
+    assert ui_item.status_code == 301
+    assert ui_item.headers["Location"].endswith(f"/media/{book_id}")
 
 
 def test_api_bookmark_authorization(client, app, sample_epub):

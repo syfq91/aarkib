@@ -90,7 +90,7 @@ def test_get_env_library_dirs(tmp_path):
         "AARKIB_LIBRARY_DIR1": f"{tmp_path}/manga",
         "AARKIB_LIBRARY_DIR2": f"{tmp_path}/comics",
         "AARKIB_LIBRARY_DIR3": f"{tmp_path}/novels",
-        "BUUKU_LIBRARY_DIR4": f"{tmp_path}/audiobooks",
+        "AARKIB_LIBRARY_DIR4": f"{tmp_path}/audiobooks",
         "AARKIB_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
         "AARKIB_LIBRARY_DIR_10": f"{tmp_path}/extra10",
     }
@@ -132,9 +132,9 @@ def test_scan_multiple_directories_via_env(
     shutil.copy(sample_cbz, dir2 / "comic1.cbz")
     shutil.copy(sample_epub, dir3 / "book2.epub")
 
-    monkeypatch.setenv("BUUKUU_LIBRARY_DIR", str(dir1))
-    monkeypatch.setenv("BUUKUU_LIBRARY_DIR1", str(dir2))
-    monkeypatch.setenv("BUUKUU_LIBRARY_DIR2", str(dir3))
+    monkeypatch.setenv("AARKIB_LIBRARY_DIR", str(dir1))
+    monkeypatch.setenv("AARKIB_LIBRARY_DIR1", str(dir2))
+    monkeypatch.setenv("AARKIB_LIBRARY_DIR2", str(dir3))
 
     class EnvMultiDirConfig(TestConfig):
         DATA_DIR = tmp_path / "data"

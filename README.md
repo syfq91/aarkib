@@ -109,7 +109,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 >   - **Comics & Manga (`comic`)**: Catalogs files inside as comics/manga.
 >   - **Movies & TV Shows (`video`)**: Catalogs video media files inside as movies & shows.
 > - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies` (or `MEDIA_DIR1`, `DIR1`), or named variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
-> - *(Legacy `AARKIB_LIBRARY_DIR` and `BUUKUU_*` variables are fully supported for backward compatibility).*
+> - *(Legacy `AARKIB_LIBRARY_DIR` is supported as an alias for `AARKIB_MEDIA_DIR`).*
 
 ---
 
@@ -121,7 +121,7 @@ Aarkib exposes standard OPDS feeds as well as on-demand auto-optimizing feeds fo
 - **OPDS 1.2 Feed (Atom)**: `http://<your-server-ip>:5000/opds`
 - **OPDS 2.0 Feed (JSON)**: `http://<your-server-ip>:5000/opds/v2/catalog.json`
 - **OPDS Authentication Document**: `http://<your-server-ip>:5000/opds/authentication.json`
-- **OPDS Progression 1.0 Endpoint**: `http://<your-server-ip>:5000/opds/books/<id>/progression`
+- **OPDS Progression 1.0 Endpoint**: `http://<your-server-ip>:5000/opds/media/<id>/progression`
 
 ### ⚡ Specialized E-Ink Auto-Converting Feeds (On-Demand):
 - **⚡ Xteink X4**: `http://<your-server-ip>:5000/opds/x4` (480×800 resolution, grayscale dithering, font-stripped)
@@ -159,21 +159,24 @@ Aarkib has expanded from books and comics into a full-featured personal media se
 
 ## 🔌 REST API Endpoints
 
-Aarkib exposes clean REST APIs for integration and automation:
+Aarkib exposes clean, unified REST APIs across all media types:
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/media` / `/api/books` | `GET` | List catalog items (supports `q`, `media_type`, `library`, `sort_by`, `page`). |
-| `/api/media/<id>` / `/api/books/<id>` | `GET` | Retrieve full item details and user progress. |
-| `/api/media/<id>/file` / `/api/books/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
-| `/api/media/<id>/cover` / `/api/books/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
-| `/api/media/<id>/progress` / `/api/books/<id>/progress` | `GET`, `POST`| Fetch or update playback / reading progress. |
-| `/api/media/<id>` / `/api/books/<id>` | `PATCH` | Canonical RESTful metadata edit (title, creators, series, tags). |
-| `/api/media/<id>/edit` / `/api/books/<id>/edit` | `POST` | Edit title, creators, series, and tags metadata. *(Legacy edit endpoint.)* |
+| `/api/media` | `GET` | List catalog items (supports `q`, `media_type`, `library`, `sort_by`, `page`). |
+| `/api/media/<id>` | `GET` | Retrieve full item details and user progress. |
+| `/api/media/<id>/file` | `GET` | Stream or download original media file (supports HTTP 206 byte-ranges). |
+| `/api/media/<id>/cover` | `GET` | Retrieve cached WebP cover/poster image. |
+| `/api/media/<id>/progress` | `GET`, `POST`| Fetch or update playback / reading progress. |
+| `/api/media/<id>` | `PATCH` | Canonical RESTful metadata edit (title, creators, series, tags, locked fields). |
+| `/api/media/<id>/edit` | `POST` | Update metadata via form/JSON. |
+| `/api/media/<id>/stream/info` | `GET` | Probe media codecs, technical streams, and playback compatibility. |
+| `/api/media/<id>/stream/remux` | `GET` | Direct remux pipeline for video playback. |
+| `/api/media/<id>/stream/hls/master.m3u8` | `GET` | HLS adaptive bitrate master playlist. |
 | `/api/libraries` | `GET`, `POST` | List all configured media folders or add a new folder with custom `media_type`. |
 | `/api/libraries/<id>` | `GET`, `PUT`, `DELETE` | View, update `media_type` / name, or remove media folder. |
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
-| `/api/libraries/scan` | `POST` | Trigger full scan across all configured media folders. *(Canonical — legacy `/api/library/scan` also works.)* |
+| `/api/libraries/scan` | `POST` | Trigger full scan across all configured media folders. |
 | `/api/libraries/enrich` | `POST` | Enrich catalog items with Google Books & Open Library metadata. |
 | `/api/health` | `GET` | Healthcheck monitoring endpoint (`{"status": "healthy"}`). |
 

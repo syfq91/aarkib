@@ -6,6 +6,7 @@ from flask import (
     Blueprint,
     abort,
     current_app,
+    redirect,
     render_template,
     send_from_directory,
 )
@@ -156,14 +157,12 @@ def index():
     )
 
 
-@ui_bp.route("/book/<int:book_id>")
-@ui_bp.route("/item/<int:book_id>")
-@ui_bp.route("/media/<int:book_id>")
+@ui_bp.route("/media/<int:item_id>")
 @optional_or_required_auth
-def book_detail(book_id: int):
-    book = db.session.get(Book, book_id)
-    if not book:
-        abort(404, description="Book not found")
+def media_detail(item_id: int):
+    item = db.session.get(Book, item_id)
+    if not item:
+        abort(404, description="Media item not found")
 
     user_id = current_user.id if current_user.is_authenticated else None
     user_cond = (
@@ -174,11 +173,17 @@ def book_detail(book_id: int):
     progress = db.session.scalar(
         select(UserProgress).where(
             user_cond,
-            UserProgress.book_id == book.id,
+            UserProgress.book_id == item.id,
         )
     )
 
-    return render_template("book_detail.html", book=book, progress=progress)
+    return render_template("book_detail.html", book=item, item=item, progress=progress)
+
+
+@ui_bp.route("/book/<int:item_id>")
+@ui_bp.route("/item/<int:item_id>")
+def legacy_item_redirect(item_id: int):
+    return redirect(f"/media/{item_id}", code=301)
 
 
 @ui_bp.route("/authors")

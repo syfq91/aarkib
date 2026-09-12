@@ -266,7 +266,7 @@ def serialize_media_item_summary(b: Any) -> dict[str, Any]:
         "authors_display": b.authors_display,
         "file_format": b.file_format,
         "file_size": b.file_size,
-        "cover_url": f"/api/books/{b.id}/cover",
+        "cover_url": f"/api/media/{b.id}/cover",
         "player_url": b.player_url,
         "series": b.series.name if b.series else None,
         "series_index": b.series_index,

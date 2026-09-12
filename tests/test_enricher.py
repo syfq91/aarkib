@@ -145,7 +145,7 @@ def test_api_enrich_endpoints(client, app, sample_epub):
         "aarkib.services.enricher.fetch_external_metadata", return_value=mock_meta
     ):
         # Single book enrich
-        res = client.post(f"/api/books/{book_id}/enrich", json={"overwrite": True})
+        res = client.post(f"/api/media/{book_id}/enrich", json={"overwrite": True})
         assert res.status_code == 200
         data = res.get_json()
         assert data["status"] == "success"

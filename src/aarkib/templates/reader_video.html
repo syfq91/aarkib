@@ -186,7 +186,7 @@
   <!-- Top Navigation Overlay -->
   <div class="player-header" id="player-header">
     <div class="player-title-wrap">
-      <a href="/book/{{ book.id }}" class="back-btn" title="Back to Details">←</a>
+      <a href="/media/{{ book.id }}" class="back-btn" title="Back to Details">←</a>
       <div>
         <span class="video-title">
           {% if book.series %}
@@ -244,10 +244,10 @@
     controls
     playsinline
     preload="metadata"
-    poster="/api/books/{{ book.id }}/cover"
+    poster="/api/media/{{ book.id }}/cover"
     tabindex="0"
   >
-    <source src="/api/books/{{ book.id }}/file" type="video/{{ 'mp4' if book.file_format == 'mp4' else ('webm' if book.file_format == 'webm' else 'mp4') }}">
+    <source src="/api/media/{{ book.id }}/file" type="video/{{ 'mp4' if book.file_format == 'mp4' else ('webm' if book.file_format == 'webm' else 'mp4') }}">
     Your browser does not support the video tag.
   </video>
 
@@ -317,7 +317,7 @@
   // Subtitle track dynamic loader
   async function loadSubtitles() {
     try {
-      const res = await fetch(`/api/stream/${BOOK_ID}/subtitles`);
+      const res = await fetch(`/api/media/${BOOK_ID}/stream/subtitles`);
       if (!res.ok) return;
       const data = await res.json();
       const subs = data.subtitles || [];
@@ -338,7 +338,7 @@
         if (idx !== "off") {
           const track = document.createElement("track");
           track.kind = "subtitles";
-          track.src = `/api/stream/${BOOK_ID}/subtitles/${idx}.vtt`;
+          track.src = `/api/media/${BOOK_ID}/stream/subtitles/${idx}.vtt`;
           track.srclang = "en";
           track.label = e.target.options[e.target.selectedIndex].text;
           track.default = true;
@@ -360,7 +360,7 @@
     }
     if (activeHlsSessionId) {
       try {
-        navigator.sendBeacon(`/api/stream/${BOOK_ID}/hls/${activeHlsSessionId}/stop`);
+        navigator.sendBeacon(`/api/media/${BOOK_ID}/stream/hls/${activeHlsSessionId}/stop`);
       } catch (_) {}
       activeHlsSessionId = null;
     }
@@ -372,20 +372,20 @@
 
   function loadDirect(time) {
     stopHlsHeartbeat();
-    video.src = `/api/books/${BOOK_ID}/file`;
+    video.src = `/api/media/${BOOK_ID}/file`;
     if (time > 0) video.currentTime = time;
     video.play().catch(() => {});
   }
 
   function loadRemux(time) {
     stopHlsHeartbeat();
-    video.src = `/api/stream/${BOOK_ID}/remux?start=${(time || 0).toFixed(1)}`;
+    video.src = `/api/media/${BOOK_ID}/stream/remux?start=${(time || 0).toFixed(1)}`;
     video.play().catch(() => {});
   }
 
   function loadHls(resolution, time) {
     stopHlsHeartbeat();
-    const masterUrl = `/api/stream/${BOOK_ID}/hls/master.m3u8?resolution=${resolution}&start=${(time || 0).toFixed(1)}`;
+    const masterUrl = `/api/media/${BOOK_ID}/stream/hls/master.m3u8?resolution=${resolution}&start=${(time || 0).toFixed(1)}`;
 
     if (window.Hls && Hls.isSupported()) {
       hlsInstance = new Hls({
@@ -409,7 +409,7 @@
 
       heartbeatTimer = setInterval(() => {
         if (activeHlsSessionId && !video.paused) {
-          fetch(`/api/stream/${BOOK_ID}/hls/${activeHlsSessionId}/heartbeat`, { method: "POST" }).catch(() => {});
+          fetch(`/api/media/${BOOK_ID}/stream/hls/${activeHlsSessionId}/heartbeat`, { method: "POST" }).catch(() => {});
         }
       }, 25000);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -431,7 +431,7 @@
       loadHls(mode, curTime);
     } else {
       try {
-        const res = await fetch(`/api/stream/${BOOK_ID}/info`);
+        const res = await fetch(`/api/media/${BOOK_ID}/stream/info`);
         if (res.ok) {
           const info = await res.json();
           const strat = info.evaluation ? info.evaluation.strategy : "direct_play";
@@ -473,7 +473,7 @@
     const percentage = Math.min(100, Math.max(0, (currentTime / video.duration) * 100));
 
     try {
-      await fetch(`/api/books/${BOOK_ID}/progress`, {
+      await fetch(`/api/media/${BOOK_ID}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

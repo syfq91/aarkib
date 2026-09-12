@@ -25,6 +25,7 @@ from aarkib.models import (
     Author,
     Book,
     Library,
+    MediaItem,
     Series,
     Tag,
 )
@@ -572,14 +573,14 @@ def _assign_authors_tags_series(book: Book, metadata) -> None:
         book.tags = tag_objs
 
 
-def index_single_book(
+def index_media_file(
     file_path: Path,
     covers_dir: Path,
     auto_enrich: bool = False,
     library_media_type: str | None = None,
     library_id: int | None = None,
-) -> Book | None:
-    """Parses and updates or inserts a single book record in the database."""
+) -> MediaItem | None:
+    """Parses and updates or inserts a single media record in the database."""
     supported = get_supported_extensions()
     if file_path.suffix.lower() not in supported or not file_path.is_file():
         return None
@@ -731,6 +732,9 @@ def index_single_book(
         db.session.rollback()
         logger.error("Failed to index %s: %s", file_path, exc)
         return None
+
+
+index_single_book = index_media_file
 
 
 def scan_library(

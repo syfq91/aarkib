@@ -50,22 +50,22 @@
     {% endif %}
 
     <!-- Cover Images -->
-    <link rel="http://opds-spec.org/image" type="image/webp" href="{{ base_url }}/api/books/{{ book.id }}/cover"/>
-    <link rel="http://opds-spec.org/image/thumbnail" type="image/webp" href="{{ base_url }}/api/books/{{ book.id }}/cover"/>
+    <link rel="http://opds-spec.org/image" type="image/webp" href="{{ base_url }}/api/media/{{ book.id }}/cover"/>
+    <link rel="http://opds-spec.org/image/thumbnail" type="image/webp" href="{{ base_url }}/api/media/{{ book.id }}/cover"/>
 
     <!-- Acquisition Download -->
     {% if book.file_format == 'epub' %}
       {% if preset %}
-      <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="{{ base_url }}/api/books/{{ book.id }}/download/optimized/{{ preset }}" length="{{ book.file_size }}"/>
+      <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="{{ base_url }}/api/media/{{ book.id }}/download/optimized/{{ preset }}" length="{{ book.file_size }}"/>
       {% else %}
-      <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="{{ base_url }}/api/books/{{ book.id }}/download" length="{{ book.file_size }}"/>
+      <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="{{ base_url }}/api/media/{{ book.id }}/download" length="{{ book.file_size }}"/>
       {% endif %}
     {% else %}
-    <link rel="http://opds-spec.org/acquisition" type="application/vnd.comicbook+zip" href="{{ base_url }}/api/books/{{ book.id }}/download" length="{{ book.file_size }}"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/vnd.comicbook+zip" href="{{ base_url }}/api/media/{{ book.id }}/download" length="{{ book.file_size }}"/>
     {% endif %}
 
     <!-- OPDS Progression 1.0 Sync Service -->
-    <link rel="http://opds-spec.org/progression" type="application/opds-progression+json" href="{{ base_url }}/opds/books/{{ book.id }}/progression"/>
+    <link rel="http://opds-spec.org/progression" type="application/opds-progression+json" href="{{ base_url }}/opds/media/{{ book.id }}/progression"/>
   </entry>
   {% endfor %}
 </feed>

@@ -192,7 +192,7 @@ def test_per_user_progress_isolation(client, app, sample_epub):
         follow_redirects=True,
     )
     res = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "cfi_alice", "percentage": 35.0},
     )
     assert res.status_code == 200
@@ -207,14 +207,14 @@ def test_per_user_progress_isolation(client, app, sample_epub):
         follow_redirects=True,
     )
     res = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "cfi_bob", "percentage": 80.0},
     )
     assert res.status_code == 200
     assert res.get_json()["percentage"] == 80.0
 
     # Verify Bob's progress is 80%
-    res = client.get(f"/api/books/{book_id}/progress")
+    res = client.get(f"/api/media/{book_id}/progress")
     assert res.get_json()["percentage"] == 80.0
 
     client.get("/auth/logout", follow_redirects=True)
@@ -225,7 +225,7 @@ def test_per_user_progress_isolation(client, app, sample_epub):
         data={"username": "alice", "password": "passalice"},
         follow_redirects=True,
     )
-    res = client.get(f"/api/books/{book_id}/progress")
+    res = client.get(f"/api/media/{book_id}/progress")
     assert res.get_json()["percentage"] == 35.0
 
 
@@ -253,7 +253,7 @@ def test_auth_required_enforcement(client, app, sample_epub):
     assert res.status_code == 302
     assert "/auth/login" in res.headers["Location"]
 
-    res = client.get(f"/book/{book_id}", follow_redirects=False)
+    res = client.get(f"/media/{book_id}", follow_redirects=False)
     assert res.status_code == 302
     assert "/auth/login" in res.headers["Location"]
 
@@ -262,7 +262,7 @@ def test_auth_required_enforcement(client, app, sample_epub):
     assert "/auth/login" in res.headers["Location"]
 
     # 2. Unauthenticated request to API should return 401
-    res = client.get("/api/books")
+    res = client.get("/api/media")
     assert res.status_code == 401
 
     # 3. Log in as user
@@ -277,13 +277,13 @@ def test_auth_required_enforcement(client, app, sample_epub):
     assert res.status_code == 200
     assert b"Library" in res.data
 
-    res = client.get(f"/book/{book_id}")
+    res = client.get(f"/media/{book_id}")
     assert res.status_code == 200
     assert b"Sample Test Book" in res.data
 
-    res = client.get("/api/books")
+    res = client.get("/api/media")
     assert res.status_code == 200
-    assert len(res.get_json()["books"]) >= 1
+    assert len(res.get_json()["items"]) >= 1
 
     # 5. Public healthcheck endpoint succeeds without auth
     client.get("/auth/logout", follow_redirects=True)
@@ -297,12 +297,12 @@ def test_auth_required_enforcement(client, app, sample_epub):
     b64_creds = base64.b64encode(b"auth_tester:pass123").decode("ascii")
     headers = {"Authorization": f"Basic {b64_creds}"}
 
-    res_api = client.get("/api/books", headers=headers)
+    res_api = client.get("/api/media", headers=headers)
     assert res_api.status_code == 200
 
     # Post progress via Basic Auth
     res_prog = client.post(
-        f"/api/books/{book_id}/progress",
+        f"/api/media/{book_id}/progress",
         json={"location": "cfi_basic_auth", "percentage": 77.0},
         headers=headers,
     )

@@ -77,7 +77,7 @@ async function initCBZReader() {
   showLoading("Opening comic pages...");
 
   try {
-    const res = await fetch(`/api/books/${currentBookId}/pages`);
+    const res = await fetch(`/api/media/${currentBookId}/pages`);
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
       throw new Error(errJson.error || `HTTP ${res.status}: Failed to load comic`);
@@ -608,7 +608,7 @@ function syncProgressDebounced() {
 
     const percent = Math.round((currentPage / totalPages) * 100);
     try {
-      await fetch(`/api/books/${bookId}/progress`, {
+      await fetch(`/api/media/${bookId}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -634,7 +634,7 @@ window.addEventListener("pagehide", () => {
       is_completed: currentPage >= totalPages
     });
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(`/api/books/${bookId}/progress`, new Blob([data], { type: "application/json" }));
+      navigator.sendBeacon(`/api/media/${bookId}/progress`, new Blob([data], { type: "application/json" }));
     }
   }
 });

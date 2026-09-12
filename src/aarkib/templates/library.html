@@ -102,7 +102,7 @@
         {% for item in in_progress_books %}
           <a href="{{ item.book.reader_url }}" class="book-card" title="Continue {{ 'watching' if item.book.is_video else ('listening to' if item.book.is_audio else 'reading') }} {{ item.book.title }} ({{ item.percentage|round|int }}%)">
             <div class="book-cover-wrap">
-              <img src="/api/books/{{ item.book.id }}/cover" alt="{{ item.book.title }}" class="book-cover-img" loading="lazy">
+              <img src="/api/media/{{ item.book.id }}/cover" alt="{{ item.book.title }}" class="book-cover-img" loading="lazy">
               <span class="badge-format">{{ item.book.file_format }}</span>
               <span class="badge-progress">{{ item.percentage|round|int }}%</span>
               <span class="badge-resume">{% if item.book.is_video %}Watch →{% elif item.book.is_audio %}Listen →{% else %}Resume →{% endif %}</span>
@@ -138,9 +138,9 @@
     <div class="shelf-row-wrapper">
       <div class="shelf-row" id="row-recent">
         {% for book in recent_books %}
-          <a href="/book/{{ book.id }}" class="book-card">
+          <a href="/media/{{ book.id }}" class="book-card">
             <div class="book-cover-wrap">
-              <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
+              <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
               <span class="badge-format">{{ book.file_format }}</span>
             </div>
             {% set prog = progress_map.get(book.id, 0) %}
@@ -178,9 +178,9 @@
       <div class="shelf-row-wrapper">
         <div class="shelf-row" id="row-lib-{{ shelf.id }}">
           {% for book in shelf.books %}
-            <a href="/book/{{ book.id }}" class="book-card">
+            <a href="/media/{{ book.id }}" class="book-card">
               <div class="book-cover-wrap">
-                <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
+                <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
                 <span class="badge-format">{{ book.file_format }}</span>
               </div>
               {% set prog = progress_map.get(book.id, 0) %}
@@ -207,9 +207,9 @@
 {# --- FILTERED / ALL BOOKS GRID VIEW --- #}
 <div id="book-grid" class="book-grid" style="display: none;">
   {% for book in initial_books %}
-    <a href="/book/{{ book.id }}" class="book-card">
+    <a href="/media/{{ book.id }}" class="book-card">
       <div class="book-cover-wrap">
-        <img src="/api/books/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
+        <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
         <span class="badge-format">{{ book.file_format }}</span>
       </div>
       {% set prog = progress_map.get(book.id, 0) %}
@@ -420,18 +420,19 @@ async function fetchBooks() {
   if (activeTagId) params.append("tag_id", activeTagId);
 
   try {
-    const res = await fetch(`/api/books?${params.toString()}`);
+    const res = await fetch(`/api/media?${params.toString()}`);
     if (res.status === 401) {
       window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname + window.location.search);
       return;
     }
     const data = await res.json();
-    if (res.ok && data.books) {
-      renderBooks(data.books);
+    const items = data.items || data.books;
+    if (res.ok && items) {
+      renderBooks(items);
       renderPagination(data);
     }
   } catch (err) {
-    console.error("Failed to load books", err);
+    console.error("Failed to load media items", err);
   }
 }
 
@@ -446,7 +447,7 @@ function renderBookCard(book) {
   }
 
   return `
-    <a href="/book/${book.id}" class="book-card">
+    <a href="/media/${book.id}" class="book-card">
       <div class="book-cover-wrap">
         <img src="${book.cover_url}" alt="${title}" class="book-cover-img" loading="lazy" onerror="this.src='/static/icons/icon.svg'">
         ${badge ? `<span class="badge-format">${badge}</span>` : ""}
