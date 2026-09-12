@@ -11,8 +11,6 @@ services:
       - ./data:/app/data
     environment:
       - AARKIB_DATA_DIR=/app/data
-      - AARKIB_AUTH_REQUIRED=true
-      - AARKIB_ALLOW_REGISTRATION=true
       - AARKIB_AUTO_SCAN=true
       - AARKIB_WATCH_LIBRARY=true
       - AARKIB_AUTO_ENRICH=false

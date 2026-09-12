@@ -350,6 +350,7 @@ def test_reindex_search_api_admin_required(client, app):
     from aarkib.models import User
 
     # Unauthenticated attempt redirects or rejects
+    client.get("/auth/logout")
     res = client.post("/api/search/reindex")
     assert res.status_code in (302, 401, 403)
 

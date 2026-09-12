@@ -7,7 +7,6 @@ from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
-    current_app,
     flash,
     redirect,
     render_template,
@@ -35,26 +34,30 @@ def load_user(user_id: str) -> User | None:
 def load_user_from_request(req: Any) -> User | None:
     """Authenticates API and OPDS requests using HTTP Basic Auth."""
     auth = req.authorization
-    if auth and auth.username and auth.password:
+    if auth and auth.username:
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password):
+        if user and user.check_password(auth.password or ""):
             return user
     return None
 
 
-def optional_or_required_auth(f: Callable[..., Any]) -> Callable[..., Any]:
-    """Requires login if AUTH_REQUIRED is enabled in config; otherwise allows guests."""
+def require_auth(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Requires an authenticated user; redirects to initial setup if 0 users, or login."""
 
     @wraps(f)
     def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        if (
-            current_app.config.get("AUTH_REQUIRED", False)
-            and not current_user.is_authenticated
-        ):
+        if not current_user.is_authenticated:
+            user_count = db.session.scalar(select(func.count(User.id))) or 0
+            if user_count == 0:
+                return redirect(url_for("auth.setup"))
             return redirect(url_for("auth.login", next=request.url))
         return f(*args, **kwargs)
 
     return decorated_function
+
+
+# Backward compatibility alias
+optional_or_required_auth = require_auth
 
 
 def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -90,14 +93,12 @@ def is_safe_url(target: str | None) -> bool:
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
+    if request.method == "GET" and current_user.is_authenticated:
         return redirect(url_for("ui.index"))
 
     user_count = db.session.scalar(select(func.count(User.id))) or 0
     if user_count == 0:
-        return redirect(url_for("auth.register"))
-
-    allow_registration = current_app.config.get("ALLOW_REGISTRATION", True)
+        return redirect(url_for("auth.setup"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -115,24 +116,16 @@ def login():
             return redirect(redirect_target)
         flash("Invalid username or password.", "error")
 
-    return render_template("login.html", allow_registration=allow_registration)
+    return render_template("login.html")
 
 
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
+@auth_bp.route("/setup", methods=["GET", "POST"])
+def setup():
     user_count = db.session.scalar(select(func.count(User.id))) or 0
-    is_first_user = user_count == 0
-    allow_registration = current_app.config.get("ALLOW_REGISTRATION", True)
-
-    if not is_first_user and not allow_registration:
-        flash(
-            "Public registration is disabled. Please contact your administrator.",
-            "error",
-        )
+    if user_count > 0:
+        if current_user.is_authenticated:
+            return redirect(url_for("ui.index"))
         return redirect(url_for("auth.login"))
-
-    if current_user.is_authenticated:
-        return redirect(url_for("ui.index"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -140,28 +133,23 @@ def register():
         confirm_password = request.form.get("confirm_password", "")
 
         if not username or not password:
-            flash("Username and password are required.", "error")
+            flash(
+                "Username and password are required for administrator setup.", "error"
+            )
         elif len(password) < 4:
             flash("Password must be at least 4 characters long.", "error")
         elif password != confirm_password:
             flash("Passwords do not match.", "error")
-        elif db.session.scalar(select(User).where(User.username == username)):
-            flash("Username is already taken.", "error")
         else:
-            user = User(username=username, is_admin=is_first_user)
+            user = User(username=username, is_admin=True)
             user.set_password(password)
             db.session.add(user)
             db.session.commit()
             login_user(user)
-            flash(
-                "Admin account created! Welcome to Aarkib."
-                if is_first_user
-                else "Account registered successfully!",
-                "success",
-            )
+            flash("Admin account created! Welcome to Aarkib.", "success")
             return redirect(url_for("ui.index"))
 
-    return render_template("register.html", is_first_user=is_first_user)
+    return render_template("setup.html")
 
 
 @auth_bp.route("/logout")
@@ -180,16 +168,24 @@ def profile():
         new_password = request.form.get("new_password", "")
         confirm_new_password = request.form.get("confirm_new_password", "")
 
-        if not current_user.check_password(current_password):
+        if current_user.has_password and not current_user.check_password(
+            current_password
+        ):
             flash("Current password is incorrect.", "error")
-        elif len(new_password) < 4:
+        elif current_user.is_admin and not new_password:
+            flash("Administrators cannot remove their password.", "error")
+        elif new_password and len(new_password) < 4:
             flash("New password must be at least 4 characters.", "error")
         elif new_password != confirm_new_password:
             flash("New passwords do not match.", "error")
         else:
-            current_user.set_password(new_password)
+            if new_password:
+                current_user.set_password(new_password)
+                flash("Password updated successfully!", "success")
+            else:
+                current_user.set_password(None)
+                flash("Password removed. Account is now passwordless.", "info")
             db.session.commit()
-            flash("Password updated successfully!", "success")
             return redirect(url_for("auth.profile"))
 
     # Compute reading stats
@@ -238,13 +234,20 @@ def manage_users():
         password = request.form.get("password", "")
         is_admin = bool(request.form.get("is_admin"))
 
-        if not username or not password:
-            flash("Username and password are required.", "error")
+        if not username:
+            flash("Username is required.", "error")
+        elif is_admin and not password:
+            flash("A password is required for administrator accounts.", "error")
+        elif password and len(password) < 4:
+            flash("Password must be at least 4 characters long.", "error")
         elif db.session.scalar(select(User).where(User.username == username)):
             flash(f"User '{username}' already exists.", "error")
         else:
             new_user = User(username=username, is_admin=is_admin)
-            new_user.set_password(password)
+            if password:
+                new_user.set_password(password)
+            else:
+                new_user.set_password(None)
             db.session.add(new_user)
             db.session.commit()
             flash(f"User '{username}' created successfully.", "success")
@@ -281,6 +284,13 @@ def toggle_admin(user_id: int):
         flash("You cannot change your own administrator status.", "error")
         return redirect(dest)
 
+    if not target_user.is_admin and not target_user.has_password:
+        flash(
+            f"Cannot promote '{target_user.username}' to administrator without a password. Please set a password first.",
+            "error",
+        )
+        return redirect(dest)
+
     target_user.is_admin = not target_user.is_admin
     db.session.commit()
     flash(
@@ -305,7 +315,17 @@ def reset_password(user_id: int):
         return redirect(dest)
 
     new_password = request.form.get("new_password", "")
-    if not new_password or len(new_password) < 4:
+    if not new_password:
+        if target_user.is_admin:
+            flash("Administrators cannot have a blank password.", "error")
+            return redirect(dest)
+        target_user.set_password(None)
+        db.session.commit()
+        flash(
+            f"Removed password for '{target_user.username}'. User is now passwordless.",
+            "success",
+        )
+    elif len(new_password) < 4:
         flash("Password must be at least 4 characters long.", "error")
     else:
         target_user.set_password(new_password)

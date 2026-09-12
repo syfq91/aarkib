@@ -32,6 +32,7 @@ def _create_reader(app):
 
 
 def _login_admin(client, app):
+    client.get("/auth/logout")
     _create_admin(app)
     client.post(
         "/auth/login",
@@ -41,6 +42,7 @@ def _login_admin(client, app):
 
 
 def _login_reader(client, app):
+    client.get("/auth/logout")
     _create_reader(app)
     client.post(
         "/auth/login",
@@ -67,7 +69,7 @@ def test_system_setting_model(app):
 
 
 def test_parse_setting_value_validation():
-    bool_spec = MANAGED_SETTINGS["AUTH_REQUIRED"]
+    bool_spec = MANAGED_SETTINGS["AUTO_SCAN_ON_START"]
     assert parse_setting_value(bool_spec, True) is True
     assert parse_setting_value(bool_spec, False) is False
     assert parse_setting_value(bool_spec, "true") is True
@@ -99,37 +101,38 @@ def test_parse_setting_value_validation():
 def test_settings_service_lifecycle(app):
     with app.app_context():
         effective = get_effective_settings(app)
-        assert "AUTH_REQUIRED" in effective["settings"]
+        assert "AUTO_SCAN_ON_START" in effective["settings"]
         assert "PAGE_SIZE" in effective["settings"]
 
         # Update settings via service
         updated = update_settings(
             app,
             {
-                "AUTH_REQUIRED": False,
+                "AUTO_SCAN_ON_START": False,
                 "PAGE_SIZE": 48,
                 "METADATA_PROVIDER": "googlebooks",
             },
         )
-        assert app.config["AUTH_REQUIRED"] is False
+        assert app.config["AUTO_SCAN_ON_START"] is False
         assert app.config["PAGE_SIZE"] == 48
         assert app.config["METADATA_PROVIDER"] == "googlebooks"
-        assert updated["settings"]["AUTH_REQUIRED"]["is_overridden"] is True
-        assert updated["settings"]["AUTH_REQUIRED"]["value"] is False
+        assert updated["settings"]["AUTO_SCAN_ON_START"]["is_overridden"] is True
+        assert updated["settings"]["AUTO_SCAN_ON_START"]["value"] is False
 
         # Load settings in a simulated restart
-        app.config["AUTH_REQUIRED"] = True  # reset in-memory config
+        app.config["AUTO_SCAN_ON_START"] = True  # reset in-memory config
         load_settings_into_config(app)
-        assert app.config["AUTH_REQUIRED"] is False  # restored from DB
+        assert app.config["AUTO_SCAN_ON_START"] is False  # restored from DB
 
         # Reset to defaults
         reset = reset_settings_to_defaults(app)
-        assert reset["settings"]["AUTH_REQUIRED"]["is_overridden"] is False
+        assert reset["settings"]["AUTO_SCAN_ON_START"]["is_overridden"] is False
         assert app.config["PAGE_SIZE"] == 24
 
 
 def test_api_settings_permissions(client, app):
     # Unauthenticated request to /api/settings
+    client.get("/auth/logout")
     res = client.get("/api/settings")
     assert res.status_code in (302, 401, 403)
 
@@ -145,7 +148,7 @@ def test_api_settings_permissions(client, app):
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "success"
-    assert "AUTH_REQUIRED" in data["settings"]
+    assert "AUTO_SCAN_ON_START" in data["settings"]
     assert "PAGE_SIZE" in data["settings"]
 
 
@@ -165,7 +168,7 @@ def test_api_settings_update_and_reset(client, app):
         "/api/settings",
         json={
             "PAGE_SIZE": 36,
-            "ALLOW_REGISTRATION": False,
+            "AUTO_ENRICH": True,
             "METADATA_PROVIDER": "openlibrary",
         },
     )
@@ -173,7 +176,7 @@ def test_api_settings_update_and_reset(client, app):
     data = res.get_json()
     assert data["status"] == "success"
     assert app.config["PAGE_SIZE"] == 36
-    assert app.config["ALLOW_REGISTRATION"] is False
+    assert app.config["AUTO_ENRICH"] is True
     assert app.config["METADATA_PROVIDER"] == "openlibrary"
 
     # Reset endpoint
@@ -182,7 +185,7 @@ def test_api_settings_update_and_reset(client, app):
     reset_data = res_reset.get_json()
     assert reset_data["status"] == "success"
     assert app.config["PAGE_SIZE"] == 24
-    assert app.config["ALLOW_REGISTRATION"] is True
+    assert app.config["AUTO_ENRICH"] is False
 
 
 def test_ui_settings_view_for_admin_and_reader(client, app):
@@ -225,12 +228,12 @@ def test_ui_settings_view_for_admin_and_reader(client, app):
         b"System &amp; Library Preferences" in res_admin.data
         or b"System & Library Preferences" in res_admin.data
     )
-    assert b"setting-AUTH_REQUIRED" in res_admin.data
+    assert b"setting-AUTO_SCAN_ON_START" in res_admin.data
     assert b"setting-PAGE_SIZE" in res_admin.data
 
     res_system = client.get("/settings/system")
     assert res_system.status_code == 200
-    assert b"setting-AUTH_REQUIRED" in res_system.data
+    assert b"setting-AUTO_SCAN_ON_START" in res_system.data
 
     # Admin viewing /settings/plugins should see plugin cards and toggles
     res_plugins = client.get("/settings/plugins")

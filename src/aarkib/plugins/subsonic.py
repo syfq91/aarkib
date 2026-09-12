@@ -95,9 +95,6 @@ def subsonic_response(
 
 def get_authenticated_user() -> User | None:
     """Authenticates Subsonic client via user credentials, tokens, or session."""
-    if current_user.is_authenticated:
-        return current_user
-
     username = request.values.get("u")
     password = request.values.get("p")
     token = request.values.get("t")
@@ -142,12 +139,14 @@ def get_authenticated_user() -> User | None:
                 return user
             return None
 
+        # 3. Passwordless user without credentials parameter
+        if not user.has_password:
+            return user
+
         return None
 
-    # No explicit credentials provided: allow guest/default user only when auth is disabled
-    if not current_app.config.get("AUTH_REQUIRED", True):
-        first_user = db.session.scalar(select(User).order_by(User.id.asc()))
-        return first_user
+    if current_user.is_authenticated:
+        return current_user
 
     return None
 

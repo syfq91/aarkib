@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from aarkib.extensions import db
 from aarkib.models import MediaItem, UserProgress
-from aarkib.routes.auth import optional_or_required_auth
+from aarkib.routes.auth import require_auth
 from aarkib.services.media_service import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 
 reader_bp = Blueprint("reader", __name__, url_prefix="/reader")
@@ -14,7 +14,7 @@ reader_bp = Blueprint("reader", __name__, url_prefix="/reader")
 
 @reader_bp.route("/item/<int:item_id>")
 @reader_bp.route("/media/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def open_media_item(item_id: int):
     """Auto-dispatches to the appropriate reader or player view for the given media item."""
     item = db.session.get(MediaItem, item_id)
@@ -24,7 +24,7 @@ def open_media_item(item_id: int):
 
 
 @reader_bp.route("/epub/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def read_epub(item_id: int):
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -49,7 +49,7 @@ def read_epub(item_id: int):
 
 
 @reader_bp.route("/cbz/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def read_cbz(item_id: int):
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -81,7 +81,7 @@ def read_cbz(item_id: int):
 
 
 @reader_bp.route("/video/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def watch_video(item_id: int):
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -133,7 +133,7 @@ def watch_video(item_id: int):
 
 
 @reader_bp.route("/audiobook/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def play_audiobook(item_id: int):
     """Dedicated audiobook web player with chapter selection, sleep timer, and speed controls."""
     item = db.session.get(MediaItem, item_id)
@@ -185,7 +185,7 @@ def play_audiobook(item_id: int):
 
 
 @reader_bp.route("/music/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def play_music(item_id: int):
     """Dedicated music track player."""
     item = db.session.get(MediaItem, item_id)
@@ -236,7 +236,7 @@ def play_music(item_id: int):
 
 
 @reader_bp.route("/podcast/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def play_podcast(item_id: int):
     """Dedicated podcast episode player with episode notes and jump navigation."""
     item = db.session.get(MediaItem, item_id)
@@ -297,7 +297,7 @@ def play_podcast(item_id: int):
 
 
 @reader_bp.route("/audio/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def play_audio(item_id: int):
     """Unified audio playback dispatching to dedicated audiobook player or music player."""
     item = db.session.get(MediaItem, item_id)

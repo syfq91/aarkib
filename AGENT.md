@@ -101,8 +101,8 @@ aarkib/
 │   │   └── podcast.py        # PodcastMediaPlugin for RSS audio podcast feeds
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── auth.py           # Login, logout, register, profile, user management endpoints (@admin_required)
-│   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings)
+│   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints (@admin_required)
+│   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings categories)
 │   │   ├── api.py            # Unified REST endpoints: media CRUD, streams, progress, favorites, playlists, settings, /health
 │   │   ├── reader.py         # In-browser reader/player views for EPUB, CBZ, Video, Audio, and Podcasts
 │   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
@@ -147,7 +147,12 @@ aarkib/
 │       ├── authors.html      # Creators / Authors grid & volume count
 │       ├── series.html       # Collections / Series grid & volume count
 │       ├── tags.html         # Categories & genre tags
-│       ├── settings.html     # System preferences, OPDS feeds, storage stats, media folders, user management
+│       ├── settings/         # Dedicated category settings templates
+│       │   ├── system.html   # System preferences (scan, watcher, enrich, page size)
+│       │   ├── libraries.html# Storage folders and media type classification
+│       │   ├── users.html    # User management dashboard
+│       │   ├── plugins.html  # Plugin & protocol details (OPDS, Subsonic, E-Ink)
+│       │   └── jobs.html     # Background jobs and indexing tools
 │       ├── reader_epub.html  # Dedicated EPUB web reader interface
 │       ├── reader_cbz.html   # Dedicated CBZ comic web reader interface
 │       ├── reader_video.html # Dedicated HTML5 video player interface
@@ -155,9 +160,8 @@ aarkib/
 │       ├── player_audiobook.html # Audiobook player with chapter navigation
 │       ├── player_podcast.html # Podcast player with episode playlist
 │       ├── login.html        # Authentication login view
-│       ├── register.html     # User registration view
+│       ├── setup.html        # First-run admin setup wizard view
 │       ├── profile.html      # User profile, reading/listening statistics, password change
-│       ├── users.html        # Admin user management view
 │       └── opds/             # Jinja XML templates for OPDS 1.2 catalog feeds
 ├── tests/
 │   ├── conftest.py           # Pytest fixtures (sample media generator, test client, app)
@@ -194,10 +198,14 @@ aarkib/
 
 ## 🔑 Core Invariants & Architectural Rules
 
-1. **Authentication Enforcement (`AARKIB_AUTH_REQUIRED`)**:
-   * Default is `AARKIB_AUTH_REQUIRED=true`.
-   * Unauthenticated web visitors are redirected to `/auth/login?next=<url>` (or `/auth/register` if no users exist in the system).
-   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth from e-readers and API clients (authenticating `current_user` via Flask-Login's `request_loader`). `/api/health` and media covers are publicly accessible without authentication.
+1. **Mandatory Authentication Enforcement & Passwordless Users**:
+   * Authentication is always mandatory across all interfaces (WebUI, REST API, OPDS feeds, Subsonic).
+   * **Admin Accounts**: Passwords are strictly compulsory (minimum 4 characters) for administrators. Enforced in first-time setup, user creation, password resets, role promotion (must set password first), and profile edits.
+   * **Normal Users**: Passwordless reader accounts are supported (`has_password = False`, `password_hash = None`). Passwordless users authenticate with an empty/blank password.
+   * On fresh boot with 0 users in the database, unauthenticated web visitors are redirected to `/auth/setup` to bootstrap the primary administrator account (compulsory password). Once >=1 users exist, `/auth/setup` is permanently locked out.
+   * Unauthenticated visitors are redirected to `/auth/login?next=<url>`.
+   * Public registration (`/auth/register`) is completely removed. New accounts can only be created by administrators via `/settings/users`.
+   * API endpoints (`/api/*`) return `401 Unauthorized` for unauthorized requests, but accept HTTP Basic Auth (supporting passwordless users with empty password). `/api/health` and media covers are publicly accessible without authentication.
    * OPDS endpoints (`/opds/*`) return `401 Unauthorized` with `WWW-Authenticate: Basic realm="Aarkib OPDS"` and an `application/opds-authentication+json` document.
 
 2. **Multi-Media Plugin Architecture & Video/Audio Support**:
@@ -238,7 +246,7 @@ aarkib/
    * Filesystem watcher and scanner service automatically detect additions, modifications, and deletions without a manual upload web form.
 
 9. **Dynamic System Preferences & Settings Service**:
-   * Runtime options (`AUTH_REQUIRED`, `ALLOW_REGISTRATION`, `AUTO_SCAN_ON_START`, `WATCH_LIBRARY`, `AUTO_ENRICH`, `METADATA_PROVIDER`, `PAGE_SIZE`) are managed via `settings_service.py` backed by the `SystemSetting` table.
+   * Runtime options (`AUTO_SCAN_ON_START`, `WATCH_LIBRARY`, `AUTO_ENRICH`, `METADATA_PROVIDER`, `PAGE_SIZE`) are managed via `settings_service.py` backed by the `SystemSetting` table.
    * Precedence: `Database (WebUI)` > `Environment Variables (.env)` > `Hardcoded Defaults`.
    * Modifying settings via `PATCH /api/settings` immediately updates in-memory `current_app.config` without restarting the server, and dynamically starts/stops the library watcher thread if `WATCH_LIBRARY` was toggled.
    * `POST /api/settings/reset` clears database overrides and restores baseline environment values.

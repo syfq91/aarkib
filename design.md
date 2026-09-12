@@ -268,8 +268,6 @@ Aarkib features a decoupled, extensible plugin architecture designed to manage d
 Aarkib decouples runtime application preferences from static environment configuration. Key operational controls are managed via a database-backed settings architecture:
 
 1. **Managed Runtime Settings**:
-   - `AUTH_REQUIRED` (bool): Require visitor authentication to browse, stream, download, or access OPDS.
-   - `ALLOW_REGISTRATION` (bool): Enable or disable public account registration on the login screen.
    - `AUTO_SCAN_ON_START` (bool): Automatically trigger a full library scan at server startup.
    - `WATCH_LIBRARY` (bool): Enable or disable the real-time background `watchdog` observer.
    - `AUTO_ENRICH` (bool): Automatically fetch online metadata during library scans.
@@ -393,12 +391,16 @@ erDiagram
 
 ## 5. Security & Authentication Architecture
 
-1. **Authentication Enforcement (`AARKIB_AUTH_REQUIRED`)**:
-   - When enabled (default), all web routes redirect unauthenticated users to `/auth/login`.
-   - If the database contains zero users, the application automatically redirects visitors to `/auth/register` to establish the initial Administrator account.
+1. **Mandatory Authentication & Passwordless Users**:
+   - Authentication is always required across all interfaces (WebUI, REST API, OPDS feeds, Subsonic).
+   - **Compulsory Admin Passwords**: Passwords (minimum 4 characters) are strictly mandatory for all administrator accounts across first-time setup, user creation, password reset, role promotion, and profile editing.
+   - **Passwordless Normal Users**: Passwordless reader accounts are supported (`has_password = False`, `password_hash = None`). Passwordless users authenticate by submitting an empty/blank password.
+   - If the database contains zero users, the application automatically redirects visitors to `/auth/setup` to bootstrap the initial Administrator account (with a compulsory password). Once >=1 users exist, `/auth/setup` is permanently locked out.
+   - Unauthenticated web visitors are redirected to `/auth/login`.
+   - Public registration (`/auth/register`) is disabled; accounts can only be created by administrators in **Settings → Users** (`/settings/users`).
 2. **Dual-Credential Interceptor**:
    - Web sessions are secured with signed HTTP-only cookies (`Lax` SameSite policy).
-   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. When present, Flask-Login's `request_loader` validates credentials against the `User` model and populates `current_user`, allowing headless readers to sync progress and access collections seamlessly without browser cookies.
+   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. When present, Flask-Login's `request_loader` validates credentials against the `User` model (including blank password for passwordless users) and populates `current_user`, allowing headless readers to sync progress and access collections seamlessly without browser cookies.
 3. **Security Headers**:
    - Injected on all outgoing responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
 4. **Data Isolation**:
@@ -424,7 +426,7 @@ erDiagram
 ### Server Launcher & Web Administration
 - `uv run aarkib`: Start the web application server (or container startup via `aarkib`).
 - **Administrative Operations**: Managed exclusively via the modern Web UI:
-  - Account setup & user management: First-run setup wizard and `/settings#users`.
-  - Content discovery: Background filesystem watchers and on-demand rescan via `/settings`.
-  - Full-Text Search: Automatic startup synchronization and manual reindexing via `/settings`.
-  - Metadata enrichment: Background enricher jobs triggered via `/settings` or per-media detail views.
+  - Account setup & user management: First-run setup wizard (`/auth/setup`) and `/settings/users`.
+  - Content discovery: Background filesystem watchers and on-demand rescan via `/settings/libraries`.
+  - Full-Text Search: Automatic startup synchronization and manual reindexing via `/settings/jobs`.
+  - Metadata enrichment: Background enricher jobs triggered via `/settings/jobs` or per-media detail views.

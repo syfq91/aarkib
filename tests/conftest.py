@@ -28,8 +28,38 @@ def app(tmp_path: Path) -> Flask:
 
 
 @pytest.fixture
-def client(app: Flask):
+def unauth_client(app: Flask):
+    """Provides a fresh, unauthenticated test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def default_user(app: Flask):
+    """Creates a default administrator user for test suite requests."""
+    from sqlalchemy import select
+
+    from aarkib.models import User
+
+    with app.app_context():
+        user = db.session.scalar(
+            select(User).where(User.username == "default_test_admin")
+        )
+        if not user:
+            user = User(username="default_test_admin", is_admin=True)
+            user.set_password("defaultpass")
+            db.session.add(user)
+            db.session.commit()
+        return user.id
+
+
+@pytest.fixture
+def client(app: Flask, default_user: int):
+    """Provides a test client pre-authenticated as the default administrator."""
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess["_user_id"] = str(default_user)
+        sess["_fresh"] = True
+    return c
 
 
 @pytest.fixture

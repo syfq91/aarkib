@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Initial Setup - Aarkib{% endblock %}
+
+{% block content %}
+<div style="max-width: 440px; margin: 3rem auto; background-color: var(--bg-secondary); padding: 2.25rem; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+  <div style="text-align: center; margin-bottom: 1.5rem;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🚀</div>
+    <h2 style="margin-bottom: 0.5rem; font-weight: 700;">Welcome to Aarkib</h2>
+    <p style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.4;">
+      Create your primary administrator account to get started.
+    </p>
+  </div>
+
+  <form method="POST" action="/auth/setup" style="display: flex; flex-direction: column; gap: 1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div>
+      <label for="setup-username" style="display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-primary); margin-bottom: 0.35rem;">
+        Administrator Username <span style="color: var(--danger, #ef4444);">*</span>
+      </label>
+      <input type="text" id="setup-username" name="username" class="input-text" required autofocus placeholder="admin" style="width: 100%;">
+    </div>
+    <div>
+      <label for="setup-password" style="display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-primary); margin-bottom: 0.35rem;">
+        Password <span style="color: var(--danger, #ef4444);">*</span>
+      </label>
+      <input type="password" id="setup-password" name="password" class="input-text" required minlength="4" placeholder="Minimum 4 characters" style="width: 100%;">
+    </div>
+    <div>
+      <label for="setup-confirm-password" style="display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-primary); margin-bottom: 0.35rem;">
+        Confirm Password <span style="color: var(--danger, #ef4444);">*</span>
+      </label>
+      <input type="password" id="setup-confirm-password" name="confirm_password" class="input-text" required minlength="4" placeholder="Repeat password" style="width: 100%;">
+    </div>
+
+    <div style="margin-top: 0.5rem; padding: 0.75rem; background-color: rgba(99, 102, 241, 0.08); border-radius: var(--radius-sm); border: 1px solid rgba(99, 102, 241, 0.2); font-size: 0.8rem; color: var(--text-secondary);">
+      🛡️ <strong>Note:</strong> Administrator accounts require a password. Regular reader accounts can be created with or without passwords later in Settings.
+    </div>
+
+    <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding: 0.75rem; font-weight: 600; font-size: 0.95rem;">
+      Complete Setup & Launch Library
+    </button>
+  </form>
+</div>
+{% endblock %}

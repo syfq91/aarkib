@@ -27,22 +27,6 @@ class SettingDefinition:
 
 
 MANAGED_SETTINGS: dict[str, SettingDefinition] = {
-    "AUTH_REQUIRED": SettingDefinition(
-        key="AUTH_REQUIRED",
-        type=bool,
-        default=True,
-        display_name="Require Authentication",
-        description="Require users to log in to browse the catalog, download media, and access OPDS feeds.",
-        category="Security & Access",
-    ),
-    "ALLOW_REGISTRATION": SettingDefinition(
-        key="ALLOW_REGISTRATION",
-        type=bool,
-        default=True,
-        display_name="Allow User Registration",
-        description="Allow new visitors to register their own reader accounts on the registration page.",
-        category="Security & Access",
-    ),
     "AUTO_SCAN_ON_START": SettingDefinition(
         key="AUTO_SCAN_ON_START",
         type=bool,

@@ -22,7 +22,7 @@ class User(UserMixin, db.Model):
     username: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True
     )
-    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
@@ -42,10 +42,24 @@ class User(UserMixin, db.Model):
         "Playlist", back_populates="user", cascade="all, delete-orphan"
     )
 
-    def set_password(self, password: str) -> None:
-        self.password_hash = generate_password_hash(password)
+    @property
+    def has_password(self) -> bool:
+        """Returns True if this user account has a password set."""
+        return bool(self.password_hash)
 
-    def check_password(self, password: str) -> bool:
+    def set_password(self, password: str | None) -> None:
+        """Sets a password hash or clears the password if None/empty."""
+        if not password or not password.strip():
+            self.password_hash = None
+        else:
+            self.password_hash = generate_password_hash(password.strip())
+
+    def check_password(self, password: str | None) -> bool:
+        """Verifies password. If the user has no password set, entering nothing matches."""
+        if not self.has_password:
+            return not password or not password.strip()
+        if not password:
+            return False
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self) -> str:

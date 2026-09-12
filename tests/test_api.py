@@ -266,6 +266,6 @@ def test_api_bookmark_authorization(client, app, sample_epub):
         db.session.commit()
         bm_id = bm.id
 
-    # Unauthenticated attempt to delete user1's bookmark should return 403 without crashing
+    # Unauthenticated attempt to delete user1's bookmark should return 401 or 403 without crashing
     res_del_unauth = client.delete(f"/api/bookmarks/{bm_id}")
-    assert res_del_unauth.status_code == 403
+    assert res_del_unauth.status_code in (401, 403)

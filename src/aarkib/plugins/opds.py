@@ -73,26 +73,25 @@ def get_opds_user() -> User | None:
         return current_user  # type: ignore
 
     auth = request.authorization
-    if auth and auth.username and auth.password:
+    if auth and auth.username:
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password):
+        if user and user.check_password(auth.password or ""):
             return user
     return None
 
 
 def opds_auth_required(f: Any) -> Any:
-    """Enforce HTTP Basic auth on OPDS feeds when AUTH_REQUIRED is enabled."""
+    """Enforce HTTP Basic auth on OPDS feeds."""
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         """Authenticate the request or return a 401 Basic-auth challenge."""
-        if current_app.config.get("AUTH_REQUIRED", False):
-            user = get_opds_user()
-            if not user:
-                return Response(
-                    "Authentication required for Aarkib OPDS Catalog",
-                    401,
-                    {"WWW-Authenticate": 'Basic realm="Aarkib OPDS"'},
-                )
+        user = get_opds_user()
+        if not user:
+            return Response(
+                "Authentication required for Aarkib OPDS Catalog",
+                401,
+                {"WWW-Authenticate": 'Basic realm="Aarkib OPDS"'},
+            )
         return f(*args, **kwargs)
 
     wrapper.__name__ = f.__name__
@@ -301,7 +300,7 @@ def _resolve_progression_conflict(progress, modified_dt, user) -> Response | Non
 def opds_media_progression(item_id: int):
     """OPDS Progression 1.0 Fetch and Update endpoint."""
     user = get_opds_user()
-    if current_app.config.get("AUTH_REQUIRED", False) and not user:
+    if not user:
         auth_doc = make_opds_auth_document()
         return Response(
             json.dumps(auth_doc),

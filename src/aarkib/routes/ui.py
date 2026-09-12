@@ -25,7 +25,7 @@ from aarkib.models import (
     User,
     UserProgress,
 )
-from aarkib.routes.auth import optional_or_required_auth
+from aarkib.routes.auth import require_auth
 from aarkib.services.media_service import path_match_filter
 
 ui_bp = Blueprint("ui", __name__)
@@ -33,7 +33,7 @@ ui_bp = Blueprint("ui", __name__)
 
 @ui_bp.route("/")
 @ui_bp.route("/library")
-@optional_or_required_auth
+@require_auth
 def index():
     authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
     series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
@@ -166,7 +166,7 @@ def index():
 
 
 @ui_bp.route("/media/<int:item_id>")
-@optional_or_required_auth
+@require_auth
 def media_detail(item_id: int):
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -189,21 +189,21 @@ def media_detail(item_id: int):
 
 
 @ui_bp.route("/authors")
-@optional_or_required_auth
+@require_auth
 def authors():
     author_list = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
     return render_template("authors.html", authors=author_list)
 
 
 @ui_bp.route("/series")
-@optional_or_required_auth
+@require_auth
 def series():
     series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
     return render_template("series.html", series_list=series_list)
 
 
 @ui_bp.route("/tags")
-@optional_or_required_auth
+@require_auth
 def tags():
     tag_list = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
     return render_template("tags.html", tags=tag_list)
@@ -221,7 +221,7 @@ ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users"}
 
 @ui_bp.route("/settings")
 @ui_bp.route("/settings/<category>")
-@optional_or_required_auth
+@require_auth
 def settings(category: str | None = None):
     is_admin = bool(current_user.is_authenticated and current_user.is_admin)
 

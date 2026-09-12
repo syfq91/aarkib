@@ -181,6 +181,21 @@ def test_settings_page_displays_multiple_directories(tmp_path):
     app = create_app(MultiDirTestConfig)
     client = app.test_client()
 
+    with app.app_context():
+        from aarkib.extensions import db
+        from aarkib.models import User
+
+        db.create_all()
+        user = User(username="reader", is_admin=False)
+        user.set_password("pass")
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(user_id)
+        sess["_fresh"] = True
+
     res = client.get("/settings")
     assert res.status_code == 200
     assert b"Library Storage (2 folders):" in res.data
@@ -287,10 +302,21 @@ def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample
     client = app.test_client()
 
     with app.app_context():
+        from aarkib.models import User
+
         db.create_all()
+        user = User(username="admin", is_admin=True)
+        user.set_password("pass")
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
         covers_dir = Path(app.config["COVERS_DIR"])
         index_single_book(manga_file, covers_dir)
         index_single_book(novel_file, covers_dir)
+
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(user_id)
+        sess["_fresh"] = True
 
     res = client.get("/")
     assert res.status_code == 200

@@ -51,9 +51,27 @@
       <h3 style="margin-bottom: 1rem;">Change Password</h3>
       <form method="POST" action="/auth/profile" style="display: flex; flex-direction: column; gap: 0.75rem;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if user.has_password %}
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Current Password</label>
           <input type="password" name="current_password" class="input-text" required placeholder="••••••••">
+        </div>
+        <div>
+          {% if user.is_admin %}
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">New Password <span style="font-size: 0.75rem; color: var(--text-secondary);">(required for administrators)</span></label>
+          <input type="password" name="new_password" class="input-text" required minlength="4" placeholder="Minimum 4 characters">
+          {% else %}
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">New Password <span style="font-size: 0.75rem; color: var(--text-secondary);">(leave blank to make account passwordless)</span></label>
+          <input type="password" name="new_password" class="input-text" placeholder="Minimum 4 characters">
+          {% endif %}
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Confirm New Password</label>
+          <input type="password" name="confirm_new_password" class="input-text" {% if user.is_admin %}required minlength="4"{% endif %} placeholder="Repeat new password">
+        </div>
+        {% else %}
+        <div style="padding: 0.75rem; background-color: rgba(234, 179, 8, 0.1); border-radius: var(--radius-sm); border: 1px solid rgba(234, 179, 8, 0.25); font-size: 0.8rem; color: var(--text-primary); margin-bottom: 0.5rem;">
+          🔓 <strong>Passwordless Account</strong>: You currently log in without a password. You can optionally set a password below.
         </div>
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">New Password</label>
@@ -63,6 +81,7 @@
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Confirm New Password</label>
           <input type="password" name="confirm_new_password" class="input-text" required minlength="4" placeholder="Repeat new password">
         </div>
+        {% endif %}
         <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Update Password</button>
       </form>
     </div>

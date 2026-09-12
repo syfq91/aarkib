@@ -205,18 +205,6 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
     # App Settings
-    AUTH_REQUIRED: bool = (os.getenv("AARKIB_AUTH_REQUIRED", "true")).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
-    ALLOW_REGISTRATION: bool = (
-        os.getenv("AARKIB_ALLOW_REGISTRATION", "true")
-    ).lower() in (
-        "true",
-        "1",
-        "yes",
-    )
     AUTO_SCAN_ON_START: bool = (os.getenv("AARKIB_AUTO_SCAN", "true")).lower() in (
         "true",
         "1",
@@ -311,7 +299,6 @@ class TestConfig(Config):
 
     TESTING: bool = True
     SQLALCHEMY_DATABASE_URI: str = "sqlite:///:memory:"
-    AUTH_REQUIRED: bool = False
     AUTO_SCAN_ON_START: bool = False
     WATCH_LIBRARY: bool = False
     AUTO_ENRICH: bool = False

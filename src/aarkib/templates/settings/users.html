@@ -24,6 +24,7 @@
             <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase;">
               <th style="padding: 0.75rem 1rem;">User</th>
               <th style="padding: 0.75rem 1rem;">Role</th>
+              <th style="padding: 0.75rem 1rem;">Auth</th>
               <th style="padding: 0.75rem 1rem;">Joined</th>
               <th style="padding: 0.75rem 1rem; text-align: right;">Actions</th>
             </tr>
@@ -44,6 +45,13 @@
                   <span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem;">READER</span>
                 {% endif %}
               </td>
+              <td style="padding: 0.75rem 1rem;">
+                {% if u.has_password %}
+                  <span style="background: rgba(16, 185, 129, 0.12); color: var(--success); padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 500;">🔑 Password</span>
+                {% else %}
+                  <span style="background: rgba(234, 179, 8, 0.12); color: #eab308; padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 500;">🔓 Passwordless</span>
+                {% endif %}
+              </td>
               <td style="padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.85rem;">
                 {{ u.created_at.strftime('%Y-%m-%d') if u.created_at else 'N/A' }}
               </td>
@@ -56,7 +64,7 @@
                         {{ "Demote" if u.is_admin else "Promote" }}
                       </button>
                     </form>
-                    <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}')">
+                    <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="promptResetPassword({{ u.id }}, '{{ u.username }}', {{ 'true' if u.is_admin else 'false' }})">
                       Reset
                     </button>
                     <form method="POST" action="/auth/users/{{ u.id }}/delete" style="display: inline;" onsubmit="return confirm('Delete user {{ u.username }}?');">
@@ -83,15 +91,17 @@
       <form method="POST" action="/auth/users" style="display: flex; flex-direction: column; gap: 0.75rem;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
-          <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Username</label>
-          <input type="text" name="username" class="input-text" required placeholder="New username">
+          <label for="new-user-username" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Username</label>
+          <input type="text" id="new-user-username" name="username" class="input-text" required placeholder="New username" style="width: 100%;">
         </div>
         <div>
-          <label style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Initial Password</label>
-          <input type="password" name="password" class="input-text" required minlength="4" placeholder="Minimum 4 characters">
+          <label for="new-user-password" id="new-user-password-label" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+            Password <span id="password-req-hint" style="font-size: 0.75rem; color: var(--text-secondary);">(optional for readers)</span>
+          </label>
+          <input type="password" id="new-user-password" name="password" class="input-text" placeholder="Leave blank for passwordless access" style="width: 100%;">
         </div>
         <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0;">
-          <input type="checkbox" name="is_admin" id="is_admin">
+          <input type="checkbox" name="is_admin" id="is_admin" onchange="onAdminToggle(this.checked)">
           <label for="is_admin" style="font-size: 0.85rem;">Grant Administrator privileges</label>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top: 0.25rem;">Create User</button>
@@ -114,11 +124,33 @@
 
 {% block scripts %}
 <script>
-function promptResetPassword(userId, username) {
-  const newPass = prompt(`Enter new password for ${username} (min 4 characters):`);
-  if (!newPass) return;
-  if (newPass.length < 4) {
-    alert("Password must be at least 4 characters.");
+function onAdminToggle(isAdmin) {
+  const pwInput = document.getElementById("new-user-password");
+  const hint = document.getElementById("password-req-hint");
+  if (isAdmin) {
+    pwInput.required = true;
+    pwInput.placeholder = "Minimum 4 characters (required for admin)";
+    hint.innerHTML = '<strong style="color: var(--danger, #ef4444);">(required for admin)</strong>';
+  } else {
+    pwInput.required = false;
+    pwInput.placeholder = "Leave blank for passwordless access";
+    hint.innerHTML = '(optional for readers)';
+  }
+}
+
+function promptResetPassword(userId, username, isAdmin) {
+  let promptMsg = `Enter new password for ${username} (min 4 characters):`;
+  if (!isAdmin) {
+    promptMsg = `Enter new password for ${username} (min 4 characters), or leave blank to make user passwordless:`;
+  }
+  const newPass = prompt(promptMsg);
+  if (newPass === null) return;
+  if (isAdmin && !newPass) {
+    alert("Administrators cannot be made passwordless. Please enter a password.");
+    return;
+  }
+  if (newPass !== "" && newPass.length < 4) {
+    alert("Password must be at least 4 characters long.");
     return;
   }
   const form = document.getElementById("reset-password-form");

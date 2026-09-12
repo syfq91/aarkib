@@ -27,8 +27,10 @@
   - **HTML5 Video Player**: Clean player with position resume, keyboard shortcuts (Space, Arrow keys, Fullscreen, Mute), playback speed selector (0.75x–2.0x), and automatic next-episode countdown.
 - 👥 **Multi-User & Role Management**:
   - Isolated reading progress, bookmarks, and statistics per user.
-  - Admin dashboard to manage users, reset passwords, and toggle roles.
-  - Required login mode by default (`AARKIB_AUTH_REQUIRED=true`) with first-user admin bootstrapping.
+  - Mandatory authentication across all interfaces (WebUI, REST API, OPDS feeds, Subsonic).
+  - First-time boot setup wizard (`/auth/setup`) requiring the creation of the primary administrator account with a compulsory password.
+  - Support for passwordless accounts for normal reader users.
+  - Dedicated admin dashboard (`/settings/users`) to create accounts (with or without password for readers; compulsory for admins), reset passwords, and toggle roles.
 - 🎨 **Modern Responsive UI / PWA**:
   - Clean top header navigation bar with user avatar menu.
   - Dedicated mobile bottom navigation bar on mobile devices.
@@ -64,7 +66,7 @@ cp .env.example .env
 uv run aarkib
 ```
 
-Visit **`http://localhost:5000`** in your browser. On your first visit, you will be prompted to register the **Administrator** account.
+Visit **`http://localhost:5000`** in your browser. On your first visit, you will be redirected to the Setup Wizard (`/auth/setup`) to configure your primary **Administrator** account (with a compulsory password).
 
 ---
 
@@ -90,8 +92,6 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 | `AARKIB_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
 | `AARKIB_OPTIMIZED_DIR` | `./data/optimized` | Cache directory for on-demand e-ink optimized EPUBs. |
 | `DATABASE_URL` | `sqlite:///data/aarkib.db` | SQLAlchemy database URI. |
-| `AARKIB_AUTH_REQUIRED` | `true` | When `true`, visitors must log in to browse or download. |
-| `AARKIB_ALLOW_REGISTRATION` | `true` | Allow new readers to sign up from the web UI. |
 | `AARKIB_AUTO_SCAN` | `true` | Automatically scan library on startup. |
 | `AARKIB_WATCH_LIBRARY` | `true` | Watch library for filesystem changes. |
 | `AARKIB_AUTO_ENRICH` | `false` | Automatically fetch metadata on library scan. |
@@ -102,8 +102,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 | `PORT` | `5000` | Server listening port. |
 
 > **💡 WebUI Configuration & Preferences**:
-> - **System & Library Preferences**: Administrators can configure runtime options directly from **Settings → ⚙️ System & Library Preferences** without restarting the server:
->   - **Authentication Requirement (`AARKIB_AUTH_REQUIRED`)** & **User Registration (`AARKIB_ALLOW_REGISTRATION`)**
+> - **System Preferences**: Administrators can configure runtime options directly from **Settings → ⚙️ System Preferences** without restarting the server:
 >   - **Auto-Scan on Startup (`AARKIB_AUTO_SCAN`)** & **Real-Time Filesystem Watcher (`AARKIB_WATCH_LIBRARY`)**
 >   - **Auto-Enrich Metadata on Scan (`AARKIB_AUTO_ENRICH`)** & **Preferred Provider (`AARKIB_METADATA_PROVIDER`)**
 >   - **Catalog Items Per Page (`AARKIB_PAGE_SIZE`)**
@@ -182,7 +181,7 @@ Aarkib exposes clean, unified REST APIs across all media types:
 | `/api/libraries/<id>/scan`| `POST` | Trigger targeted rescan of a specific media folder. |
 | `/api/libraries/enrich` | `POST` | Enrich catalog items across configured media folders. |
 | `/api/media/<id>/enrich` | `POST` | Enrich a single media item with online metadata. |
-| `/api/settings` | `GET`, `PATCH` | Retrieve or dynamically update runtime preferences (auth, auto-scan, watcher, enrichment, page size). |
+| `/api/settings` | `GET`, `PATCH` | Retrieve or dynamically update runtime preferences (auto-scan, watcher, enrichment, page size). |
 | `/api/settings/reset` | `POST` | Reset runtime settings to environment defaults. |
 | `/api/favorites` | `GET` | List favorited media items for the authenticated user. |
 | `/api/playlists` | `GET`, `POST` | View or create media playlists. |
@@ -192,21 +191,21 @@ Aarkib exposes clean, unified REST APIs across all media types:
 
 ## ⚙️ Web UI Administration
 
-Aarkib is engineered for unified, web-first administration. All management tasks are conducted directly in the responsive Web UI:
+Aarkib is engineered for unified, web-first administration. All management tasks are organized into dedicated category pages under **Settings**:
 
-- **First-Run Setup**: On first launch, navigating to `http://localhost:5000` prompts you to create the initial **Administrator** account.
-- **System & Library Preferences**: Fine-tune authentication requirements, user registration, startup scans, real-time filesystem watchers, metadata providers, and catalog page size dynamically under **Settings** $\to$ **System & Library Preferences** (`/settings#system-preferences`).
-- **User & Role Management**: Navigate to **Settings** $\to$ **User Management** (`/settings#users`) to create accounts, toggle Administrator/Reader privileges, reset passwords, or remove accounts.
-- **Media Folders & Libraries**: Configure media storage paths, set media types (books, comics, video, mixed), and rescan targeted folders.
-- **Library Scanning & Indexing**: Navigate to **Settings** $\to$ **Library Tools** to trigger a full rescan or rebuild the SQLite FTS5 search index.
-- **Metadata Enrichment**: Enrich media items with covers, summaries, and tags from Google Books, Open Library, TMDB, or MusicBrainz either library-wide or per-item.
+- **First-Run Setup Wizard (`/auth/setup`)**: On first launch, navigating to the server prompts you to create the initial **Administrator** account (password is compulsory). Once configured, the setup wizard is permanently locked.
+- **System Preferences (`/settings/system`)**: Fine-tune startup library scans, real-time filesystem watcher (`watchdog`), automatic metadata enrichment, preferred online providers, and catalog page size dynamically without restarting the server.
+- **User Management (`/settings/users`)**: Administrator dashboard to create new accounts (compulsory password for admins; passwordless optional for readers), toggle Administrator/Reader roles, reset passwords, or remove accounts. Public registration is disabled.
+- **Media Folders & Libraries (`/settings/libraries`)**: Configure media storage paths, set media types (books, comics, video, mixed), and trigger targeted folder rescans.
+- **Plugins & Protocols (`/settings/plugins`)**: View active media format plugins, OPDS 1.2/2.0 feed URLs, Subsonic API compatibility endpoints, and device optimizer presets.
+- **Background Tasks & Indexing (`/settings/jobs`)**: Monitor asynchronous library scanner and enrichment jobs, trigger full rescans, or rebuild the SQLite FTS5 search index.
 
 ---
 
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (157 tests)
+# Run pytest test suite (168 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff

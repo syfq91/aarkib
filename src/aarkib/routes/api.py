@@ -65,8 +65,7 @@ def api_admin_required(view):
 
     Unlike the generic ``admin_required`` in auth.py (which redirects to the UI
     for HTML pages), this returns a 401/403 JSON response suitable for API
-    clients. It is applied in addition to the before_request auth check, so it
-    is safe even when ``AUTH_REQUIRED`` is disabled.
+    clients.
     """
 
     @wraps(view)
@@ -89,15 +88,12 @@ def enforce_api_auth():
 
     # Authenticate via HTTP Basic auth if credentials are provided
     auth = request.authorization
-    if auth and auth.username and auth.password:
+    if auth and auth.username:
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password):
+        if user and user.check_password(auth.password or ""):
             login_user(user)
 
-    if (
-        current_app.config.get("AUTH_REQUIRED", False)
-        and not current_user.is_authenticated
-    ):
+    if not current_user.is_authenticated:
         return jsonify({"error": "Authentication required"}), 401
 
 
