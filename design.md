@@ -228,35 +228,40 @@ Aarkib provides rich in-browser reading environments without external server plu
 
 ---
 
-### 3.6 Multi-Media Plugin Architecture: Video (Implemented) & Audio Support (In Progress) (`plugins/`, `models/media.py`)
+### 3.6 Generalized Plugin Architecture (`plugins/`, `plugins/base.py`)
 
-Aarkib features a decoupled, extensible plugin architecture designed to manage diverse personal media libraries under unified indexing, storage, and progress-tracking foundations:
+Aarkib features a decoupled, extensible plugin architecture designed to manage diverse personal media libraries, external protocols, and device optimization pipelines under a unified lifecycle:
 
-1. **Plugin Contract (`MediaPlugin`)**:
-   - Every media handler inherits from the abstract base class `MediaPlugin` (`plugins/base.py`).
-   - Declares `name`, `media_type` (`MediaType.BOOK`, `MediaType.COMIC`, `MediaType.AUDIO`, `MediaType.VIDEO`), and `supported_extensions`.
-   - Implements standardized lifecycle hooks:
-     - `parse_metadata(file_path)`: Extracts title, creators/artists, descriptions, and technical metadata.
-     - `extract_cover(file_path)`: Extracts embedded cover art, poster artwork, or chapter thumbnails.
-     - `get_player_url(item_id, file_format)`: Returns the in-browser playback or reader route.
-     - `register_routes(app)`: Injects custom Flask blueprints (e.g. streaming endpoints, custom player interfaces).
-     - `check_health()`: Diagnostic checks for optional native tools or libraries.
+1. **Foundational Plugin Hierarchy (`BasePlugin`)**:
+   - Every plugin inherits from `BasePlugin` (`plugins/base.py`), exposing:
+     - Identification & Metadata: `name`, `display_name`, `plugin_type`, `description`.
+     - Lifecycle & Routing: `register_routes(app)`, `init_app(app)`, `check_health()`.
+     - Configuration & Security: `enabled`, `csrf_exempt`, `blueprint_options`.
+   - Archetypes derived from `BasePlugin`:
+     - **`MediaPlugin`**: Format-specific file parsing (`parse_metadata`), artwork extraction (`extract_cover`), player URLs (`get_player_url`), and file extensions (`supported_extensions`).
+     - **`ProtocolPlugin`**: Server-side protocol feeds and client streaming APIs (`protocol_version`, `url_prefix`, `csrf_exempt=True`).
+     - **`OptimizerPlugin`**: Media transformation and hardware-targeted optimization pipelines (`get_presets`, `optimize`, `supported_formats`).
 
 2. **Central Registry (`PluginRegistry`)**:
    - Singleton `plugin_registry` initialized at application startup in `aarkib/__init__.py`.
-   - Dynamically maps file extensions (e.g. `.epub`, `.cbz`, `.mp3`, `.mp4`) to their respective plugins and metadata parsers.
-   - Enables new media plugins to be registered modularly without altering the core library crawler.
+   - Dynamically maps file extensions, media types, protocol names, and optimizer handlers.
+   - Automatically registers blueprints and handles CSRF exemptions on startup without hardcoding route wiring in core application files.
+   - Supports feature toggling via environment configuration (`AARKIB_ENABLE_SUBSONIC`, `AARKIB_ENABLE_OPDS`, `AARKIB_ENABLE_EINK_OPTIMIZER`).
 
-3. **Audio Support (Work In Progress)**:
-   - **Target Formats**: `.mp3`, `.m4b`, `.flac`, `.aac`.
-   - **Data Model** (`AudioTrackMixin`): Pre-defined database columns for `duration` (runtime in seconds), `bitrate` (kbps), `album`, `track_number`, and `disc_number`.
-   - **Planned Capabilities**: Tag metadata parsing, chapter detection for audiobooks, cover art extraction, and a dedicated in-browser web audio player with listening resume position.
+3. **Protocol Plugins**:
+   - **OPDS Protocol Plugin (`OPDSProtocolPlugin`)**: Implements OPDS 1.2 (Atom XML), OPDS 2.0 (JSON-LD), OPDS Authentication, and OPDS Progression 1.0 reading synchronization under `/opds`.
+   - **Subsonic Protocol Plugin (`SubsonicProtocolPlugin`)**: Implements Subsonic v1.16.1 REST API endpoints under `/rest` for native streaming and cataloging in third-party mobile apps (Symfonium, DSub, Ultrasonic).
 
-4. **Video Support (Implemented)**:
-   - **Supported Formats**: `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v`.
-   - **Plugin & Parser** (`VideoMediaPlugin`): Pure-Python MP4 box parser extracting duration, dimensions (`mvhd`/`tkhd` boxes), filename episode parser (`S01E02`/`1x02`), and cover/poster extractor.
-   - **HTTP 206 Streaming**: Custom `send_byte_range()` implementation supporting arbitrary chunk seeking, playback resume, and fast forward / rewind.
-   - **In-Browser HTML5 Player** (`/reader/video/<id>`): Dedicated responsive player with keyboard shortcuts, speed options (0.75x–2.0x), automatic next-episode countdown, and real-time playback position sync.
+4. **Optimizer Plugins**:
+   - **E-Ink Device Optimizer (`EInkOptimizerPlugin`)**: Hardware-specific EPUB transformation pipeline with font stripping, CSS sanitization, and 16-level grayscale Floyd-Steinberg dithering.
+
+5. **Media Plugins**:
+   - **Books & Comics (`BookMediaPlugin`)**: `.epub`, `.cbz`, `.cbr`, `.zip` with web readers and ComicInfo.xml support.
+   - **Video (`VideoMediaPlugin`)**: `.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`, `.m4v` with MP4 box parsing, HTTP 206 chunk seeking, and HTML5 video player.
+   - **Audio (`AudioMediaPlugin`)**: Generic `.mp3`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.wav`, `.aac` playback.
+   - **Audiobooks (`AudiobookMediaPlugin`)**: Dedicated `.m4b` chapter markers and audiobook player.
+   - **Music (`MusicMediaPlugin`)**: Dedicated albums, tracks, and disc numbering.
+   - **Podcasts (`PodcastMediaPlugin`)**: Episodic seasons, episode numbers, and podcast player.
 
 ### 3.8 Dynamic System Preferences & Settings Service (`services/settings_service.py`)
 

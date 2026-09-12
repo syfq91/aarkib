@@ -14,7 +14,7 @@ from sqlalchemy.sql import sqltypes as sa_types
 
 from aarkib.config import Config, ProductionConfig, TestConfig
 from aarkib.extensions import db, login_manager
-from aarkib.routes import api_bp, auth_bp, opds_bp, reader_bp, subsonic_bp, ui_bp
+from aarkib.routes import api_bp, auth_bp, reader_bp, ui_bp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -154,25 +154,21 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
     login_manager.init_app(app)
     csrf.init_app(app)
 
-    # API and OPDS endpoints authenticate via HTTP Basic Auth and JSON payloads
+    # API endpoints authenticate via HTTP Basic Auth and JSON payloads
     # (not HTML forms), so they are exempt from CSRF token requirements.
     csrf.exempt(api_bp)
-    csrf.exempt(opds_bp)
-    csrf.exempt(subsonic_bp)
 
-    # Initialize media plugins
+    # Initialize plugins (media formats, protocol APIs, and optimizers)
     from aarkib.plugins import init_plugins
 
     init_plugins(app)
 
-    # Register blueprints
+    # Register core blueprints
     app.register_blueprint(ui_bp)
     app.register_blueprint(api_bp)
-    app.register_blueprint(opds_bp)
     if "reader" not in app.blueprints:
         app.register_blueprint(reader_bp)
     app.register_blueprint(auth_bp)
-    app.register_blueprint(subsonic_bp, url_prefix="/rest")
 
     # Security settings & headers
     app.config.setdefault("SESSION_COOKIE_HTTPONLY", True)

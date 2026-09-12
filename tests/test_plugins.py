@@ -128,3 +128,87 @@ def test_init_plugins_with_app(app):
     assert reg is plugin_registry
     assert reg.get_plugin("books") is not None
     assert "reader" in app.blueprints
+    assert "opds" in app.blueprints
+    assert "subsonic" in app.blueprints
+
+
+def test_opds_protocol_plugin():
+    from aarkib.plugins import OPDSProtocolPlugin
+
+    plugin = OPDSProtocolPlugin()
+    assert plugin.name == "opds"
+    assert plugin.plugin_type == "protocol"
+    assert plugin.protocol_version == "2.0"
+    assert plugin.csrf_exempt is True
+    assert plugin.blueprint_options.get("url_prefix") == "/opds"
+
+    health = plugin.check_health()
+    assert health["status"] == "ok"
+    assert health["protocol_version"] == "2.0"
+    assert "book" in health["supported_types"]
+
+
+def test_subsonic_protocol_plugin():
+    from aarkib.plugins import SubsonicProtocolPlugin
+
+    plugin = SubsonicProtocolPlugin()
+    assert plugin.name == "subsonic"
+    assert plugin.plugin_type == "protocol"
+    assert plugin.protocol_version == "1.16.1"
+    assert plugin.csrf_exempt is True
+    assert plugin.blueprint_options.get("url_prefix") == "/rest"
+
+    health = plugin.check_health()
+    assert health["status"] == "ok"
+    assert health["protocol_version"] == "1.16.1"
+    assert health["url_prefix"] == "/rest"
+
+
+def test_eink_optimizer_plugin():
+    from aarkib.plugins import EInkOptimizerPlugin
+
+    plugin = EInkOptimizerPlugin()
+    assert plugin.name == "eink_optimizer"
+    assert plugin.plugin_type == "optimizer"
+    assert ".epub" in plugin.supported_formats
+
+    presets = plugin.get_presets()
+    assert "x3" in presets
+    assert "x4" in presets
+    assert "kindle" in presets
+
+    health = plugin.check_health()
+    assert health["status"] == "ok"
+    assert health["pil_available"] is True
+
+
+def test_api_plugins_endpoint(client):
+    response = client.get("/api/plugins")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "plugins" in data
+    plugin_names = [p["name"] for p in data["plugins"]]
+    assert "books" in plugin_names
+    assert "video" in plugin_names
+    assert "audio" in plugin_names
+    assert "opds" in plugin_names
+    assert "subsonic" in plugin_names
+    assert "eink_optimizer" in plugin_names
+
+    opds_info = next(p for p in data["plugins"] if p["name"] == "opds")
+    assert opds_info["type"] == "protocol"
+    assert opds_info["enabled"] is True
+    assert opds_info["health"]["status"] == "ok"
+
+
+def test_plugin_toggle_disable():
+    from flask import Flask
+
+    from aarkib.plugins import init_plugins
+
+    test_app = Flask("test_toggle_app")
+    test_app.config["AARKIB_ENABLE_SUBSONIC"] = False
+    init_plugins(test_app)
+
+    assert "subsonic" not in test_app.blueprints
+    assert "opds" in test_app.blueprints

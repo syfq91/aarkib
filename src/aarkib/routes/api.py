@@ -107,6 +107,25 @@ def health():
     return jsonify({"status": "healthy", "app": "aarkib"})
 
 
+@api_bp.route("/plugins", methods=["GET"])
+def list_plugins():
+    """Lists all registered plugins with their status, type, and health metrics."""
+    from aarkib.plugins import plugin_registry
+
+    plugins_data = [
+        {
+            "name": plugin.name,
+            "display_name": plugin.display_name or plugin.name.title(),
+            "type": plugin.plugin_type,
+            "description": plugin.description,
+            "enabled": plugin.enabled,
+            "health": plugin.check_health(),
+        }
+        for plugin in plugin_registry.get_all_plugins()
+    ]
+    return jsonify({"plugins": plugins_data})
+
+
 @api_bp.route("/jobs", methods=["GET"])
 def list_jobs():
     """List recent background tasks and their execution states."""
