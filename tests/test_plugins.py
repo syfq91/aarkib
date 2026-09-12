@@ -164,6 +164,21 @@ def test_subsonic_protocol_plugin():
     assert health["url_prefix"] == "/rest"
 
 
+def test_jellyfin_protocol_plugin():
+    from aarkib.plugins import JellyfinProtocolPlugin
+
+    plugin = JellyfinProtocolPlugin()
+    assert plugin.name == "jellyfin"
+    assert plugin.plugin_type == "protocol"
+    assert plugin.protocol_version == "10.9.11"
+    assert plugin.csrf_exempt is True
+    assert plugin.blueprint_options.get("url_prefix") == ""
+
+    health = plugin.check_health()
+    assert health["status"] == "ok"
+    assert health["protocol_version"] == "10.9.11"
+
+
 def test_eink_optimizer_plugin():
     from aarkib.plugins import EInkOptimizerPlugin
 
@@ -193,6 +208,7 @@ def test_api_plugins_endpoint(client):
     assert "audio" in plugin_names
     assert "opds" in plugin_names
     assert "subsonic" in plugin_names
+    assert "jellyfin" in plugin_names
     assert "eink_optimizer" in plugin_names
 
     opds_info = next(p for p in data["plugins"] if p["name"] == "opds")

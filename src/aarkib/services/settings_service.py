@@ -86,6 +86,14 @@ MANAGED_SETTINGS: dict[str, SettingDefinition] = {
         description="Enable Subsonic v1.16.1 compatible REST endpoints (/rest) for third-party mobile apps (Symfonium, DSub).",
         category="Protocols & Services",
     ),
+    "ENABLE_JELLYFIN": SettingDefinition(
+        key="ENABLE_JELLYFIN",
+        type=bool,
+        default=True,
+        display_name="Jellyfin Client API",
+        description="Enable Jellyfin REST endpoints for official and third-party Jellyfin client apps (Mobile, Android TV, Swiftfin, Findroid).",
+        category="Protocols & Services",
+    ),
     "ENABLE_EINK_OPTIMIZER": SettingDefinition(
         key="ENABLE_EINK_OPTIMIZER",
         type=bool,

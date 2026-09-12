@@ -7,6 +7,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OPDS](https://img.shields.io/badge/OPDS-1.2%20%7C%202.0%20%7C%20Progression-green.svg)](https://opds.io/)
 [![Subsonic](https://img.shields.io/badge/Subsonic-API%20Compatible-blue.svg)](http://www.subsonic.org/pages/api.jsp)
+[![Jellyfin](https://img.shields.io/badge/Jellyfin-Client%20Compatible-purple.svg)](https://jellyfin.org/)
 
 ---
 
@@ -20,6 +21,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
   - **E-Readers (OPDS)**: Connect KOReader, Moon+ Reader, Thorium, or Panels to browse, download, and synchronize reading positions across devices.
   - **E-Ink Optimization**: Automatic on-the-fly book optimization tailored for Kindle, Kobo, and e-ink displays (grayscale dithering and font stripping for faster page turns).
   - **Mobile Audio Apps (Subsonic)**: Stream music and audiobooks to native apps like Symfonium, DSub, Ultrasonic, and Plappa.
+  - **TV & Mobile Streaming Apps (Jellyfin)**: Connect official and third-party Jellyfin clients (Jellyfin Mobile for Android/iOS, Android TV, Swiftfin, Findroid, Jellyfin Media Player) to browse and stream movies, TV shows, and music.
 - 🎨 **Modern Web App & PWA**: Responsive interface with Dark, Light, and OLED themes. Installable on phones and tablets as a Progressive Web App.
 - 👥 **Multi-User**: Dedicated accounts for family members with individual reading progress, bookmarks, and viewing history.
 - 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, TMDB, and MusicBrainz, with a built-in metadata editor.
@@ -99,6 +101,13 @@ Add your Aarkib catalog URL in your reader app:
 Connect your favorite Subsonic-compatible mobile app:
 - **Server Address**: `http://<your-server-ip>:5000`
 - **Username & Password**: Your Aarkib user credentials
+
+### Jellyfin Client Apps (Android TV, Mobile, Swiftfin, Findroid, Desktop)
+
+Connect your favorite Jellyfin-compatible client app:
+- **Server Address / Host**: `http://<your-server-ip>:5000`
+- **Username & Password**: Your Aarkib user credentials
+- **Supported Clients**: Jellyfin Mobile (Android / iOS), Jellyfin Android TV, Swiftfin, Findroid, Jellyfin Media Player, Infuse
 
 ---
 

@@ -16,6 +16,7 @@ from aarkib.plugins.base import (
     plugin_registry,
 )
 from aarkib.plugins.book import BookMediaPlugin
+from aarkib.plugins.jellyfin import JellyfinProtocolPlugin
 from aarkib.plugins.opds import OPDSProtocolPlugin
 from aarkib.plugins.optimizer import EInkOptimizerPlugin
 from aarkib.plugins.podcast import PodcastMediaPlugin
@@ -57,6 +58,9 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
 
     if not plugin_registry.get_plugin("subsonic"):
         plugin_registry.register(SubsonicProtocolPlugin())
+
+    if not plugin_registry.get_plugin("jellyfin"):
+        plugin_registry.register(JellyfinProtocolPlugin())
 
     # Wire blueprints, lifecycle hooks, and CSRF exemptions if app is provided
     if app is not None:
@@ -102,5 +106,6 @@ __all__ = [
     "EInkOptimizerPlugin",
     "OPDSProtocolPlugin",
     "SubsonicProtocolPlugin",
+    "JellyfinProtocolPlugin",
     "init_plugins",
 ]

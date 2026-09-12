@@ -167,6 +167,12 @@ class Config:
         "yes",
         "on",
     )
+    ENABLE_JELLYFIN: bool = (os.getenv("AARKIB_ENABLE_JELLYFIN", "true")).lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
     ENABLE_EINK_OPTIMIZER: bool = (
         os.getenv("AARKIB_ENABLE_EINK_OPTIMIZER", "true")
     ).lower() in (
