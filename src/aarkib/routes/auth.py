@@ -248,23 +248,38 @@ def manage_users():
             db.session.add(new_user)
             db.session.commit()
             flash(f"User '{username}' created successfully.", "success")
+            referrer = request.referrer or ""
+            if "/settings" in referrer:
+                return redirect(url_for("ui.settings", category="users"))
             return redirect(url_for("auth.manage_users"))
 
     users_list = db.session.scalars(select(User).order_by(User.id.asc())).all()
-    return render_template("users.html", users=users_list)
+    return render_template(
+        "settings/users.html",
+        users=users_list,
+        active_category="users",
+        category_title="User Management",
+        is_admin=True,
+    )
 
 
 @auth_bp.route("/users/<int:user_id>/toggle-admin", methods=["POST"])
 @admin_required
 def toggle_admin(user_id: int):
     target_user = db.session.get(User, user_id)
+    referrer = request.referrer or ""
+    dest = (
+        url_for("ui.settings", category="users")
+        if "/settings" in referrer
+        else url_for("auth.manage_users")
+    )
     if not target_user:
         flash("User not found.", "error")
-        return redirect(url_for("auth.manage_users"))
+        return redirect(dest)
 
     if target_user.id == current_user.id:
         flash("You cannot change your own administrator status.", "error")
-        return redirect(url_for("auth.manage_users"))
+        return redirect(dest)
 
     target_user.is_admin = not target_user.is_admin
     db.session.commit()
@@ -272,16 +287,22 @@ def toggle_admin(user_id: int):
         f"Updated admin status for '{target_user.username}' to {target_user.is_admin}.",
         "success",
     )
-    return redirect(url_for("auth.manage_users"))
+    return redirect(dest)
 
 
 @auth_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @admin_required
 def reset_password(user_id: int):
     target_user = db.session.get(User, user_id)
+    referrer = request.referrer or ""
+    dest = (
+        url_for("ui.settings", category="users")
+        if "/settings" in referrer
+        else url_for("auth.manage_users")
+    )
     if not target_user:
         flash("User not found.", "error")
-        return redirect(url_for("auth.manage_users"))
+        return redirect(dest)
 
     new_password = request.form.get("new_password", "")
     if not new_password or len(new_password) < 4:
@@ -291,23 +312,29 @@ def reset_password(user_id: int):
         db.session.commit()
         flash(f"Reset password for '{target_user.username}'.", "success")
 
-    return redirect(url_for("auth.manage_users"))
+    return redirect(dest)
 
 
 @auth_bp.route("/users/<int:user_id>/delete", methods=["POST"])
 @admin_required
 def delete_user(user_id: int):
     target_user = db.session.get(User, user_id)
+    referrer = request.referrer or ""
+    dest = (
+        url_for("ui.settings", category="users")
+        if "/settings" in referrer
+        else url_for("auth.manage_users")
+    )
     if not target_user:
         flash("User not found.", "error")
-        return redirect(url_for("auth.manage_users"))
+        return redirect(dest)
 
     if target_user.id == current_user.id:
         flash("You cannot delete your own account while logged in.", "error")
-        return redirect(url_for("auth.manage_users"))
+        return redirect(dest)
 
     username = target_user.username
     db.session.delete(target_user)
     db.session.commit()
     flash(f"User '{username}' and their reading progress deleted.", "success")
-    return redirect(url_for("auth.manage_users"))
+    return redirect(dest)

@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
 
-  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <link rel="stylesheet" href="/static/css/app.css?v=3">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -135,7 +135,7 @@
       <span>📑</span>
       <span>Series</span>
     </a>
-    <a href="/settings" class="bottom-nav-item {{ 'active' if request.path == '/settings' }}">
+    <a href="/settings" class="bottom-nav-item {{ 'active' if request.path.startswith('/settings') }}">
       <span>⚙️</span>
       <span>Settings</span>
     </a>

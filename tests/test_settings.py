@@ -186,25 +186,78 @@ def test_api_settings_update_and_reset(client, app):
 
 
 def test_ui_settings_view_for_admin_and_reader(client, app):
-    # Reader viewing /settings should not see admin preferences
+    # Reader viewing /settings should see libraries and not admin preferences
     _login_reader(client, app)
     res_reader = client.get("/settings")
     assert res_reader.status_code == 200
     assert b"System & Library Preferences" not in res_reader.data
+    assert (
+        b"Media Folders &amp; Libraries" in res_reader.data
+        or b"Media Folders & Libraries" in res_reader.data
+    )
 
-    # Admin viewing /settings should see admin preferences form
+    # Reader attempting to access admin categories should be redirected
+    res_sys_denied = client.get("/settings/system")
+    assert res_sys_denied.status_code == 302
+    assert "/settings/libraries" in res_sys_denied.headers["Location"]
+
+    res_plug_denied = client.get("/settings/plugins")
+    assert res_plug_denied.status_code == 302
+
+    res_user_denied = client.get("/settings/users")
+    assert res_user_denied.status_code == 302
+
+    # Reader can access libraries and integrations
+    res_lib = client.get("/settings/libraries")
+    assert res_lib.status_code == 200
+
+    res_integ = client.get("/settings/integrations")
+    assert res_integ.status_code == 200
+    assert b"OPDS Catalog Feeds" in res_integ.data
+
+    # Admin viewing /settings and /settings/system should see system preferences form
     client.get("/auth/logout")
     _login_admin(client, app)
+
     res_admin = client.get("/settings")
     assert res_admin.status_code == 200
-    assert b"System & Library Preferences" in res_admin.data
+    assert (
+        b"System &amp; Library Preferences" in res_admin.data
+        or b"System & Library Preferences" in res_admin.data
+    )
     assert b"setting-AUTH_REQUIRED" in res_admin.data
     assert b"setting-PAGE_SIZE" in res_admin.data
-    assert b"Protocols & Services" in res_admin.data
-    assert b"Media Format Plugins" in res_admin.data
-    assert b"setting-ENABLE_OPDS" in res_admin.data
-    assert b"setting-ENABLE_SUBSONIC" in res_admin.data
-    assert b"setting-ENABLE_BOOKS" in res_admin.data
+
+    res_system = client.get("/settings/system")
+    assert res_system.status_code == 200
+    assert b"setting-AUTH_REQUIRED" in res_system.data
+
+    # Admin viewing /settings/plugins should see plugin cards and toggles
+    res_plugins = client.get("/settings/plugins")
+    assert res_plugins.status_code == 200
+    assert b"Media Format Plugins" in res_plugins.data
+    assert (
+        b"Protocols &amp; Streaming Services" in res_plugins.data
+        or b"Protocols & Streaming Services" in res_plugins.data
+    )
+    assert b"setting-ENABLE_OPDS" in res_plugins.data
+    assert b"setting-ENABLE_SUBSONIC" in res_plugins.data
+    assert b"setting-ENABLE_BOOKS" in res_plugins.data
+
+    # Admin viewing /settings/users should see user management
+    res_users = client.get("/settings/users")
+    assert res_users.status_code == 200
+    assert b"User Management" in res_users.data
+    assert b"Add New User" in res_users.data
+
+    # Admin viewing /settings/libraries
+    res_libraries = client.get("/settings/libraries")
+    assert res_libraries.status_code == 200
+    assert b"Library Tools" in res_libraries.data
+
+    # Invalid category returns 404
+    res_404 = client.get("/settings/non_existent_category")
+    assert res_404.status_code == 404
 
 
 def test_plugin_settings_sync_and_api(client, app):

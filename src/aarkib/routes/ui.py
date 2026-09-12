@@ -6,8 +6,11 @@ from flask import (
     Blueprint,
     abort,
     current_app,
+    flash,
+    redirect,
     render_template,
     send_from_directory,
+    url_for,
 )
 from flask_login import current_user
 from sqlalchemy import func, select
@@ -206,14 +209,38 @@ def tags():
     return render_template("tags.html", tags=tag_list)
 
 
+VALID_SETTINGS_CATEGORIES = {
+    "system": "System Preferences",
+    "libraries": "Media Folders & Libraries",
+    "plugins": "Plugin Registry & Extensions",
+    "users": "User Management",
+    "integrations": "Integrations & OPDS Feeds",
+}
+ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users"}
+
+
 @ui_bp.route("/settings")
+@ui_bp.route("/settings/<category>")
 @optional_or_required_auth
-def settings():
-    users = (
-        db.session.scalars(select(User).order_by(User.id.asc())).all()
-        if current_user.is_authenticated and current_user.is_admin
-        else []
-    )
+def settings(category: str | None = None):
+    is_admin = bool(current_user.is_authenticated and current_user.is_admin)
+
+    # Default category selection: admin defaults to system, reader to libraries
+    if not category:
+        category = "system" if is_admin else "libraries"
+
+    category = category.lower().strip()
+    if category not in VALID_SETTINGS_CATEGORIES:
+        abort(404, description=f"Settings category '{category}' not found")
+
+    # Role enforcement for admin-only categories
+    if category in ADMIN_ONLY_CATEGORIES and not is_admin:
+        flash(
+            "Administrator privileges required to access this settings category.",
+            "error",
+        )
+        return redirect(url_for("ui.settings", category="libraries"))
+
     from aarkib.services.scanner import get_library_definitions
 
     libraries = get_library_definitions(current_app)
@@ -223,13 +250,14 @@ def settings():
     author_count = db.session.scalar(select(func.count(Author.id))) or 0
     series_count = db.session.scalar(select(func.count(Series.id))) or 0
 
-    system_settings = None
-    plugins_info = None
-    if current_user.is_authenticated and current_user.is_admin:
-        from aarkib.plugins import plugin_registry
-        from aarkib.services.settings_service import get_effective_settings
+    from aarkib.services.settings_service import get_effective_settings
 
-        system_settings = get_effective_settings(current_app)
+    system_settings = get_effective_settings(current_app)
+
+    plugins_info = None
+    if is_admin:
+        from aarkib.plugins import plugin_registry
+
         plugins_info = [
             {
                 "name": p.name,
@@ -243,8 +271,19 @@ def settings():
             for p in plugin_registry.get_all_plugins()
         ]
 
+    users = (
+        db.session.scalars(select(User).order_by(User.id.asc())).all()
+        if is_admin
+        else []
+    )
+
+    category_title = VALID_SETTINGS_CATEGORIES[category]
+
     return render_template(
-        "settings.html",
+        f"settings/{category}.html",
+        active_category=category,
+        category_title=category_title,
+        is_admin=is_admin,
         users=users,
         libraries=libraries,
         library_dirs=library_dirs,

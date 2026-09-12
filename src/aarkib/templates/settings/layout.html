@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ category_title|default('Settings') }} - Aarkib{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <h2>Settings &amp; Preferences</h2>
+  <p style="color: var(--text-secondary); font-size: 0.9rem;">
+    Manage system configuration, media storage folders, plugins, user access, and client integrations.
+  </p>
+</div>
+
+<!-- Category Sub-Navigation Bar -->
+<nav class="settings-subnav" aria-label="Settings Categories">
+  {% if is_admin %}
+  <a href="/settings/system" class="settings-tab {{ 'active' if active_category == 'system' }}">
+    <span class="settings-tab-icon">⚙️</span>
+    <span>System</span>
+  </a>
+  {% endif %}
+  <a href="/settings/libraries" class="settings-tab {{ 'active' if active_category == 'libraries' }}">
+    <span class="settings-tab-icon">📁</span>
+    <span>Libraries</span>
+  </a>
+  {% if is_admin %}
+  <a href="/settings/plugins" class="settings-tab {{ 'active' if active_category == 'plugins' }}">
+    <span class="settings-tab-icon">🧩</span>
+    <span>Plugins</span>
+  </a>
+  <a href="/settings/users" class="settings-tab {{ 'active' if active_category == 'users' }}">
+    <span class="settings-tab-icon">👥</span>
+    <span>Users</span>
+  </a>
+  {% endif %}
+  <a href="/settings/integrations" class="settings-tab {{ 'active' if active_category == 'integrations' }}">
+    <span class="settings-tab-icon">📡</span>
+    <span>Integrations</span>
+  </a>
+</nav>
+
+{% block settings_content %}{% endblock %}
+{% endblock %}

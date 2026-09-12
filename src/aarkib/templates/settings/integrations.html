@@ -1,0 +1,145 @@
+{% extends "settings/layout.html" %}
+
+{% block settings_content %}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+
+  <!-- OPDS Feed Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📡</span> OPDS Catalog Feeds
+        {% if system_settings and not system_settings.settings.ENABLE_OPDS.value %}
+          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; margin-left: auto;">Inactive (Disabled)</span>
+        {% else %}
+          <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.75rem; margin-left: auto;">🟢 Active</span>
+        {% endif %}
+      </h3>
+      {% if system_settings and not system_settings.settings.ENABLE_OPDS.value %}
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #ef4444;">
+          ⚠️ OPDS feeds are currently disabled in <strong>Plugins</strong> settings. Feeds will return 404 until re-enabled by an administrator.
+        </div>
+      {% endif %}
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Add these URLs to any OPDS e-reader (KOReader, Xteink, Moon+ Reader, Thorium, Panels) to browse and download books:
+      </p>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Standard OPDS 1.2 Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" id="opds-url-input" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X4 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x4" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x4')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Xteink X3 Optimized Feed (Auto-Convert)</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/x3" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/x3')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">⚡ Kindle / Kobo / Generic E-Ink Feed</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/opds/eink" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/opds/eink')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      💡 Optimized feeds automatically strip fonts, convert images to grayscale e-ink format, and compress EPUBs on demand!
+    </div>
+  </div>
+
+  <!-- Subsonic Mobile Streaming API Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📻</span> Subsonic Mobile Streaming API
+        {% if system_settings and not system_settings.settings.ENABLE_SUBSONIC.value %}
+          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; margin-left: auto;">Inactive (Disabled)</span>
+        {% else %}
+          <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.75rem; margin-left: auto;">🟢 Active</span>
+        {% endif %}
+      </h3>
+      {% if system_settings and not system_settings.settings.ENABLE_SUBSONIC.value %}
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #ef4444;">
+          ⚠️ Subsonic endpoints are currently disabled in <strong>Plugins</strong> settings. Requests to <code>/rest</code> will return 404 until re-enabled.
+        </div>
+      {% endif %}
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Connect mobile music and audio player apps (Symfonium, DSub, Ultrasonic, Audinaut) to your audio library using the OpenSubsonic standard:
+      </p>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Server URL / Base Address</label>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <input type="text" id="subsonic-url-input" class="input-text" readonly value="{{ request.host_url.rstrip('/') }}/rest" style="font-family: monospace; font-size: 0.8rem; flex: 1;">
+          <button class="btn btn-secondary" onclick="copyText('{{ request.host_url.rstrip('/') }}/rest')" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Authentication Instructions:</div>
+        <div>• <strong>Username:</strong> Your Aarkib account username</div>
+        <div>• <strong>Password:</strong> Your Aarkib account password</div>
+        <div>• <strong>Protocol:</strong> REST API v1.16.1 compatible</div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      🎧 Supports playlists, streaming transcodes, and offline music syncing in mobile apps!
+    </div>
+  </div>
+
+  <!-- E-Ink Device Optimization Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>⚡</span> E-Ink Device Optimizer
+        {% if system_settings and not system_settings.settings.ENABLE_EINK_OPTIMIZER.value %}
+          <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; margin-left: auto;">Inactive</span>
+        {% else %}
+          <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.75rem; margin-left: auto;">🟢 Active</span>
+        {% endif %}
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        On-demand hardware adaptation engine for e-paper readers (Kindle, Kobo, Xteink, Boox).
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">Font Stripping:</strong> Removes embedded web fonts so e-readers can use their optimized native screen fonts.
+        </div>
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">16-Level Grayscale:</strong> Dithers heavy color illustrations to fast-refreshing monochrome e-ink depth.
+        </div>
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">Download Options:</strong> Available on every book detail page via the split-button download menu.
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      📖 Optimized files are cached under <code>data/optimized/</code> for instantaneous subsequent downloads.
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyText(text) {
+  navigator.clipboard.writeText(text);
+  showToast("URL copied to clipboard!", "success");
+}
+</script>
+{% endblock %}

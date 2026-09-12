@@ -187,6 +187,12 @@ def test_settings_page_displays_multiple_directories(tmp_path):
     assert str(dir1).encode() in res.data
     assert str(dir2).encode() in res.data
 
+    res_lib = client.get("/settings/libraries")
+    assert res_lib.status_code == 200
+    assert b"Library Storage (2 folders):" in res_lib.data
+    assert str(dir1).encode() in res_lib.data
+    assert str(dir2).encode() in res_lib.data
+
 
 def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_epub):
     from pathlib import Path
