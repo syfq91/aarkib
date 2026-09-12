@@ -15,6 +15,7 @@ class BookMediaPlugin(MediaPlugin):
 
     name = "books"
     media_type = "book"
+    supported_media_types: ClassVar[set[str]] = {"book", "comic"}
     supported_extensions: ClassVar[set[str]] = {".epub", ".cbz", ".zip", ".cbr"}
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:

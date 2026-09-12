@@ -279,9 +279,7 @@ def test_jellyfin_catalog_and_items(app, client, tmp_path):
 
     # Filter by ParentId (Movies library)
     vid_lib_hex = to_jellyfin_id(ids["video_lib_id"])
-    resp_vid_items = client.get(
-        f"/Items?ParentId={vid_lib_hex}", headers=headers
-    )
+    resp_vid_items = client.get(f"/Items?ParentId={vid_lib_hex}", headers=headers)
     assert resp_vid_items.status_code == 200
     vid_data = resp_vid_items.get_json()
     titles = [i["Name"] for i in vid_data["Items"]]
@@ -313,15 +311,11 @@ def test_jellyfin_catalog_and_items(app, client, tmp_path):
 
     # Series Seasons and Episodes
     series_hex = to_jellyfin_id(ids["tv_col_id"])
-    resp_seasons = client.get(
-        f"/Shows/{series_hex}/Seasons", headers=headers
-    )
+    resp_seasons = client.get(f"/Shows/{series_hex}/Seasons", headers=headers)
     assert resp_seasons.status_code == 200
     assert resp_seasons.get_json()["TotalRecordCount"] == 1
 
-    resp_series_eps = client.get(
-        f"/Shows/{series_hex}/Episodes", headers=headers
-    )
+    resp_series_eps = client.get(f"/Shows/{series_hex}/Episodes", headers=headers)
     assert resp_series_eps.status_code == 200
     assert resp_series_eps.get_json()["TotalRecordCount"] == 1
     assert resp_series_eps.get_json()["Items"][0]["Name"] == "Pilot"
@@ -393,9 +387,7 @@ def test_jellyfin_progress_scrobbling_and_played(app, client, tmp_path):
     assert resp_prog.status_code == 204
 
     # Check Resume list
-    resp_resume = client.get(
-        f"/Users/{user_hex}/Items/Resume", headers=headers
-    )
+    resp_resume = client.get(f"/Users/{user_hex}/Items/Resume", headers=headers)
     assert resp_resume.status_code == 200
     res_items = resp_resume.get_json()["Items"]
     assert len(res_items) >= 1

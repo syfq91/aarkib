@@ -16,6 +16,7 @@ class VideoMediaPlugin(MediaPlugin):
 
     name = "video"
     media_type = "video"
+    supported_media_types: ClassVar[set[str]] = {"video", "movie", "tv"}
     supported_extensions: ClassVar[set[str]] = {
         ".mp4",
         ".mkv",
@@ -57,3 +58,17 @@ class VideoMediaPlugin(MediaPlugin):
             "ffmpeg_available": bool(shutil.which("ffmpeg")),
             "ffprobe_available": bool(shutil.which("ffprobe")),
         }
+
+
+class MovieMediaPlugin(VideoMediaPlugin):
+    """Built-in media plugin for movies (MP4, MKV, WEBM, AVI, MOV, M4V)."""
+
+    name = "movie"
+    media_type = "movie"
+
+
+class TVMediaPlugin(VideoMediaPlugin):
+    """Built-in media plugin for TV shows and series (MP4, MKV, WEBM, AVI, MOV, M4V)."""
+
+    name = "tv"
+    media_type = "tv"

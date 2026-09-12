@@ -78,7 +78,7 @@
         <span>📁</span> Media Folders &amp; Libraries
       </h3>
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
-        Manage media directories and select the content type (books, comics/manga, movies/TV shows, or mixed auto-detect).
+        Manage media directories and select the content type (books, movies, TV shows, audiobooks, music tracks, or podcasts).
       </p>
     </div>
     {% if current_user.is_authenticated and current_user.is_admin %}
@@ -109,13 +109,12 @@
       <div>
         <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Media Type</label>
         <select id="new-folder-type" class="input-text" style="width: 100%;">
-          <option value="all">📁 Mixed / Auto-detect</option>
-          <option value="book">📚 Books Only</option>
-          <option value="comic">🎨 Comics &amp; Manga</option>
-          <option value="video">🎬 Movies &amp; TV Shows</option>
+          <option value="book">📚 Books</option>
+          <option value="movie">🎬 Movies</option>
+          <option value="tv">📺 TV Shows</option>
           <option value="audiobook">🎧 Audiobooks</option>
           <option value="music">🎵 Music Tracks</option>
-          <option value="audio">🔊 All Audio</option>
+          <option value="podcast">🎙️ Podcasts</option>
         </select>
       </div>
       <div style="display: flex; gap: 0.35rem;">
@@ -152,13 +151,12 @@
           <td style="padding: 0.75rem 1rem;">
             {% if current_user.is_authenticated and current_user.is_admin %}
             <select class="input-text" style="padding: 0.25rem 0.5rem; font-size: 0.85rem; width: auto;" onchange="updateLibraryMediaType('{{ lib.id }}', this.value, this)">
-              <option value="all" {% if lib.media_type == 'all' %}selected{% endif %}>📁 Mixed / Auto-detect</option>
-              <option value="book" {% if lib.media_type == 'book' %}selected{% endif %}>📚 Books Only</option>
-              <option value="comic" {% if lib.media_type == 'comic' %}selected{% endif %}>🎨 Comics &amp; Manga</option>
-              <option value="video" {% if lib.media_type == 'video' %}selected{% endif %}>🎬 Movies &amp; TV Shows</option>
+              <option value="book" {% if lib.media_type in ('book', 'comic') %}selected{% endif %}>📚 Books</option>
+              <option value="movie" {% if lib.media_type in ('movie', 'video') %}selected{% endif %}>🎬 Movies</option>
+              <option value="tv" {% if lib.media_type == 'tv' %}selected{% endif %}>📺 TV Shows</option>
               <option value="audiobook" {% if lib.media_type == 'audiobook' %}selected{% endif %}>🎧 Audiobooks</option>
-              <option value="music" {% if lib.media_type == 'music' %}selected{% endif %}>🎵 Music Tracks</option>
-              <option value="audio" {% if lib.media_type == 'audio' %}selected{% endif %}>🔊 All Audio</option>
+              <option value="music" {% if lib.media_type in ('music', 'audio') %}selected{% endif %}>🎵 Music Tracks</option>
+              <option value="podcast" {% if lib.media_type == 'podcast' %}selected{% endif %}>🎙️ Podcasts</option>
             </select>
             {% else %}
             <span style="font-size: 0.85rem; color: var(--accent); text-transform: uppercase;">{{ lib.media_type }}</span>
@@ -248,13 +246,12 @@
       <div style="margin-bottom: 1.25rem;">
         <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Media Type</label>
         <select id="edit-lib-type" class="input-text" style="width: 100%;">
-          <option value="all">📁 Mixed / Auto-detect</option>
-          <option value="book">📚 Books Only</option>
-          <option value="comic">🎨 Comics &amp; Manga</option>
-          <option value="video">🎬 Movies &amp; TV Shows</option>
+          <option value="book">📚 Books</option>
+          <option value="movie">🎬 Movies</option>
+          <option value="tv">📺 TV Shows</option>
           <option value="audiobook">🎧 Audiobooks</option>
           <option value="music">🎵 Music Tracks</option>
-          <option value="audio">🔊 All Audio</option>
+          <option value="podcast">🎙️ Podcasts</option>
         </select>
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
@@ -712,7 +709,11 @@ function openEditLibraryModal(libId, libName, libPath, libType) {
   document.getElementById("edit-lib-id").value = libId;
   document.getElementById("edit-lib-name").value = libName;
   document.getElementById("edit-lib-path").value = libPath;
-  document.getElementById("edit-lib-type").value = libType;
+  let normalizedType = libType;
+  if (libType === "comic") normalizedType = "book";
+  else if (libType === "video") normalizedType = "movie";
+  else if (libType === "audio" || libType === "all") normalizedType = "book";
+  document.getElementById("edit-lib-type").value = normalizedType;
   modal.style.display = "flex";
 }
 

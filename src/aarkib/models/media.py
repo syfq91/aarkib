@@ -16,6 +16,8 @@ class MediaType(StrEnum):
     COMIC = "comic"
     AUDIO = "audio"
     VIDEO = "video"
+    MOVIE = "movie"
+    TV = "tv"
     AUDIOBOOK = "audiobook"
     MUSIC = "music"
     PODCAST = "podcast"
@@ -74,6 +76,8 @@ class MediaItemMixin:
     @property
     def is_book(self) -> bool:
         """Check if this item is a text book."""
+        if self.media_type == MediaType.BOOK.value:
+            return not self.is_comic
         if self.media_type:
             return self.media_type == MediaType.BOOK.value
         return (self.file_format or "").lower() not in ("cbz", "cbr", "zip")
@@ -81,8 +85,8 @@ class MediaItemMixin:
     @property
     def is_comic(self) -> bool:
         """Check if this item is a comic book or graphic novel."""
-        if self.media_type:
-            return self.media_type == MediaType.COMIC.value
+        if self.media_type == MediaType.COMIC.value:
+            return True
         return (self.file_format or "").lower() in ("cbz", "cbr", "zip")
 
     @property
@@ -129,8 +133,31 @@ class MediaItemMixin:
 
     @property
     def is_video(self) -> bool:
-        """Check if this item is a video or movie."""
-        return self.media_type == MediaType.VIDEO.value
+        """Check if this item is a video, movie, or TV show."""
+        if self.media_type:
+            return self.media_type in (
+                MediaType.VIDEO.value,
+                MediaType.MOVIE.value,
+                MediaType.TV.value,
+            )
+        return (self.file_format or "").lower() in (
+            "mp4",
+            "mkv",
+            "webm",
+            "avi",
+            "mov",
+            "m4v",
+        )
+
+    @property
+    def is_movie(self) -> bool:
+        """Check if this item is specifically a movie."""
+        return self.media_type in (MediaType.MOVIE.value, "movie")
+
+    @property
+    def is_tv(self) -> bool:
+        """Check if this item is specifically a TV show episode."""
+        return self.media_type in (MediaType.TV.value, "tv")
 
     @property
     def formatted_file_size(self) -> str:

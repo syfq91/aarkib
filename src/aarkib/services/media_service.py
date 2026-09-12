@@ -20,7 +20,18 @@ AUDIO_EXTENSIONS = AUDIOBOOK_EXTENSIONS | MUSIC_EXTENSIONS
 VIDEO_EXTENSIONS = frozenset({"mp4", "mkv", "webm", "avi", "mov", "m4v"})
 BOOK_EXTENSIONS = frozenset({"epub", "cbz", "cbr", "zip", "pdf", "mobi", "azw3"})
 MEDIA_TYPE_CHOICES = frozenset(
-    {"all", "book", "comic", "video", "audio", "audiobook", "music", "podcast"}
+    {
+        "all",
+        "book",
+        "comic",
+        "video",
+        "movie",
+        "tv",
+        "audio",
+        "audiobook",
+        "music",
+        "podcast",
+    }
 )
 
 MAX_TITLE_LENGTH = 500

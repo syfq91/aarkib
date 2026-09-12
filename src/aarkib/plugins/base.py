@@ -53,6 +53,7 @@ class MediaPlugin(BasePlugin, ABC):
 
     plugin_type: str = "media"
     media_type: str = ""
+    supported_media_types: ClassVar[set[str]] = set()
     supported_extensions: ClassVar[set[str]] = set()
 
     @abstractmethod
@@ -145,6 +146,8 @@ class PluginRegistry:
         if isinstance(plugin, MediaPlugin):
             if plugin.media_type:
                 self._media_type_map[plugin.media_type] = plugin
+            for mt in getattr(plugin, "supported_media_types", set()):
+                self._media_type_map[mt] = plugin
             for ext in plugin.supported_extensions:
                 norm_ext = ext.lower() if ext.startswith(".") else f".{ext.lower()}"
                 self._ext_map[norm_ext] = plugin
@@ -162,7 +165,9 @@ class PluginRegistry:
         plugin = self._plugins.pop(plugin_name, None)
         if plugin:
             if isinstance(plugin, MediaPlugin):
-                self._media_type_map.pop(plugin.media_type, None)
+                self._media_type_map = {
+                    k: v for k, v in self._media_type_map.items() if v != plugin
+                }
                 self._ext_map = {k: v for k, v in self._ext_map.items() if v != plugin}
                 for ext in plugin.supported_extensions:
                     norm = ext.lower().lstrip(".")

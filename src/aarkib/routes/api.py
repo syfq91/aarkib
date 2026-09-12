@@ -214,6 +214,27 @@ def list_media():
             query = query.filter(
                 MediaItem.media_type.in_(["audio", "audiobook", "music", "podcast"])
             )
+        elif media_type == "book":
+            query = query.filter(MediaItem.media_type.in_(["book", "comic"]))
+        elif media_type == "movie":
+            query = query.filter(
+                or_(
+                    MediaItem.media_type == "movie",
+                    (MediaItem.media_type == "video")
+                    & MediaItem.season.is_(None)
+                    & MediaItem.episode.is_(None),
+                )
+            )
+        elif media_type == "tv":
+            query = query.filter(
+                or_(
+                    MediaItem.media_type == "tv",
+                    (MediaItem.media_type == "video")
+                    & (MediaItem.season.is_not(None) | MediaItem.episode.is_not(None)),
+                )
+            )
+        elif media_type == "video":
+            query = query.filter(MediaItem.media_type.in_(["video", "movie", "tv"]))
         else:
             query = query.filter(MediaItem.media_type == media_type)
     if library_filter:
@@ -577,7 +598,14 @@ def update_library(identifier: str):
                     if b.file_format in ("cbz", "cbr", "zip"):
                         b.media_type = "comic"
                     elif b.file_format in VIDEO_EXTENSIONS:
-                        b.media_type = "video"
+                        b.media_type = (
+                            "tv"
+                            if (
+                                getattr(b, "season", None) is not None
+                                or getattr(b, "episode", None) is not None
+                            )
+                            else "movie"
+                        )
                     elif b.file_format == "m4b" or (
                         hasattr(b, "chapters") and b.chapters
                     ):

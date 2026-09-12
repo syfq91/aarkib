@@ -317,3 +317,132 @@ def test_api_browse_directories(client, app, tmp_path):
     # Hidden folders and files should be excluded
     assert ".hidden_folder" not in dir_names
     assert "file.txt" not in dir_names
+
+
+def test_library_media_types_movie_tv_podcast_and_books(
+    client, app, tmp_path, sample_epub, sample_cbz
+):
+    import shutil
+
+    _login_admin(client, app)
+
+    # 1. Movie library
+    movie_dir = tmp_path / "movies"
+    movie_dir.mkdir()
+    fake_movie = movie_dir / "Inception (2010).mp4"
+    fake_movie.write_bytes(b"dummy movie data")
+
+    add_res = client.post(
+        "/api/libraries",
+        json={
+            "path": str(movie_dir),
+            "name": "Feature Films",
+            "media_type": "movie",
+        },
+    )
+    assert add_res.status_code == 201
+    movie_lib_id = add_res.get_json()["library"]["id"]
+
+    # Verify item has media_type="movie"
+    media_res = client.get(f"/api/media?library={movie_lib_id}")
+    assert media_res.status_code == 200
+    items = media_res.get_json()["items"]
+    assert len(items) == 1
+    assert items[0]["media_type"] == "movie"
+
+    # Query with media_type=movie
+    res_m = client.get("/api/media?media_type=movie")
+    assert res_m.status_code == 200
+    assert any(i["id"] == items[0]["id"] for i in res_m.get_json()["items"])
+
+    # 2. TV library
+    tv_dir = tmp_path / "tv_shows"
+    tv_dir.mkdir()
+    fake_tv = tv_dir / "Breaking Bad S01E01.mp4"
+    fake_tv.write_bytes(b"dummy tv data")
+
+    add_tv_res = client.post(
+        "/api/libraries",
+        json={
+            "path": str(tv_dir),
+            "name": "TV Shows",
+            "media_type": "tv",
+        },
+    )
+    assert add_tv_res.status_code == 201
+    tv_lib_id = add_tv_res.get_json()["library"]["id"]
+
+    media_tv_res = client.get(f"/api/media?library={tv_lib_id}")
+    assert media_tv_res.status_code == 200
+    tv_items = media_tv_res.get_json()["items"]
+    assert len(tv_items) == 1
+    assert tv_items[0]["media_type"] == "tv"
+
+    # Query with media_type=tv
+    res_tv = client.get("/api/media?media_type=tv")
+    assert res_tv.status_code == 200
+    assert any(i["id"] == tv_items[0]["id"] for i in res_tv.get_json()["items"])
+
+    # 3. Podcast library
+    pod_dir = tmp_path / "podcasts"
+    pod_dir.mkdir()
+    fake_pod = pod_dir / "Episode 1.mp3"
+    fake_pod.write_bytes(b"dummy pod data")
+
+    add_pod_res = client.post(
+        "/api/libraries",
+        json={
+            "path": str(pod_dir),
+            "name": "Tech Podcasts",
+            "media_type": "podcast",
+        },
+    )
+    assert add_pod_res.status_code == 201
+    pod_lib_id = add_pod_res.get_json()["library"]["id"]
+
+    media_pod_res = client.get(f"/api/media?library={pod_lib_id}")
+    assert media_pod_res.status_code == 200
+    pod_items = media_pod_res.get_json()["items"]
+    assert len(pod_items) == 1
+    assert pod_items[0]["media_type"] == "podcast"
+
+    # 4. Books library with both EPUB and CBZ
+    books_dir = tmp_path / "unified_books"
+    books_dir.mkdir()
+    shutil.copy(sample_epub, books_dir / "novel.epub")
+    shutil.copy(sample_cbz, books_dir / "comic.cbz")
+
+    add_books_res = client.post(
+        "/api/libraries",
+        json={
+            "path": str(books_dir),
+            "name": "My Bookshelf",
+            "media_type": "book",
+        },
+    )
+    assert add_books_res.status_code == 201
+    book_lib_id = add_books_res.get_json()["library"]["id"]
+
+    media_book_res = client.get(f"/api/media?library={book_lib_id}")
+    assert media_book_res.status_code == 200
+    book_items = media_book_res.get_json()["items"]
+    assert len(book_items) == 2
+
+    # Query with media_type=book should return both
+    res_book = client.get("/api/media?media_type=book")
+    assert res_book.status_code == 200
+    retrieved_ids = {i["id"] for i in res_book.get_json()["items"]}
+    for bi in book_items:
+        assert bi["id"] in retrieved_ids
+
+    # Verify CBZ item opens CBZ reader
+    cbz_item = next(i for i in book_items if i["file_format"] == "cbz")
+    with app.app_context():
+        from aarkib.extensions import db
+        from aarkib.models import MediaItem
+
+        cbz_model = db.session.get(MediaItem, cbz_item["id"])
+        assert cbz_model.is_comic is True
+        assert cbz_model.is_book is False
+        assert "/reader/cbz/" in cbz_model.player_url
+

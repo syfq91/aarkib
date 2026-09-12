@@ -26,7 +26,7 @@ class TMDBProvider(MetadataProvider):
     """Metadata provider connecting to The Movie Database (TMDB) API."""
 
     name = "tmdb"
-    supported_media_types: ClassVar[set[str]] = {"video", "all"}
+    supported_media_types: ClassVar[set[str]] = {"video", "movie", "tv", "all"}
 
     def __init__(
         self,
@@ -65,17 +65,11 @@ class TMDBProvider(MetadataProvider):
         media_type: str = "video",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
-        _ = media_type
-        if not query or not query.strip():
+        if not query:
             return []
 
-        api_key = self._get_api_key()
-        if not api_key:
-            logger.debug("TMDB API key not configured. Skipping TMDB search.")
-            return []
-
-        clean_query = query.strip()
         auth_headers, auth_params = self._build_auth()
+        clean_query = query.strip()
 
         # Extract season/episode hints if present in query e.g. "Breaking Bad S01E02"
         tv_match = re.search(r"\bS(\d{1,2})E(\d{1,2})\b", clean_query, re.IGNORECASE)
@@ -90,15 +84,19 @@ class TMDBProvider(MetadataProvider):
         results: list[MetadataSearchResult] = []
 
         # 1. Search Movies
-        movie_params = dict(auth_params)
-        movie_params["query"] = search_query
-        if year:
-            movie_params["year"] = str(year)[:4]
-        movie_data = self.client.get_json(
-            f"{TMDB_API_BASE}/search/movie",
-            params=movie_params,
-            headers=auth_headers,
-        )
+        movie_data = None
+        if media_type in ("movie", "video", "all") and not (
+            tv_match and media_type == "tv"
+        ):
+            movie_params = dict(auth_params)
+            movie_params["query"] = search_query
+            if year:
+                movie_params["year"] = str(year)[:4]
+            movie_data = self.client.get_json(
+                f"{TMDB_API_BASE}/search/movie",
+                params=movie_params,
+                headers=auth_headers,
+            )
         if isinstance(movie_data, dict):
             for m in movie_data.get("results", [])[:8]:
                 m_id = str(m.get("id"))
@@ -135,15 +133,16 @@ class TMDBProvider(MetadataProvider):
                 )
 
         # 2. Search TV Shows
-        tv_params = dict(auth_params)
-        tv_params["query"] = search_query
-        if year:
-            tv_params["first_air_date_year"] = str(year)[:4]
-        tv_data = self.client.get_json(
-            f"{TMDB_API_BASE}/search/tv",
-            params=tv_params,
-            headers=auth_headers,
-        )
+        if media_type in ("tv", "video", "all") or tv_match:
+            tv_params = dict(auth_params)
+            tv_params["query"] = search_query
+            if year:
+                tv_params["first_air_date_year"] = str(year)[:4]
+            tv_data = self.client.get_json(
+                f"{TMDB_API_BASE}/search/tv",
+                params=tv_params,
+                headers=auth_headers,
+            )
         if isinstance(tv_data, dict):
             for t in tv_data.get("results", [])[:8]:
                 t_id = str(t.get("id"))

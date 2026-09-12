@@ -247,9 +247,7 @@ def _format_user(user: User) -> dict[str, Any]:
         "HasConfiguredPassword": user.has_password,
         "HasConfiguredEasyPassword": False,
         "EnableAutoLogin": True,
-        "LastLoginDate": (
-            user.created_at.isoformat() if user.created_at else None
-        ),
+        "LastLoginDate": (user.created_at.isoformat() if user.created_at else None),
         "LastActivityDate": None,
         "Configuration": {
             "PlayDefaultAudioTrack": True,
@@ -273,7 +271,7 @@ def _format_view(lib: Library) -> dict[str, Any]:
     """Formats an Aarkib Library into a Jellyfin CollectionFolder view."""
     server_id = get_server_id()
     col_type = "mixed"
-    if lib.media_type in ("video", "movies"):
+    if lib.media_type in ("video", "movies", "movie"):
         col_type = "movies"
     elif lib.media_type in ("tv", "series", "shows"):
         col_type = "tvshows"
@@ -338,9 +336,7 @@ def _format_media_streams(item: MediaItem) -> list[dict[str, Any]]:
     return streams
 
 
-def _format_item(
-    item: MediaItem, user_id: int | None = None
-) -> dict[str, Any]:
+def _format_item(item: MediaItem, user_id: int | None = None) -> dict[str, Any]:
     """Formats an Aarkib MediaItem into a standard Jellyfin BaseItemDto."""
     server_id = get_server_id()
     run_time_ticks = int((item.duration or 0) * 10_000_000)
@@ -348,12 +344,12 @@ def _format_item(
     if item.release_year:
         try:
             year = int(item.release_year[:4])
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     elif item.publication_date:
         try:
             year = int(item.publication_date[:4])
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
     # Type resolution
@@ -382,14 +378,12 @@ def _format_item(
         "IsFavorite": False,
     }
     if user_id:
-        prog = next(
-            (p for p in item.progress_records if p.user_id == user_id), None
-        )
+        prog = next((p for p in item.progress_records if p.user_id == user_id), None)
         if prog:
             pos_sec = 0.0
             try:
                 pos_sec = float(prog.progress_location)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
             user_data["PlaybackPositionTicks"] = int(pos_sec * 10_000_000)
             user_data["Played"] = prog.is_completed
@@ -499,16 +493,10 @@ def get_system_info(user: User | None = None):
             "LocalAddress": request.host_url.rstrip("/"),
             "CanSelfRestart": False,
             "CanLaunchWebBrowser": False,
-            "ProgramDataPath": str(
-                current_app.config.get("DATA_DIR", "/app/data")
-            ),
+            "ProgramDataPath": str(current_app.config.get("DATA_DIR", "/app/data")),
             "WebPath": "/web",
-            "ItemsByNamePath": str(
-                current_app.config.get("DATA_DIR", "/app/data")
-            ),
-            "TranscodingTempPath": str(
-                current_app.config.get("TRANSCODE_DIR", "/tmp")
-            ),
+            "ItemsByNamePath": str(current_app.config.get("DATA_DIR", "/app/data")),
+            "TranscodingTempPath": str(current_app.config.get("TRANSCODE_DIR", "/tmp")),
             "HasUpdateAvailable": False,
             "SupportsLibraryMonitor": True,
             "EncoderLocationType": "System",
@@ -699,7 +687,7 @@ def get_items(user_id: str | None = None, user: User | None = None):
         if "video" in mtypes:
             conditions.append(
                 or_(
-                    MediaItem.media_type.in_(["video", "movie"]),
+                    MediaItem.media_type.in_(["video", "movie", "tv"]),
                     MediaItem.file_format.in_(VIDEO_EXTENSIONS),
                 )
             )
@@ -713,9 +701,7 @@ def get_items(user_id: str | None = None, user: User | None = None):
                 )
             )
         if "book" in mtypes:
-            conditions.append(
-                MediaItem.media_type.in_(["book", "comic", "all"])
-            )
+            conditions.append(MediaItem.media_type.in_(["book", "comic", "all"]))
         if conditions:
             query = query.where(or_(*conditions))
 
@@ -730,7 +716,7 @@ def get_items(user_id: str | None = None, user: User | None = None):
             )
         if "episode" in itypes:
             conditions.append(
-                MediaItem.media_type.in_(["video", "movie"])
+                MediaItem.media_type.in_(["video", "tv", "movie"])
                 & MediaItem.season.is_not(None)
                 & MediaItem.episode.is_not(None)
             )
@@ -744,9 +730,7 @@ def get_items(user_id: str | None = None, user: User | None = None):
                 )
             )
         if "book" in itypes:
-            conditions.append(
-                MediaItem.media_type.in_(["book", "comic", "all"])
-            )
+            conditions.append(MediaItem.media_type.in_(["book", "comic", "all"]))
         if conditions:
             query = query.where(or_(*conditions))
 
@@ -842,9 +826,7 @@ def get_latest_items(user_id: str, user: User | None = None):
 @jellyfin_bp.route("/Users/<user_id>/Items/<item_id>", methods=["GET"])
 @jellyfin_bp.route("/users/<user_id>/items/<item_id>", methods=["GET"])
 @jellyfin_auth
-def get_item_detail(
-    item_id: str, user_id: str | None = None, user: User | None = None
-):
+def get_item_detail(item_id: str, user_id: str | None = None, user: User | None = None):
     """Returns full item metadata for an individual item."""
     db_id = from_jellyfin_id(item_id)
     if not db_id:
@@ -888,9 +870,7 @@ def get_seasons(series_id: str, user: User | None = None):
     if not col:
         return jsonify({"Items": [], "TotalRecordCount": 0})
 
-    season_numbers = sorted(
-        {m.season for m in col.media_items if m.season is not None}
-    )
+    season_numbers = sorted({m.season for m in col.media_items if m.season is not None})
     if not season_numbers:
         season_numbers = [1]
 
@@ -976,9 +956,7 @@ def get_genres(user: User | None = None):
     """Returns media genres."""
     server_id = get_server_id()
     genres_res = db.session.scalars(
-        select(MediaItem.genre)
-        .where(MediaItem.genre.is_not(None))
-        .distinct()
+        select(MediaItem.genre).where(MediaItem.genre.is_not(None)).distinct()
     ).all()
     items = [
         {
@@ -1004,8 +982,12 @@ def get_genres(user: User | None = None):
 @jellyfin_bp.route("/items/<item_id>/images/primary/<int:image_index>", methods=["GET"])
 @jellyfin_bp.route("/Items/<item_id>/Images/Backdrop", methods=["GET"])
 @jellyfin_bp.route("/items/<item_id>/images/backdrop", methods=["GET"])
-@jellyfin_bp.route("/Items/<item_id>/Images/Backdrop/<int:image_index>", methods=["GET"])
-@jellyfin_bp.route("/items/<item_id>/images/backdrop/<int:image_index>", methods=["GET"])
+@jellyfin_bp.route(
+    "/Items/<item_id>/Images/Backdrop/<int:image_index>", methods=["GET"]
+)
+@jellyfin_bp.route(
+    "/items/<item_id>/images/backdrop/<int:image_index>", methods=["GET"]
+)
 @jellyfin_bp.route("/Items/<item_id>/Images/Thumb", methods=["GET"])
 @jellyfin_bp.route("/items/<item_id>/images/thumb", methods=["GET"])
 def get_item_image(item_id: str, image_index: int = 0):
@@ -1016,9 +998,7 @@ def get_item_image(item_id: str, image_index: int = 0):
 
     item = db.session.get(MediaItem, db_id)
     if item and item.cover_image_path:
-        covers_dir = Path(
-            current_app.config.get("COVERS_DIR", "data/covers")
-        ).resolve()
+        covers_dir = Path(current_app.config.get("COVERS_DIR", "data/covers")).resolve()
         cover_file = (covers_dir / item.cover_image_path).resolve()
         if cover_file.is_file() and cover_file.is_relative_to(covers_dir):
             mime, _ = mimetypes.guess_type(str(cover_file))
@@ -1152,7 +1132,7 @@ def session_playing_progress(user: User | None = None):
 
     try:
         sec = float(ticks) / 10_000_000.0
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return "", 204
 
     prog = db.session.scalar(
@@ -1211,7 +1191,7 @@ def session_playing_stopped(user: User | None = None):
                 prog.percentage = min(100.0, round(pct, 2))
                 if pct >= 90.0:
                     prog.is_completed = True
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
     db.session.commit()
@@ -1256,8 +1236,12 @@ def toggle_played_item(user_id: str, item_id: str, user: User | None = None):
     return jsonify(_format_item(item, user_id=uid))
 
 
-@jellyfin_bp.route("/Users/<user_id>/FavoriteItems/<item_id>", methods=["POST", "DELETE"])
-@jellyfin_bp.route("/users/<user_id>/favoriteitems/<item_id>", methods=["POST", "DELETE"])
+@jellyfin_bp.route(
+    "/Users/<user_id>/FavoriteItems/<item_id>", methods=["POST", "DELETE"]
+)
+@jellyfin_bp.route(
+    "/users/<user_id>/favoriteitems/<item_id>", methods=["POST", "DELETE"]
+)
 @jellyfin_auth
 def toggle_favorite_item(user_id: str, item_id: str, user: User | None = None):
     """Favorites or unfavorites an item."""
@@ -1320,9 +1304,7 @@ class JellyfinProtocolPlugin(ProtocolPlugin):
 
     name = "jellyfin"
     display_name = "Jellyfin Client API"
-    description = (
-        "Jellyfin REST streaming & catalog API for Jellyfin mobile, TV, and desktop apps"
-    )
+    description = "Jellyfin REST streaming & catalog API for Jellyfin mobile, TV, and desktop apps"
     protocol_version = JELLYFIN_SERVER_VERSION
     csrf_exempt = True
     blueprint_options: ClassVar[dict[str, Any]] = {"url_prefix": ""}

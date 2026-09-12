@@ -216,6 +216,8 @@ class MediaItem(
             "aac",
         ):
             return f"/reader/audio/{self.id}"
+        elif self.is_video:
+            return f"/reader/video/{self.id}"
         return f"/reader/epub/{self.id}"
 
     @property

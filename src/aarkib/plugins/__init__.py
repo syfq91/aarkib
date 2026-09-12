@@ -21,7 +21,11 @@ from aarkib.plugins.opds import OPDSProtocolPlugin
 from aarkib.plugins.optimizer import EInkOptimizerPlugin
 from aarkib.plugins.podcast import PodcastMediaPlugin
 from aarkib.plugins.subsonic import SubsonicProtocolPlugin
-from aarkib.plugins.video import VideoMediaPlugin
+from aarkib.plugins.video import (
+    MovieMediaPlugin,
+    TVMediaPlugin,
+    VideoMediaPlugin,
+)
 
 if TYPE_CHECKING:
     from flask import Flask
@@ -99,6 +103,8 @@ __all__ = [
     "plugin_registry",
     "BookMediaPlugin",
     "VideoMediaPlugin",
+    "MovieMediaPlugin",
+    "TVMediaPlugin",
     "AudioMediaPlugin",
     "AudiobookMediaPlugin",
     "MusicMediaPlugin",

@@ -25,6 +25,8 @@ class MetadataProviderRegistry:
         "book": ["googlebooks", "openlibrary"],
         "comic": ["openlibrary", "googlebooks"],
         "video": ["tmdb"],
+        "movie": ["tmdb"],
+        "tv": ["tmdb"],
         "music": ["musicbrainz"],
         "audio": ["musicbrainz"],
         "audiobook": ["googlebooks", "openlibrary", "musicbrainz"],

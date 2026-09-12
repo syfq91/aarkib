@@ -254,15 +254,21 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
         # Determine default media_type based on folder/name context
         lower_name = (folder_name or name or "").lower()
         if any(w in lower_name for w in ("comic", "manga", "cbz")):
-            media_type = "comic"
-        elif any(
-            w in lower_name for w in ("video", "movie", "film", "show", "tv", "anime")
-        ):
-            media_type = "video"
+            media_type = "book"
+        elif any(w in lower_name for w in ("show", "tv", "series", "season")):
+            media_type = "tv"
+        elif any(w in lower_name for w in ("video", "movie", "film", "anime")):
+            media_type = "movie"
+        elif any(w in lower_name for w in ("podcast", "podcasts")):
+            media_type = "podcast"
+        elif any(w in lower_name for w in ("audiobook", "audiobooks")):
+            media_type = "audiobook"
+        elif any(w in lower_name for w in ("music", "song", "album")):
+            media_type = "music"
         elif "book" in lower_name:
             media_type = "book"
         else:
-            media_type = "all"
+            media_type = "book"
 
         # Unique slug
         base_slug = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or "media"
@@ -458,6 +464,8 @@ def _resolve_media_type(
     if meta_type and meta_type in (
         "comic",
         "video",
+        "movie",
+        "tv",
         "audiobook",
         "music",
         "podcast",
@@ -468,7 +476,12 @@ def _resolve_media_type(
     if fmt in ("cbz", "cbr", "zip"):
         return "comic"
     if fmt in VIDEO_EXTENSIONS:
-        return "video"
+        if (
+            getattr(metadata, "season", None) is not None
+            or getattr(metadata, "episode", None) is not None
+        ):
+            return "tv"
+        return "movie"
     if (
         fmt == "m4b"
         or getattr(metadata, "chapters", None)
