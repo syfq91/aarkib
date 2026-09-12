@@ -420,8 +420,8 @@ erDiagram
 - **Dependency Management**: `uv` using pinned `uv.lock`.
 - **Container Strategy**: Multi-stage `Dockerfile` using `python:3.14-slim` and `uv` for minimal attack surface and lightweight image footprints. Runs as an unprivileged user (`USER aarkib`) with a standard container `HEALTHCHECK` querying `/api/health`.
 - **Persistent Volumes**:
-  - `/app/data`: Houses `aarkib.db`, `covers/`, and `optimized/`.
-  - `/app/data/books` (or external mounts like `/media/audio`, `/media/video`): Primary read-only media storage.
+  - `/app/data`: Houses `aarkib.db`, `covers/`, `optimized/`, and runtime caches.
+  - `/media` (or individual category mounts like `/media/books`, `/media/comics`, `/media/videos`): Primary external media storage.
 
 ### Server Launcher & Web Administration
 - `uv run aarkib`: Start the web application server (or container startup via `aarkib`).

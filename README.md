@@ -77,7 +77,7 @@ Visit **`http://localhost:5000`** in your browser. On your first visit, you will
 docker compose up -d
 ```
 
-Your library media placed in `./data` (or subdirectories `./data/media`, `./data/books`, `./data/videos`) will be mounted automatically.
+Your library media placed in `./data` (or subdirectories `./data/media`, `./data/books`, `./data/videos`) will be mounted automatically. Alternatively, external host media folders can be mounted directly to `/media` (e.g., `/media/books`, `/media/videos`) in `docker-compose.yml` and managed via the WebUI.
 
 ---
 

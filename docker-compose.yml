@@ -9,19 +9,13 @@ services:
       - "5000:5000"
     volumes:
       - ./data:/app/data
-    environment:
-      - AARKIB_DATA_DIR=/app/data
-      - AARKIB_VAAPI_DEVICE=${AARKIB_VAAPI_DEVICE:-}
-      - SECRET_KEY=${SECRET_KEY:-}
-    volumes:
-      - ./data:/app/data
-      # Mount your host media directories as needed:
-      # - /path/to/media/books:/app/data/books:ro
-      # - /path/to/media/comics:/app/data/comics:ro
-      # - /path/to/media/videos:/app/data/videos:ro
-      # - /path/to/media/audiobooks:/app/data/audiobooks:ro
-      # - /path/to/media/music:/app/data/music:ro
-      # - /path/to/media/podcasts:/app/data/podcasts:ro
+      # Mount your host media directories to /media as needed:
+      # - /path/to/media/books:/media/books:ro
+      # - /path/to/media/comics:/media/comics:ro
+      # - /path/to/media/videos:/media/videos:ro
+      # - /path/to/media/audiobooks:/media/audiobooks:ro
+      # - /path/to/media/music:/media/music:ro
+      # - /path/to/media/podcasts:/media/podcasts:ro
     devices:
       - /dev/dri:/dev/dri # Hardware acceleration passthrough for Intel & AMD VAAPI
     group_add:
