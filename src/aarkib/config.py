@@ -6,18 +6,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-PRIMARY_DIR_VARS: tuple[str, ...] = (
-    "AARKIB_MEDIA_DIR",
-    "AARKIB_MEDIA_DIRS",
-    "MEDIA_DIR",
-    "MEDIA_DIRS",
-)
+PRIMARY_DIR_VARS: tuple[str, ...] = ("AARKIB_MEDIA_DIR",)
 
-NUMBERED_DIR_REGEX = re.compile(r"^(?:AARKIB_)?(?:MEDIA_)?DIR_?(\d+)$", re.IGNORECASE)
-NAMED_DIR_REGEX = re.compile(
-    r"^(?:AARKIB_)?(?:MEDIA_)?DIR_([A-Za-z0-9_]+)$",
-    re.IGNORECASE,
-)
+NUMBERED_DIR_REGEX = re.compile(r"^AARKIB_MEDIA_DIR_?(\d+)$", re.IGNORECASE)
+NAMED_DIR_REGEX = re.compile(r"^AARKIB_MEDIA_DIR_([A-Za-z0-9_]+)$", re.IGNORECASE)
 
 
 def split_path_string(val: str) -> list[str]:
@@ -73,10 +65,9 @@ def get_env_media_dirs(env: dict[str, str] | None = None) -> list[Path]:
     """Collects all media directory paths explicitly declared in environment variables.
 
     Supports:
-    - AARKIB_MEDIA_DIR, AARKIB_MEDIA_DIRS, MEDIA_DIR, MEDIA_DIRS
-    - Numbered variables: DIR1, DIR2, DIR_1, DIR_2, AARKIB_DIR1, AARKIB_MEDIA_DIR_1, etc.
-    - Named variables: AARKIB_MEDIA_DIR_MANGA, AARKIB_DIR_COMICS, etc.
-    - Delimited values (colons, semicolons, commas, newlines).
+    - Canonical: AARKIB_MEDIA_DIR (single path or delimited by :, ;, ,, \n)
+    - Numbered: AARKIB_MEDIA_DIR1, AARKIB_MEDIA_DIR2, AARKIB_MEDIA_DIR_1, etc.
+    - Named categories: AARKIB_MEDIA_DIR_MANGA, AARKIB_MEDIA_DIR_MOVIES, etc.
     """
     target_env = os.environ if env is None else env
     collected_raw: list[str] = []

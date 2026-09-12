@@ -101,15 +101,11 @@ def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
     raw_candidates: list[Any] = []
 
     if app is not None:
-        raw_dirs = app.config.get("MEDIA_DIRS") or app.config.get("LIBRARY_DIRS")
-        raw_dir = app.config.get("MEDIA_DIR") or app.config.get("LIBRARY_DIR")
+        raw_dirs = app.config.get("MEDIA_DIRS")
+        raw_dir = app.config.get("MEDIA_DIR")
 
-        default_dirs = getattr(Config, "MEDIA_DIRS", None) or getattr(
-            Config, "LIBRARY_DIRS", None
-        )
-        default_dir = getattr(Config, "MEDIA_DIR", None) or getattr(
-            Config, "LIBRARY_DIR", None
-        )
+        default_dirs = Config.MEDIA_DIRS
+        default_dir = Config.MEDIA_DIR
 
         if raw_dirs is not None and raw_dirs != default_dirs:
             if isinstance(raw_dirs, (list, tuple, set)):
@@ -131,12 +127,7 @@ def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
     # If neither app config override nor explicit env vars were found
     if not raw_candidates:
         if app is not None:
-            raw = (
-                app.config.get("MEDIA_DIRS")
-                or app.config.get("MEDIA_DIR")
-                or app.config.get("LIBRARY_DIRS")
-                or app.config.get("LIBRARY_DIR")
-            )
+            raw = app.config.get("MEDIA_DIRS") or app.config.get("MEDIA_DIR")
             if raw is not None:
                 if isinstance(raw, (list, tuple, set)):
                     raw_candidates.extend(raw)
@@ -223,10 +214,8 @@ def sync_and_get_libraries(app: Flask | None = None) -> list[Library]:
     else:
         target_dirs = get_env_media_dirs()
         if app is not None:
-            custom_dirs = app.config.get("MEDIA_DIRS") or app.config.get("LIBRARY_DIRS")
-            default_dirs = getattr(Config, "MEDIA_DIRS", None) or getattr(
-                Config, "LIBRARY_DIRS", None
-            )
+            custom_dirs = app.config.get("MEDIA_DIRS")
+            default_dirs = Config.MEDIA_DIRS
             if custom_dirs and custom_dirs != default_dirs:
                 items = (
                     custom_dirs

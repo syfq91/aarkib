@@ -86,8 +86,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 | `SECRET_KEY` | Auto-generated in `<DATA_DIR>/secret_key` | Secret key for session security & signing. Auto-generated and persisted on first boot if omitted. |
 | `AARKIB_DATA_DIR` | `./data` | Base storage directory. |
 | `AARKIB_MEDIA_DIR` | `./data/media` | Primary media folder (or delimited list: `/dir1:/dir2`). |
-| `AARKIB_MEDIA_DIRS` / `MEDIA_DIRS` | *(none)* | Delimited list of multiple media directories. |
-| `AARKIB_MEDIA_DIR1`, `DIR2`, ... | *(none)* | Additional numbered media folders (`AARKIB_MEDIA_DIR1`, `MEDIA_DIR2`, `DIR1`, etc.). |
+| `AARKIB_MEDIA_DIR1`, `DIR2`, ... | *(none)* | Additional numbered media folders (`AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, etc.). |
 | `AARKIB_COVERS_DIR` | `./data/covers` | Storage directory for extracted cover art. |
 | `AARKIB_OPTIMIZED_DIR` | `./data/optimized` | Cache directory for on-demand e-ink optimized EPUBs. |
 | `DATABASE_URL` | `sqlite:///data/aarkib.db` | SQLAlchemy database URI. |
@@ -108,7 +107,7 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 >   - **Books Only (`book`)**: Catalogs files inside as books.
 >   - **Comics & Manga (`comic`)**: Catalogs files inside as comics/manga.
 >   - **Movies & TV Shows (`video`)**: Catalogs video media files inside as movies & shows.
-> - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies` (or `MEDIA_DIR1`, `DIR1`), or named variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
+> - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, delimited paths `AARKIB_MEDIA_DIR=/media/movies:/media/books`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies`, or named category variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
 
 ---
 

@@ -84,8 +84,12 @@ def test_get_env_library_dirs(tmp_path):
     assert split_path_string("/a:/b;/c,/d\n/e") == ["/a", "/b", "/c", "/d", "/e"]
     assert split_path_string("C:\\books;D:\\comics") == ["C:\\books", "D:\\comics"]
 
-    # Verify retired AARKIB_LIBRARY_DIR is ignored
+    # Verify retired variations are ignored
     assert get_env_media_dirs(env={"AARKIB_LIBRARY_DIR": f"{tmp_path}/ignored"}) == []
+    assert get_env_media_dirs(env={"AARKIB_MEDIA_DIRS": f"{tmp_path}/ignored"}) == []
+    assert get_env_media_dirs(env={"MEDIA_DIR": f"{tmp_path}/ignored"}) == []
+    assert get_env_media_dirs(env={"MEDIA_DIRS": f"{tmp_path}/ignored"}) == []
+    assert get_env_media_dirs(env={"DIR1": f"{tmp_path}/ignored"}) == []
 
     # Test numbered and named environment variables in custom dict
     mock_env = {
@@ -94,7 +98,7 @@ def test_get_env_library_dirs(tmp_path):
         "AARKIB_MEDIA_DIR2": f"{tmp_path}/comics",
         "AARKIB_MEDIA_DIR3": f"{tmp_path}/novels",
         "AARKIB_MEDIA_DIR4": f"{tmp_path}/audiobooks",
-        "AARKIB_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
+        "AARKIB_MEDIA_DIR_LIGHTNOVELS": f"{tmp_path}/ln",
         "AARKIB_MEDIA_DIR_10": f"{tmp_path}/extra10",
     }
     paths = get_env_media_dirs(env=mock_env)
