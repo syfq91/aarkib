@@ -307,6 +307,7 @@ def evaluate_playback_strategy(
     client_caps: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Determines the optimal playback strategy for a media item."""
+    _ = client_caps
     if streams_info is None:
         streams_info = probe_media_streams(file_path)
 
@@ -452,7 +453,8 @@ def stream_remux_pipe(
             bufsize=64 * 1024,
             preexec_fn=os.setsid if hasattr(os, "setsid") else None,
         )
-        assert proc.stdout is not None
+        if proc.stdout is None:
+            raise RuntimeError("FFmpeg process stdout pipe is not available")
         while True:
             chunk = proc.stdout.read(64 * 1024)
             if not chunk:
@@ -476,8 +478,8 @@ def stream_remux_pipe(
                         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                     else:
                         proc.kill()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Force kill failed for remux proc: %s", exc)
 
 
 @dataclass
@@ -742,8 +744,8 @@ class TranscodeSupervisor:
                         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                     else:
                         proc.kill()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Force kill failed for transcode proc: %s", exc)
 
         try:
             if session.output_dir.exists():

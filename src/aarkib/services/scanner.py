@@ -472,12 +472,13 @@ def _resolve_media_type(
         all_libs = db.session.scalars(select(Library)).all()
         for lib_record in all_libs:
             lib_p_res, lib_p_raw = library_path_conditions(lib_record)
-            if resolved_path.startswith(lib_p_res) or resolved_path.startswith(
-                lib_p_raw
+            if (
+                resolved_path.startswith((lib_p_res, lib_p_raw))
+                and lib_record.media_type
+                and lib_record.media_type != "all"
             ):
-                if lib_record.media_type and lib_record.media_type != "all":
-                    matching_type = lib_record.media_type
-                    break
+                matching_type = lib_record.media_type
+                break
     except Exception:
         logger.debug(
             "Failed to resolve library media type for %s: %s",
@@ -522,7 +523,7 @@ def _resolve_media_type(
 
 def _assign_authors_tags_series(book: Book, metadata) -> None:
     """Resolves and assigns the authors, series, and tags on a Book record."""
-    is_locked = getattr(book, "is_field_locked", lambda f: False)
+    is_locked = getattr(book, "is_field_locked", lambda _field: False)
 
     if not is_locked("authors") and not is_locked("creators"):
         author_objs = []
@@ -635,7 +636,7 @@ def index_media_file(
         if library_id is not None:
             book.library_id = library_id
 
-        is_locked = getattr(book, "is_field_locked", lambda f: False)
+        is_locked = getattr(book, "is_field_locked", lambda _field: False)
 
         if not is_locked("title"):
             book.title = metadata.title or file_path.stem
@@ -943,8 +944,8 @@ def start_library_watcher(app: Flask) -> Observer | None:
         try:
             existing.stop()
             existing.join(timeout=2.0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error stopping existing library watcher: %s", e)
 
     library_dirs = get_library_dirs(app)
     event_handler = LibraryChangeHandler(app)

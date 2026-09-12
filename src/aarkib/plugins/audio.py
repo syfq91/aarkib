@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from aarkib.plugins.base import MediaPlugin
 from aarkib.services.parsers.base import BaseParsedMetadata
@@ -15,7 +15,7 @@ class AudioMediaPlugin(MediaPlugin):
 
     name = "audio"
     media_type = "audio"
-    supported_extensions = {
+    supported_extensions: ClassVar[set[str]] = {
         ".mp3",
         ".m4a",
         ".m4b",
@@ -62,7 +62,7 @@ class AudiobookMediaPlugin(MediaPlugin):
 
     name = "audiobook"
     media_type = "audiobook"
-    supported_extensions = {".m4b"}
+    supported_extensions: ClassVar[set[str]] = {".m4b"}
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses audiobook metadata and chapter markers."""
@@ -99,7 +99,7 @@ class MusicMediaPlugin(MediaPlugin):
 
     name = "music"
     media_type = "music"
-    supported_extensions = {
+    supported_extensions: ClassVar[set[str]] = {
         ".mp3",
         ".flac",
         ".wav",

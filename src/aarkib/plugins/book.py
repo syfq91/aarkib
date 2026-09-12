@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from aarkib.plugins.base import MediaPlugin
 from aarkib.services.parsers.base import BaseParsedMetadata
@@ -15,7 +15,7 @@ class BookMediaPlugin(MediaPlugin):
 
     name = "books"
     media_type = "book"
-    supported_extensions = {".epub", ".cbz", ".zip", ".cbr"}
+    supported_extensions: ClassVar[set[str]] = {".epub", ".cbz", ".zip", ".cbr"}
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses EPUB or Comic archive metadata."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import urllib.parse
+from typing import ClassVar
 
 from aarkib.services.metadata.base import (
     MediaMetadataDetails,
@@ -23,7 +24,7 @@ class iTunesPodcastProvider(MetadataProvider):
     """Zero-configuration podcast metadata provider using the public iTunes Search API."""
 
     name = "itunes"
-    supported_media_types = {"podcast", "audio", "all"}
+    supported_media_types: ClassVar[set[str]] = {"podcast", "audio", "all"}
 
     def __init__(self, client: ResilientHttpClient | None = None) -> None:
         self.client = client or ResilientHttpClient(
@@ -36,6 +37,7 @@ class iTunesPodcastProvider(MetadataProvider):
         media_type: str = "podcast",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
+        _ = media_type
         if not query or not query.strip():
             return []
 
@@ -103,6 +105,7 @@ class iTunesPodcastProvider(MetadataProvider):
         external_id: str,
         media_type: str = "podcast",
     ) -> MediaMetadataDetails | None:
+        _ = media_type
         clean_id = str(external_id).strip()
         if not clean_id:
             return None

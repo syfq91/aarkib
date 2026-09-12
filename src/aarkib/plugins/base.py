@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from aarkib.services.parsers.base import PARSER_REGISTRY, register_parser
 
@@ -25,7 +25,7 @@ class MediaPlugin(ABC):
 
     name: str = ""
     media_type: str = ""
-    supported_extensions: set[str] = set()
+    supported_extensions: ClassVar[set[str]] = set()
 
     @abstractmethod
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:

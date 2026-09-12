@@ -1,5 +1,6 @@
 import logging
 import urllib.parse
+from typing import ClassVar
 
 from aarkib.services.metadata.base import (
     MediaMetadataDetails,
@@ -17,7 +18,7 @@ class OpenLibraryProvider(MetadataProvider):
     """Metadata provider connecting to Open Library Search & Books APIs."""
 
     name = "openlibrary"
-    supported_media_types = {"book", "comic", "all"}
+    supported_media_types: ClassVar[set[str]] = {"book", "comic", "all"}
 
     def __init__(self, client: ResilientHttpClient | None = None) -> None:
         self.client = client or ResilientHttpClient(
@@ -31,6 +32,7 @@ class OpenLibraryProvider(MetadataProvider):
         media_type: str = "all",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
+        _ = media_type
         if not query or not query.strip():
             return []
 
@@ -107,6 +109,7 @@ class OpenLibraryProvider(MetadataProvider):
         external_id: str,
         media_type: str = "all",
     ) -> MediaMetadataDetails | None:
+        _ = media_type
         if not external_id:
             return None
 

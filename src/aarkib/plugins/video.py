@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from aarkib.plugins.base import MediaPlugin
 from aarkib.services.parsers.base import BaseParsedMetadata
@@ -16,7 +16,14 @@ class VideoMediaPlugin(MediaPlugin):
 
     name = "video"
     media_type = "video"
-    supported_extensions = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v"}
+    supported_extensions: ClassVar[set[str]] = {
+        ".mp4",
+        ".mkv",
+        ".webm",
+        ".avi",
+        ".mov",
+        ".m4v",
+    }
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses video metadata from container and filename."""

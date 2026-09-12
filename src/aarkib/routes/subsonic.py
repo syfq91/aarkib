@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import mimetypes
 from functools import wraps
 from pathlib import Path
@@ -23,6 +24,8 @@ from sqlalchemy import or_, select
 from aarkib.extensions import db
 from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
 from aarkib.services.media_service import AUDIO_EXTENSIONS
+
+logger = logging.getLogger(__name__)
 
 subsonic_bp = Blueprint("subsonic", __name__)
 
@@ -99,8 +102,8 @@ def get_authenticated_user() -> User | None:
             if clean_pw.startswith("enc:"):
                 try:
                     clean_pw = bytes.fromhex(clean_pw[4:]).decode("utf-8")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed decoding hex password: %s", exc)
             if user.check_password(clean_pw):
                 return user
             return None
@@ -110,7 +113,9 @@ def get_authenticated_user() -> User | None:
             # Check against user's stored plaintext/API token or test token if configured
             api_token = getattr(user, "api_token", None)
             if api_token:
-                expected = hashlib.md5((api_token + salt).encode("utf-8")).hexdigest()
+                expected = hashlib.md5(
+                    (api_token + salt).encode("utf-8"), usedforsecurity=False
+                ).hexdigest()
                 if token.lower() == expected.lower():
                     return user
             # Allow checking if token matches direct MD5
@@ -289,7 +294,7 @@ def get_artists(user: User | None = None):
             "id": str(auth.id),
             "name": auth.name,
             "albumCount": len(
-                set(m.collection_id for m in audio_items if m.collection_id)
+                {m.collection_id for m in audio_items if m.collection_id}
             ),
         }
         index_map.setdefault(first_char, []).append(artist_obj)
@@ -379,12 +384,17 @@ def stream_media(user: User | None = None):
     if not item_id:
         abort(400, description="Missing media id")
 
-    item = db.session.get(MediaItem, int(item_id))
+    try:
+        clean_item_id = int(item_id)
+    except ValueError, TypeError:
+        abort(404, description="Invalid media id")
+
+    item = db.session.get(MediaItem, clean_item_id)
     if not item:
         abort(404, description="Media item not found")
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not file_path.is_file():
         abort(404, description="File missing on disk")
 
     mime, _ = mimetypes.guess_type(str(file_path))
@@ -403,11 +413,16 @@ def get_cover_art(user: User | None = None):
     if not cover_id:
         abort(400, description="Missing cover id")
 
-    item = db.session.get(MediaItem, int(cover_id))
+    try:
+        clean_cover_id = int(cover_id)
+    except ValueError, TypeError:
+        abort(404, description="Invalid cover id")
+
+    item = db.session.get(MediaItem, clean_cover_id)
     if item and item.cover_image_path:
-        covers_dir = Path(current_app.config.get("COVERS_DIR", "data/covers"))
-        cover_file = covers_dir / item.cover_image_path
-        if cover_file.exists():
+        covers_dir = Path(current_app.config.get("COVERS_DIR", "data/covers")).resolve()
+        cover_file = (covers_dir / item.cover_image_path).resolve()
+        if cover_file.is_file() and cover_file.is_relative_to(covers_dir):
             return send_file(cover_file, mimetype="image/webp", conditional=True)
 
     # Fallback default 1x1 png or 404

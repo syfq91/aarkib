@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import urllib.parse
+from typing import ClassVar
 
 from aarkib.services.metadata.base import (
     MediaMetadataDetails,
@@ -22,7 +23,7 @@ class MusicBrainzProvider(MetadataProvider):
     """Metadata provider connecting to MusicBrainz and Cover Art Archive."""
 
     name = "musicbrainz"
-    supported_media_types = {"music", "audio", "audiobook", "all"}
+    supported_media_types: ClassVar[set[str]] = {"music", "audio", "audiobook", "all"}
 
     def __init__(self, client: ResilientHttpClient | None = None) -> None:
         self.client = client or ResilientHttpClient(
@@ -36,6 +37,7 @@ class MusicBrainzProvider(MetadataProvider):
         media_type: str = "music",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
+        _ = media_type
         if not query or not query.strip():
             return []
 
@@ -109,6 +111,7 @@ class MusicBrainzProvider(MetadataProvider):
         external_id: str,
         media_type: str = "music",
     ) -> MediaMetadataDetails | None:
+        _ = media_type
         if not external_id:
             return None
 

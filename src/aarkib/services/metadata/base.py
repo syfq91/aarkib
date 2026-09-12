@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 
 @dataclass
@@ -163,7 +163,7 @@ class MetadataProvider(ABC):
     """Abstract base class for online metadata enrichment providers."""
 
     name: str
-    supported_media_types: set[str]
+    supported_media_types: ClassVar[set[str]] = set()
 
     @abstractmethod
     def search(

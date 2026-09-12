@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import ClassVar
 
 from flask import current_app, has_app_context
 
@@ -25,7 +26,7 @@ class TMDBProvider(MetadataProvider):
     """Metadata provider connecting to The Movie Database (TMDB) API."""
 
     name = "tmdb"
-    supported_media_types = {"video", "all"}
+    supported_media_types: ClassVar[set[str]] = {"video", "all"}
 
     def __init__(
         self,
@@ -64,6 +65,7 @@ class TMDBProvider(MetadataProvider):
         media_type: str = "video",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
+        _ = media_type
         if not query or not query.strip():
             return []
 
@@ -193,6 +195,7 @@ class TMDBProvider(MetadataProvider):
         external_id: str,
         media_type: str = "video",
     ) -> MediaMetadataDetails | None:
+        _ = media_type
         if not external_id:
             return None
 
@@ -292,7 +295,7 @@ class TMDBProvider(MetadataProvider):
                 language=tv_data.get("original_language"),
             )
 
-        # Default: movie
+        # Fallback: movie lookup
         movie_id = (
             clean_id.split(":", 1)[1] if clean_id.startswith("movie:") else clean_id
         )

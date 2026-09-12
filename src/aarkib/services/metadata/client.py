@@ -85,6 +85,10 @@ class ResilientHttpClient:
         if headers:
             req_headers.update(headers)
 
+        if not full_url.startswith(("http://", "https://")):
+            logger.warning("Rejected non-HTTP(S) metadata request URL: %s", full_url)
+            return None
+
         attempt = 0
         while attempt <= self.max_retries:
             # 2. Rate limiter throttling
@@ -183,6 +187,10 @@ class ResilientHttpClient:
 
         if self.limiter:
             self.limiter.acquire(1.0)
+
+        if not url.startswith(("http://", "https://")):
+            logger.warning("Rejected non-HTTP(S) download URL: %s", url)
+            return None
 
         req_headers = {"User-Agent": self.user_agent}
         if headers:

@@ -49,8 +49,8 @@ def _decode_id3_text(data: bytes, encoding: int) -> str:
             return data.decode("utf-16-be", errors="ignore").rstrip("\x00")
         elif encoding == 3:
             return data.decode("utf-8", errors="ignore").rstrip("\x00")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed decoding ID3 text with encoding %s: %s", encoding, exc)
     return data.decode("utf-8", errors="ignore").rstrip("\x00")
 
 
@@ -152,15 +152,15 @@ def parse_id3v2(file_path: Path) -> dict[str, Any]:
                     comm_txt = _decode_id3_text(cdata, enc).strip()
                     if comm_txt:
                         meta["description"] = comm_txt
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed decoding COMM frame: %s", exc)
             elif frame_id == "TLEN":
                 try:
                     meta["duration"] = round(
                         float(_decode_id3_text(text_data, enc)) / 1000.0, 2
                     )
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as exc:
+                    logger.debug("Failed parsing TLEN duration: %s", exc)
             elif frame_id == "CHAP":
                 try:
                     cstream = io.BytesIO(payload)
@@ -347,8 +347,8 @@ def parse_flac(file_path: Path) -> dict[str, Any]:
                         img_data = stream.read(img_len)
                         if len(img_data) > 100:
                             meta["cover_bytes"] = img_data
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed parsing FLAC picture block: %s", exc)
 
                 if is_last:
                     break
@@ -460,8 +460,8 @@ def extract_audio_cover(file_path: Path) -> bytes | None:
                 data = c_path.read_bytes()
                 if len(data) > 100:
                     return data
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Failed reading cover file %s: %s", c_path, exc)
 
     return None
 

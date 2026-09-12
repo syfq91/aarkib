@@ -128,9 +128,7 @@ def _parse_opf_metadata(metadata_elem, default_title: str) -> dict:
             parsed["language"] = text
         elif tag.endswith("identifier") and text:
             scheme = elem.attrib.get("scheme", "").upper()
-            if "ISBN" in scheme or "isbn" in text.lower():
-                parsed["isbn"] = text
-            elif not parsed["isbn"]:
+            if "ISBN" in scheme or "isbn" in text.lower() or not parsed["isbn"]:
                 parsed["isbn"] = text
         elif tag.endswith("date") and text:
             parsed["publication_date"] = text[:10]
@@ -200,10 +198,7 @@ def _locate_cover_href(opf_root, cover_id: str | None) -> str | None:
             props = item.attrib.get("properties", "")
             media_type = item.attrib.get("media-type", "")
 
-            if "cover-image" in props:
-                cover_href = href
-                break
-            elif cover_id and item_id == cover_id:
+            if "cover-image" in props or (cover_id and item_id == cover_id):
                 cover_href = href
                 break
             elif "cover" in item_id.lower() and media_type.startswith("image/"):

@@ -154,7 +154,7 @@ class MediaItemMixin:
 
     def set_locked_fields(self, fields: list[str]) -> None:
         """Sets list of locked field names."""
-        cleaned = sorted(list({str(f).strip() for f in fields if f and str(f).strip()}))
+        cleaned = sorted({str(f).strip() for f in fields if f and str(f).strip()})
         self.locked_fields = json.dumps(cleaned) if cleaned else None
 
     def is_field_locked(self, field_name: str) -> bool:

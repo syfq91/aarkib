@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from flask import Flask
@@ -216,9 +217,8 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         try:
             from aarkib.services.transcoder import transcode_supervisor
 
-            transcode_dir = Path(
-                app.config.get("TRANSCODE_DIR", Path("/tmp/transcode"))
-            )
+            default_transcode = Path(tempfile.gettempdir()) / "aarkib_transcode"
+            transcode_dir = Path(app.config.get("TRANSCODE_DIR", default_transcode))
             transcode_dir.mkdir(parents=True, exist_ok=True)
             transcode_supervisor.clean_stale_directories(transcode_dir)
         except Exception as e:

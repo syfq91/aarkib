@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from aarkib.plugins.base import MediaPlugin
 from aarkib.services.parsers.base import BaseParsedMetadata
@@ -15,7 +15,7 @@ class PodcastMediaPlugin(MediaPlugin):
 
     name = "podcast"
     media_type = "podcast"
-    supported_extensions = {
+    supported_extensions: ClassVar[set[str]] = {
         ".mp3",
         ".m4a",
         ".ogg",

@@ -324,7 +324,14 @@ def opds_media_progression(item_id: int):
     vals, error_response = _parse_progression_payload(payload)
     if error_response is not None:
         return error_response
-    assert vals is not None
+    if vals is None:
+        return Response(
+            json.dumps(
+                {"type": "about:blank", "title": "Invalid progression payload."}
+            ),
+            status=400,
+            mimetype=PROBLEM_JSON_TYPE,
+        )
 
     progress = db.session.scalar(
         select(UserProgress).where(

@@ -197,7 +197,7 @@ def profile():
         db.session.scalar(
             select(func.count(UserProgress.id)).where(
                 UserProgress.user_id == current_user.id,
-                UserProgress.is_completed == True,  # noqa: E712
+                UserProgress.is_completed.is_(True),
             )
         )
         or 0
@@ -207,7 +207,7 @@ def profile():
         db.session.scalar(
             select(func.count(UserProgress.id)).where(
                 UserProgress.user_id == current_user.id,
-                UserProgress.is_completed == False,  # noqa: E712
+                UserProgress.is_completed.is_(False),
                 UserProgress.percentage > 0,
             )
         )

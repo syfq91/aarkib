@@ -68,6 +68,28 @@ SELECT
 FROM media_items m
 """
 
+FTS_SEARCH_SQL = text("""
+SELECT fts.rowid, bm25(media_items_fts, 10.0, 5.0, 3.0, 1.0, 2.0) AS rank
+FROM media_items_fts fts
+JOIN media_items m ON m.id = fts.rowid
+WHERE media_items_fts MATCH :match_query
+  AND (:media_type IS NULL OR m.media_type = :media_type)
+  AND (:library_id IS NULL OR m.library_id = :library_id)
+ORDER BY rank ASC
+LIMIT :limit;
+""")
+
+FTS_FACET_SQL = text("""
+SELECT fts.rowid AS id, m.media_type, m.file_format,
+       bm25(media_items_fts, 10.0, 5.0, 3.0, 1.0, 2.0) AS rank
+FROM media_items_fts fts
+JOIN media_items m ON m.id = fts.rowid
+WHERE media_items_fts MATCH :match_query
+  AND (:library_id IS NULL OR m.library_id = :library_id)
+ORDER BY rank ASC
+LIMIT 1000;
+""")
+
 
 def init_search_fts(conn_or_session: Any = None) -> bool:
     """Initialize the media_items_fts virtual table if it does not exist.
@@ -227,18 +249,8 @@ def search_media_ids(
 
     sess = session or db.session
     try:
-        sql = f"""
-        SELECT fts.rowid, bm25(media_items_fts, {BM25_WEIGHTS_SQL}) AS rank
-        FROM media_items_fts fts
-        JOIN media_items m ON m.id = fts.rowid
-        WHERE media_items_fts MATCH :match_query
-          AND (:media_type IS NULL OR m.media_type = :media_type)
-          AND (:library_id IS NULL OR m.library_id = :library_id)
-        ORDER BY rank ASC
-        LIMIT :limit;
-        """
         rows = sess.execute(
-            text(sql),
+            FTS_SEARCH_SQL,
             {
                 "match_query": clean_query,
                 "media_type": media_type if media_type else None,
@@ -310,18 +322,8 @@ def search_grouped(
     matching_entries: list[tuple[int, str, str]] = []  # (id, media_type, file_format)
 
     try:
-        sql = f"""
-        SELECT fts.rowid AS id, m.media_type, m.file_format,
-               bm25(media_items_fts, {BM25_WEIGHTS_SQL}) AS rank
-        FROM media_items_fts fts
-        JOIN media_items m ON m.id = fts.rowid
-        WHERE media_items_fts MATCH :match_query
-          AND (:library_id IS NULL OR m.library_id = :library_id)
-        ORDER BY rank ASC
-        LIMIT 1000;
-        """
         rows = sess.execute(
-            text(sql),
+            FTS_FACET_SQL,
             {
                 "match_query": clean_query,
                 "library_id": library_id if library_id else None,

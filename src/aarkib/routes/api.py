@@ -57,11 +57,7 @@ def _is_within_covers(file_path: Path) -> bool:
     ``cover_image_path`` value combined with the covers directory base.
     """
     covers_dir = Path(current_app.config["COVERS_DIR"]).resolve()
-    try:
-        file_path.resolve().relative_to(covers_dir)
-        return True
-    except ValueError:
-        return False
+    return file_path.resolve().is_relative_to(covers_dir)
 
 
 def api_admin_required(view):
@@ -733,8 +729,8 @@ def get_media_file(item_id: int, filename: str | None = None):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     guessed, _ = mimetypes.guess_type(str(file_path))
@@ -1035,8 +1031,8 @@ def download_media_file(item_id: int, preset: str | None = None):
         return api_error("Media item not found", 404)
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     if preset_arg and item.file_format == "epub":
@@ -1262,9 +1258,7 @@ def media_progress(item_id: int):
             record = UserProgress(user_id=user_id, media_item_id=item.id)
 
         # Only update location if new location is non-zero or record has no valid location
-        if location and location != "0":
-            record.progress_location = location
-        elif not record.progress_location:
+        if (location and location != "0") or not record.progress_location:
             record.progress_location = location
 
         # Don't reset a known positive percentage to 0 on race condition

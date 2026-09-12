@@ -124,17 +124,16 @@ def import_opml_channels(
 
         show_matched = 0
         for ep in episodes:
-            if ep.collection_id is None:
-                # Check path or title match
-                if show_title.lower() in ep.original_file_path.lower() or (
-                    ep.album and ep.album.lower() == show_title.lower()
-                ):
-                    ep.collection_id = existing_col.id
-                    ep.media_type = "podcast"
-                    if xml_url and not ep.podcast_feed_url:
-                        ep.podcast_feed_url = xml_url
-                    show_matched += 1
-                    matched_episodes += 1
+            if ep.collection_id is None and (
+                show_title.lower() in ep.original_file_path.lower()
+                or (ep.album and ep.album.lower() == show_title.lower())
+            ):
+                ep.collection_id = existing_col.id
+                ep.media_type = "podcast"
+                if xml_url and not ep.podcast_feed_url:
+                    ep.podcast_feed_url = xml_url
+                show_matched += 1
+                matched_episodes += 1
 
         summaries.append(
             {

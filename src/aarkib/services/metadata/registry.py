@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import ClassVar
 
 from aarkib.services.metadata.base import (
     MediaMetadataDetails,
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 class MetadataProviderRegistry:
     """Registry coordinating external metadata providers and media-type priority waterfalls."""
 
-    DEFAULT_WATERFALLS: dict[str, list[str]] = {
+    DEFAULT_WATERFALLS: ClassVar[dict[str, list[str]]] = {
         "book": ["googlebooks", "openlibrary"],
         "comic": ["openlibrary", "googlebooks"],
         "video": ["tmdb"],
@@ -57,7 +58,7 @@ class MetadataProviderRegistry:
 
     def list_providers(self) -> list[str]:
         """Returns list of registered provider names."""
-        return sorted(list(self._providers.keys()))
+        return sorted(self._providers.keys())
 
     def search(
         self,

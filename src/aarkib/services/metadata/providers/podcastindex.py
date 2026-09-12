@@ -7,6 +7,7 @@ import logging
 import os
 import time
 import urllib.parse
+from typing import ClassVar
 
 from aarkib.services.metadata.base import (
     MediaMetadataDetails,
@@ -25,7 +26,7 @@ class PodcastIndexProvider(MetadataProvider):
     """Metadata provider connecting to the open PodcastIndex directory with optional API keys."""
 
     name = "podcastindex"
-    supported_media_types = {"podcast", "audio", "all"}
+    supported_media_types: ClassVar[set[str]] = {"podcast", "audio", "all"}
 
     def __init__(
         self,
@@ -47,7 +48,8 @@ class PodcastIndexProvider(MetadataProvider):
         """Generates required SHA1 authentication headers for PodcastIndex API."""
         now = str(int(time.time()))
         auth_hash = hashlib.sha1(
-            (self.api_key + self.api_secret + now).encode("utf-8")
+            (self.api_key + self.api_secret + now).encode("utf-8"),
+            usedforsecurity=False,
         ).hexdigest()
         return {
             "X-Auth-Date": now,
@@ -61,6 +63,7 @@ class PodcastIndexProvider(MetadataProvider):
         media_type: str = "podcast",
         year: str | None = None,
     ) -> list[MetadataSearchResult]:
+        _ = media_type
         if not self.is_configured() or not query or not query.strip():
             return []
 
@@ -116,6 +119,7 @@ class PodcastIndexProvider(MetadataProvider):
         external_id: str,
         media_type: str = "podcast",
     ) -> MediaMetadataDetails | None:
+        _ = media_type
         if not self.is_configured() or not external_id:
             return None
 
