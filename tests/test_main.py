@@ -1,4 +1,4 @@
-from aarkib import create_app
+from aarkib import create_app, main
 from aarkib.config import TestConfig
 
 
@@ -14,7 +14,21 @@ def test_create_app(tmp_path):
     assert app.config["TESTING"] is True
 
 
-def test_cli_commands(runner):
-    result = runner.invoke(args=["init-db"])
-    assert result.exit_code == 0
-    assert "Initialized the database." in result.output
+def test_main_startup(monkeypatch):
+    started = {}
+
+    def fake_run(self, host="0.0.0.0", port=5000, debug=False):
+        started["host"] = host
+        started["port"] = port
+        started["debug"] = debug
+
+    monkeypatch.setattr("flask.Flask.run", fake_run)
+    monkeypatch.setenv("PORT", "8080")
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("AARKIB_DEBUG", "true")
+
+    main()
+
+    assert started["host"] == "127.0.0.1"
+    assert started["port"] == 8080
+    assert started["debug"] is True

@@ -180,35 +180,22 @@ Aarkib exposes clean, unified REST APIs across all media types:
 
 ---
 
-## 🛠️ CLI Commands
+## ⚙️ Web UI Administration
 
-Aarkib includes a CLI for server administration:
+Aarkib is engineered for unified, web-first administration. All management tasks are conducted directly in the responsive Web UI:
 
-```bash
-# Scan and index media in configured folders
-uv run aarkib scan
-
-# Scan library and auto-fetch metadata from online sources
-uv run aarkib scan --enrich
-
-# Fetch online metadata across libraries (or filter by media type / item ID)
-uv run aarkib enrich
-uv run aarkib enrich --type video
-uv run aarkib enrich --item-id 1
-
-# Create a new user or administrator
-uv run aarkib create-user --username alice --password secret123 --admin
-
-# List all registered users
-uv run aarkib list-users
-```
+- **First-Run Setup**: On first launch, navigating to `http://localhost:5000` prompts you to create the initial **Administrator** account.
+- **User & Role Management**: Navigate to **Settings** $\to$ **User Management** (`/settings#users`) to create accounts, toggle Administrator/Reader privileges, reset passwords, or remove accounts.
+- **Library Scanning**: Navigate to **Settings** $\to$ **Library Tools** to trigger a full rescan or scan individual folders on demand.
+- **Search Indexing**: Rebuild the SQLite FTS5 full-text search index at any time with a single click under **Library Tools**.
+- **Metadata Enrichment**: Enrich media items with covers, summaries, and tags from Google Books, Open Library, TMDB, or MusicBrainz either library-wide or per-item.
 
 ---
 
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run pytest test suite (152 tests)
+# Run pytest test suite (151 tests)
 uv run pytest
 
 # Check code quality & formatting with ruff

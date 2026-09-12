@@ -72,6 +72,9 @@
       <button id="enrich-all-btn" class="btn btn-secondary" onclick="enrichLibrary()">
         ✨ Fetch Online Metadata (All Books)
       </button>
+      <button id="reindex-search-btn" class="btn btn-secondary" onclick="reindexSearch()">
+        🔍 Rebuild Search Index
+      </button>
     </div>
   </div>
 
@@ -455,6 +458,26 @@ async function rescanLibrary() {
     showToast("Network error scanning library", "error");
     btn.disabled = false;
     btn.innerText = "🔄 Rescan Library Folder";
+  }
+}
+
+async function reindexSearch() {
+  const btn = document.getElementById("reindex-search-btn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Rebuilding index...";
+  try {
+    const res = await fetch("/api/search/reindex", { method: "POST" });
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(data.message || `Search index rebuilt (${data.indexed_count} items)`, "success");
+    } else {
+      showToast(data.message || "Reindexing failed", "error");
+    }
+  } catch (err) {
+    showToast("Network error rebuilding search index", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "🔍 Rebuild Search Index";
   }
 }
 

@@ -386,25 +386,6 @@ def test_reindex_search_api_admin_required(client, app):
     assert "indexed_count" in data
 
 
-def test_cli_reindex_search_command(runner, app):
-    """Verify 'reindex-search' Flask CLI command."""
-    with app.app_context():
-        b = Book(
-            title="CLI Reindex Book",
-            original_file_path="/tmp/cli_reindex.epub",
-            file_format="epub",
-            file_size=500,
-            file_hash="hash_cli_reindex",
-            media_type="book",
-        )
-        db.session.add(b)
-        db.session.commit()
-
-    res = runner.invoke(args=["reindex-search"])
-    assert res.exit_code == 0
-    assert "Search index rebuild complete" in res.output
-
-
 def test_search_fallback_on_invalid_fts_syntax(app, monkeypatch):
     """Verify that when FTS5 query encounters an error, fallback to ILIKE works seamlessly."""
     with app.app_context():

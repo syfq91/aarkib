@@ -391,9 +391,10 @@ erDiagram
   - `/app/data`: Houses `aarkib.db`, `covers/`, and `optimized/`.
   - `/app/data/books` (or external mounts like `/media/audio`, `/media/video`): Primary read-only media storage.
 
-### Key Operational CLI Commands
-- `uv run aarkib`: Start web application server.
-- `uv run aarkib scan [--enrich]`: Trigger indexing scan and optional online metadata enrichment.
-- `uv run aarkib create-admin <username>`: Bootstrap or update administrator account.
-- `uv run aarkib create-user <username> [--admin]`: Create a reader or admin account.
-- `uv run aarkib list-users`: Display registered user credentials and roles.
+### Server Launcher & Web Administration
+- `uv run aarkib`: Start the web application server (or container startup via `aarkib`).
+- **Administrative Operations**: Managed exclusively via the modern Web UI:
+  - Account setup & user management: First-run setup wizard and `/settings#users`.
+  - Content discovery: Background filesystem watchers and on-demand rescan via `/settings`.
+  - Full-Text Search: Automatic startup synchronization and manual reindexing via `/settings`.
+  - Metadata enrichment: Background enricher jobs triggered via `/settings` or per-media detail views.

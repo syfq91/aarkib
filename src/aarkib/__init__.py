@@ -5,10 +5,9 @@ import os
 import sqlite3
 from pathlib import Path
 
-import click
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
-from sqlalchemy import Boolean, Integer, event, inspect, select, text
+from sqlalchemy import Boolean, Integer, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.sql import sqltypes as sa_types
 
@@ -217,154 +216,14 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
             transcode_supervisor.clean_stale_directories(transcode_dir)
         except Exception as e:
             logger.debug("Startup transcode cleanup skipped: %s", e)
-
-    # Register CLI commands
-    register_commands(app)
-
     return app
 
 
-def register_commands(app: Flask) -> None:
-    @app.cli.command("init-db")
-    def init_db_command():
-        """Initialize the database tables."""
-        migrate_database()
-        click.echo("Initialized the database.")
-
-    @app.cli.command("scan")
-    def scan_command():
-        """Scan the library directories for books, comics, and media files."""
-        from aarkib.services.scanner import scan_library
-
-        click.echo("Scanning library...")
-        result = scan_library(app)
-        click.echo(f"Scan complete: {result}")
-
-    @app.cli.command("reindex-search")
-    def reindex_search_command():
-        """Rebuild SQLite FTS5 full-text search index."""
-        from aarkib.services.search import rebuild_search_index
-
-        click.echo("Rebuilding SQLite FTS5 search index...")
-        count = rebuild_search_index()
-        click.echo(f"Search index rebuild complete: {count} items indexed.")
-
-    @app.cli.command("create-admin")
-    @click.argument("username")
-    @click.password_option()
-    def create_admin_command(username, password):
-        """Create an administrator user."""
-        from aarkib.models import User
-
-        user = db.session.scalar(select(User).where(User.username == username))
-        if user:
-            user.set_password(password)
-            user.is_admin = True
-            click.echo(f"Updated password for admin user: {username}")
-        else:
-            user = User(username=username, is_admin=True)
-            user.set_password(password)
-            db.session.add(user)
-            click.echo(f"Created admin user: {username}")
-        db.session.commit()
-
-    @app.cli.command("create-user")
-    @click.argument("username")
-    @click.password_option()
-    @click.option("--admin", is_flag=True, help="Grant admin privileges")
-    def create_user_command(username, password, admin):
-        """Create a standard or admin user."""
-        from aarkib.models import User
-
-        existing = db.session.scalar(select(User).where(User.username == username))
-        if existing:
-            click.echo(f"Error: User '{username}' already exists.")
-            return
-        user = User(username=username, is_admin=admin)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        click.echo(f"Created user: {username} ({'Admin' if admin else 'Reader'})")
-
-    @app.cli.command("list-users")
-    def list_users_command():
-        """List all registered users."""
-        from aarkib.models import User
-
-        users = db.session.scalars(select(User).order_by(User.id.asc())).all()
-        if not users:
-            click.echo("No users registered.")
-            return
-        click.echo(f"{'ID':<4} {'Username':<20} {'Role':<10} {'Joined':<12}")
-        click.echo("-" * 48)
-        for u in users:
-            role = "Admin" if u.is_admin else "Reader"
-            joined = u.created_at.strftime("%Y-%m-%d") if u.created_at else "N/A"
-            click.echo(f"{u.id:<4} {u.username:<20} {role:<10} {joined:<12}")
-
-    @app.cli.command("enrich")
-    @click.option(
-        "--item-id",
-        "--id",
-        "--book-id",
-        "item_id",
-        type=int,
-        help="ID of specific media item to enrich",
-    )
-    @click.option(
-        "--type",
-        "media_type",
-        default="all",
-        help="Media type filter (book, video, music, audiobook, podcast, all)",
-    )
-    @click.option("--overwrite", is_flag=True, help="Overwrite existing metadata")
-    @click.option(
-        "--provider",
-        default="all",
-        help="Metadata provider (all, googlebooks, openlibrary, tmdb, musicbrainz)",
-    )
-    def enrich_command(item_id, media_type, overwrite, provider):
-        """Enrich catalog metadata using online sources (Google Books, Open Library, TMDB, MusicBrainz)."""
-        from aarkib.models import MediaItem
-        from aarkib.services.enricher import enrich_all_media, enrich_media_item
-
-        covers_dir = Path(app.config["COVERS_DIR"])
-        if item_id:
-            item = db.session.get(MediaItem, item_id)
-            if not item:
-                click.echo(f"Media item ID {item_id} not found.")
-                return
-            click.echo(f"Enriching '{item.title}'...")
-            res = enrich_media_item(
-                item, covers_dir, overwrite=overwrite, provider=provider
-            )
-            click.echo(f"Result: {res}")
-        else:
-            click.echo(f"Enriching media in library (type: {media_type})...")
-            res = enrich_all_media(
-                app,
-                overwrite=overwrite,
-                provider=provider,
-                media_type=media_type,
-            )
-            click.echo(f"Enrichment complete: {res}")
-
-
 def main() -> None:
-    """CLI entry point for running the server or administration commands."""
-    import sys
-
-    from flask.cli import ScriptInfo
+    """Entry point for running the Aarkib media server."""
+    import os
 
     app = create_app()
-
-    if len(sys.argv) > 1:
-        app.cli.main(
-            args=sys.argv[1:],
-            prog_name="aarkib",
-            obj=ScriptInfo(create_app=lambda: app),
-        )
-        return
 
     from aarkib.services.scanner import scan_library, start_library_watcher
 
@@ -380,15 +239,14 @@ def main() -> None:
         except Exception as e:
             logger.warning("Library watcher error: %s", e)
 
-    import os
-
     port = int(os.getenv("PORT", "5000"))
+    host = os.getenv("HOST", "0.0.0.0")
     debug = (
         os.getenv("FLASK_DEBUG")
         or os.getenv("AARKIB_DEBUG")
         or str(app.config.get("DEBUG", False))
     ).lower() in ("true", "1", "yes")
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug)
 
 
 if __name__ == "__main__":

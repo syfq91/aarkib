@@ -33,11 +33,6 @@ def client(app: Flask):
 
 
 @pytest.fixture
-def runner(app: Flask):
-    return app.test_cli_runner()
-
-
-@pytest.fixture
 def sample_epub(tmp_path: Path) -> Path:
     epub_path = tmp_path / "sample.epub"
     container_xml = """<?xml version="1.0"?>
