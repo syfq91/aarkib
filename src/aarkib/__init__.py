@@ -189,6 +189,13 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
 
     with app.app_context():
         migrate_database()
+        from aarkib.services.settings_service import load_settings_into_config
+
+        try:
+            load_settings_into_config(app)
+        except Exception as e:
+            logger.debug("Startup settings load skipped: %s", e)
+
         from aarkib.services.job_manager import job_manager
         from aarkib.services.scanner import sync_and_get_libraries
 

@@ -217,6 +217,168 @@
 </div>
 
 {% if current_user.is_authenticated and current_user.is_admin %}
+{% if system_settings %}
+<!-- System & Library Preferences Section (Admin Only) -->
+<div id="system-preferences" style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <span>⚙️</span> System & Library Preferences
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+        Runtime configuration options. Settings modified here take immediate effect without restarting the server.
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <button type="button" class="btn btn-secondary" onclick="resetSystemSettings()" id="reset-settings-btn" title="Revert all settings to environment variables (.env)">
+        ↺ Reset to .env
+      </button>
+      <button type="button" class="btn btn-primary" onclick="saveSystemSettings()" id="save-settings-btn">
+        💾 Save Preferences
+      </button>
+    </div>
+  </div>
+
+  <form id="system-settings-form" onsubmit="event.preventDefault(); saveSystemSettings();">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+
+      <!-- Card 1: Security & Access -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>🔒</span> Security & Access
+        </h4>
+
+        <!-- AUTH_REQUIRED -->
+        <div>
+          <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+            <input type="checkbox" id="setting-AUTH_REQUIRED" name="AUTH_REQUIRED" {% if system_settings.settings.AUTH_REQUIRED.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+            <span>Require Authentication</span>
+          </label>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Require users to log in to browse the catalog, read or stream media, and access OPDS feeds.
+          </p>
+          {% if system_settings.settings.AUTH_REQUIRED.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.AUTH_REQUIRED.env_default }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- ALLOW_REGISTRATION -->
+        <div>
+          <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+            <input type="checkbox" id="setting-ALLOW_REGISTRATION" name="ALLOW_REGISTRATION" {% if system_settings.settings.ALLOW_REGISTRATION.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+            <span>Allow User Registration</span>
+          </label>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Enable public sign-up on the login screen. Turn off to restrict account creation to admins only.
+          </p>
+          {% if system_settings.settings.ALLOW_REGISTRATION.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.ALLOW_REGISTRATION.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 2: Library & Automation -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>⚡</span> Library & Automation
+        </h4>
+
+        <!-- AUTO_SCAN_ON_START -->
+        <div>
+          <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+            <input type="checkbox" id="setting-AUTO_SCAN_ON_START" name="AUTO_SCAN_ON_START" {% if system_settings.settings.AUTO_SCAN_ON_START.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+            <span>Scan Libraries on Startup</span>
+          </label>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Automatically scan and index all media folders when the server boots.
+          </p>
+          {% if system_settings.settings.AUTO_SCAN_ON_START.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.AUTO_SCAN_ON_START.env_default }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- WATCH_LIBRARY -->
+        <div>
+          <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+            <input type="checkbox" id="setting-WATCH_LIBRARY" name="WATCH_LIBRARY" {% if system_settings.settings.WATCH_LIBRARY.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+            <span>Watch Folders in Real-Time</span>
+          </label>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Continuously watch library folders for added, changed, or deleted files. (Disable if on slow network/SMB mounts).
+          </p>
+          {% if system_settings.settings.WATCH_LIBRARY.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 3: Metadata Enrichment -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>✨</span> Metadata Enrichment
+        </h4>
+
+        <!-- AUTO_ENRICH -->
+        <div>
+          <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+            <input type="checkbox" id="setting-AUTO_ENRICH" name="AUTO_ENRICH" {% if system_settings.settings.AUTO_ENRICH.value %}checked{% endif %} style="width: 1.1rem; height: 1.1rem;">
+            <span>Auto-Enrich on Library Scan</span>
+          </label>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 1.7rem;">
+            Automatically query online providers for book synopses, genres, and high-res covers during scans.
+          </p>
+          {% if system_settings.settings.AUTO_ENRICH.is_overridden %}
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.AUTO_ENRICH.env_default }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- METADATA_PROVIDER -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Metadata Provider</label>
+          <select id="setting-METADATA_PROVIDER" class="input-text" style="width: 100%; font-size: 0.85rem;">
+            <option value="all" {% if system_settings.settings.METADATA_PROVIDER.value == 'all' %}selected{% endif %}>🌐 All Providers (Google Books & Open Library)</option>
+            <option value="googlebooks" {% if system_settings.settings.METADATA_PROVIDER.value == 'googlebooks' %}selected{% endif %}>📚 Google Books</option>
+            <option value="openlibrary" {% if system_settings.settings.METADATA_PROVIDER.value == 'openlibrary' %}selected{% endif %}>📖 Open Library</option>
+          </select>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Preferred provider when fetching book metadata and cover art.
+          </p>
+          {% if system_settings.settings.METADATA_PROVIDER.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 4: Display & Pagination -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>📱</span> Catalog & Presentation
+        </h4>
+
+        <!-- PAGE_SIZE -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Default Items Per Page</label>
+          <select id="setting-PAGE_SIZE" class="input-text" style="width: 100%; font-size: 0.85rem;">
+            <option value="12" {% if system_settings.settings.PAGE_SIZE.value == 12 %}selected{% endif %}>12 items</option>
+            <option value="24" {% if system_settings.settings.PAGE_SIZE.value == 24 %}selected{% endif %}>24 items (default)</option>
+            <option value="36" {% if system_settings.settings.PAGE_SIZE.value == 36 %}selected{% endif %}>36 items</option>
+            <option value="48" {% if system_settings.settings.PAGE_SIZE.value == 48 %}selected{% endif %}>48 items</option>
+            <option value="96" {% if system_settings.settings.PAGE_SIZE.value == 96 %}selected{% endif %}>96 items</option>
+          </select>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Number of media cards displayed per page on library, books, and series catalog views.
+          </p>
+          {% if system_settings.settings.PAGE_SIZE.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (env: {{ system_settings.settings.PAGE_SIZE.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+{% endif %}
+
 <!-- User Management Section (Admin Only) -->
 <div id="users" style="margin-top: 2rem;">
   <div style="margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
@@ -615,6 +777,83 @@ async function deleteLibrary(libId, libName) {
     }
   } catch (err) {
     showToast("Network error removing folder", "error");
+  }
+}
+async function saveSystemSettings() {
+  const saveBtn = document.getElementById("save-settings-btn");
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerText = "⏳ Saving...";
+  }
+
+  const payload = {
+    AUTH_REQUIRED: document.getElementById("setting-AUTH_REQUIRED").checked,
+    ALLOW_REGISTRATION: document.getElementById("setting-ALLOW_REGISTRATION").checked,
+    AUTO_SCAN_ON_START: document.getElementById("setting-AUTO_SCAN_ON_START").checked,
+    WATCH_LIBRARY: document.getElementById("setting-WATCH_LIBRARY").checked,
+    AUTO_ENRICH: document.getElementById("setting-AUTO_ENRICH").checked,
+    METADATA_PROVIDER: document.getElementById("setting-METADATA_PROVIDER").value,
+    PAGE_SIZE: parseInt(document.getElementById("setting-PAGE_SIZE").value, 10),
+  };
+
+  try {
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("System preferences saved successfully!", "success");
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast(data.error || "Failed to save preferences", "error");
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerText = "💾 Save Preferences";
+      }
+    }
+  } catch (err) {
+    showToast("Network error saving preferences", "error");
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerText = "💾 Save Preferences";
+    }
+  }
+}
+
+async function resetSystemSettings() {
+  if (!confirm("Are you sure you want to revert all system preferences to the default values defined in your environment (.env)?")) {
+    return;
+  }
+  const resetBtn = document.getElementById("reset-settings-btn");
+  if (resetBtn) {
+    resetBtn.disabled = true;
+    resetBtn.innerText = "⏳ Reverting...";
+  }
+
+  try {
+    const res = await fetch("/api/settings/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("Restored preferences to .env defaults!", "success");
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast(data.error || "Failed to reset preferences", "error");
+      if (resetBtn) {
+        resetBtn.disabled = false;
+        resetBtn.innerText = "↺ Reset to .env";
+      }
+    }
+  } catch (err) {
+    showToast("Network error resetting preferences", "error");
+    if (resetBtn) {
+      resetBtn.disabled = false;
+      resetBtn.innerText = "↺ Reset to .env";
+    }
   }
 }
 </script>

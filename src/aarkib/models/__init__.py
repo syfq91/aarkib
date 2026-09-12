@@ -14,6 +14,7 @@ from aarkib.models.media_item import Book, Item, MediaItem
 from aarkib.models.metadata_cache import MetadataCacheEntry
 from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
 from aarkib.models.progress import Bookmark, UserProgress
+from aarkib.models.setting import SystemSetting
 from aarkib.models.tag import Tag, book_tags, media_tags
 from aarkib.models.user import User
 
@@ -23,6 +24,7 @@ __all__ = [
     "Item",
     "Book",
     "Library",
+    "SystemSetting",
     "Creator",
     "Author",
     "Collection",

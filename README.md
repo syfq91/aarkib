@@ -101,13 +101,19 @@ Your library media placed in `./data` (or subdirectories `./data/media`, `./data
 | `APP_ENV` | `development` | Runtime environment selecting the app config: `production` (enforces secure sessions), `testing`, or `development`. |
 | `PORT` | `5000` | Server listening port. |
 
-> **💡 Generic Media Folders & WebUI Configuration**:
-> - **WebUI Media Folders Management**: Head to **Settings → 📁 Media Folders & Libraries** in the web interface to view all folders, add new media directories, and customize each folder's media type:
+> **💡 WebUI Configuration & Preferences**:
+> - **System & Library Preferences**: Administrators can configure runtime options directly from **Settings → ⚙️ System & Library Preferences** without restarting the server:
+>   - **Authentication Requirement (`AARKIB_AUTH_REQUIRED`)** & **User Registration (`AARKIB_ALLOW_REGISTRATION`)**
+>   - **Auto-Scan on Startup (`AARKIB_AUTO_SCAN`)** & **Real-Time Filesystem Watcher (`AARKIB_WATCH_LIBRARY`)**
+>   - **Auto-Enrich Metadata on Scan (`AARKIB_AUTO_ENRICH`)** & **Preferred Provider (`AARKIB_METADATA_PROVIDER`)**
+>   - **Catalog Items Per Page (`AARKIB_PAGE_SIZE`)**
+> - **Media Folders Management**: Head to **Settings → 📁 Media Folders & Libraries** in the web interface to view all folders, add new media directories, and customize each folder's media type:
 >   - **Mixed / Auto-detect (`all`)**: Automatically detects books (`.epub`), comics/manga (`.cbz`, `.cbr`, `.zip`), and videos (`.mp4`, `.mkv`, etc.).
 >   - **Books Only (`book`)**: Catalogs files inside as books.
 >   - **Comics & Manga (`comic`)**: Catalogs files inside as comics/manga.
 >   - **Movies & TV Shows (`video`)**: Catalogs video media files inside as movies & shows.
 > - **Environment Configuration**: You can also declare folders in `.env` using `AARKIB_MEDIA_DIR=/media/storage`, delimited paths `AARKIB_MEDIA_DIR=/media/movies:/media/books`, numbered variables like `AARKIB_MEDIA_DIR1=/mnt/nas/books`, `AARKIB_MEDIA_DIR2=/media/manga`, `AARKIB_MEDIA_DIR3=/media/movies`, or named category variables like `AARKIB_MEDIA_DIR_MANGA=/manga`.
+> - **Environment Defaults**: Declaring values in `.env` or Docker Compose sets the baseline defaults; settings saved in the WebUI take precedence and persist across restarts.
 
 ---
 

@@ -223,6 +223,12 @@ def settings():
     author_count = db.session.scalar(select(func.count(Author.id))) or 0
     series_count = db.session.scalar(select(func.count(Series.id))) or 0
 
+    system_settings = None
+    if current_user.is_authenticated and current_user.is_admin:
+        from aarkib.services.settings_service import get_effective_settings
+
+        system_settings = get_effective_settings(current_app)
+
     return render_template(
         "settings.html",
         users=users,
@@ -234,6 +240,7 @@ def settings():
         book_count=media_count,
         author_count=author_count,
         series_count=series_count,
+        system_settings=system_settings,
     )
 
 

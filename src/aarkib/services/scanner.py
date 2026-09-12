@@ -935,6 +935,17 @@ def start_library_watcher(app: Flask) -> Observer | None:
     if not app.config.get("WATCH_LIBRARY", True):
         return None
 
+    # Stop any existing watcher first
+    existing = (
+        app.extensions.get("library_watcher") if hasattr(app, "extensions") else None
+    )
+    if existing and existing.is_alive():
+        try:
+            existing.stop()
+            existing.join(timeout=2.0)
+        except Exception:
+            pass
+
     library_dirs = get_library_dirs(app)
     event_handler = LibraryChangeHandler(app)
     observer = Observer()
@@ -943,7 +954,23 @@ def start_library_watcher(app: Flask) -> Observer | None:
         observer.schedule(event_handler, str(lib_dir), recursive=True)
     observer.daemon = True
     observer.start()
+    if hasattr(app, "extensions"):
+        app.extensions["library_watcher"] = observer
     logger.info(
         "Library watcher started for %s", ", ".join(str(d) for d in library_dirs)
     )
     return observer
+
+
+def stop_library_watcher(app: Flask) -> None:
+    """Stops the active background library watcher if running."""
+    if hasattr(app, "extensions"):
+        observer = app.extensions.get("library_watcher")
+        if observer and observer.is_alive():
+            try:
+                observer.stop()
+                observer.join(timeout=2.0)
+                logger.info("Library watcher stopped.")
+            except Exception as e:
+                logger.warning("Error stopping library watcher: %s", e)
+        app.extensions["library_watcher"] = None

@@ -1645,7 +1645,6 @@ def edit_media_metadata(item_id: int):
         }
     )
 
-
 # ----------------------------------------------------------------------
 # User Favorites API
 # ----------------------------------------------------------------------
@@ -1932,3 +1931,59 @@ def import_opml():
     except Exception as exc:
         current_app.logger.exception("Failed to import OPML: %s", exc)
         return api_error(f"OPML import error: {exc}", 500)
+
+
+@api_bp.route("/settings", methods=["GET"])
+@api_admin_required
+def get_settings():
+    """Retrieve all effective system settings and their metadata."""
+    from aarkib.services.settings_service import get_effective_settings
+
+    result = get_effective_settings(current_app)
+    return jsonify({"status": "success", **result})
+
+
+@api_bp.route("/settings", methods=["PATCH", "PUT"])
+@api_admin_required
+def update_system_settings():
+    """Update system settings dynamically."""
+    from aarkib.services.settings_service import update_settings
+
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
+    try:
+        result = update_settings(current_app, data)
+        return jsonify(
+            {
+                "status": "success",
+                "message": "Settings updated successfully",
+                **result,
+            }
+        )
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        current_app.logger.error("Failed to update settings: %s", err, exc_info=True)
+        return jsonify({"error": "Failed to update settings"}), 500
+
+
+@api_bp.route("/settings/reset", methods=["POST"])
+@api_admin_required
+def reset_system_settings():
+    """Reset system settings to environment / hardcoded defaults."""
+    from aarkib.services.settings_service import reset_settings_to_defaults
+
+    try:
+        result = reset_settings_to_defaults(current_app)
+        return jsonify(
+            {
+                "status": "success",
+                "message": "Settings reset to environment defaults",
+                **result,
+            }
+        )
+    except Exception as err:
+        current_app.logger.error("Failed to reset settings: %s", err, exc_info=True)
+        return jsonify({"error": "Failed to reset settings"}), 500
