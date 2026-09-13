@@ -16,6 +16,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
+
 logger = logging.getLogger(__name__)
 
 # Cache detected VAAPI device to avoid probing repeatedly
@@ -97,7 +99,8 @@ def detect_vaapi_device(device_override: str | None = None) -> str | None:
                 if node not in candidate_nodes:
                     candidate_nodes.append(node)
 
-        if not shutil.which("ffmpeg") or not candidate_nodes:
+        ffmpeg_bin = get_ffmpeg_binary()
+        if not ffmpeg_bin or not candidate_nodes:
             _VAAPI_CHECKED = True
             _CACHED_VAAPI_DEVICE = None
             return None
@@ -114,7 +117,7 @@ def detect_vaapi_device(device_override: str | None = None) -> str | None:
             try:
                 # Probe VAAPI hardware encoder capability
                 probe_cmd = [
-                    "ffmpeg",
+                    ffmpeg_bin,
                     "-v",
                     "quiet",
                     "-hwaccel",
@@ -180,7 +183,8 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
         "subtitles": [],
     }
 
-    if not shutil.which("ffprobe") or not file_path.exists():
+    ffprobe_bin = get_ffprobe_binary()
+    if not ffprobe_bin or not file_path.exists():
         # Fallback to basic pure-Python inspection if possible
         from aarkib.services.parsers.video import read_mp4_metadata
 
@@ -197,7 +201,7 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
 
     try:
         cmd = [
-            "ffprobe",
+            ffprobe_bin,
             "-v",
             "quiet",
             "-print_format",
@@ -382,12 +386,13 @@ def evaluate_playback_strategy(
 def generate_vtt_subtitles(file_path: Path, subtitle_index: int = 0) -> bytes:
     """Extracts and converts embedded text subtitles (SRT, ASS) to WebVTT format."""
     file_path = Path(file_path)
-    if not shutil.which("ffmpeg") or not file_path.exists():
+    ffmpeg_bin = get_ffmpeg_binary()
+    if not ffmpeg_bin or not file_path.exists():
         return b"WEBVTT\n\nNOTE Subtitle engine unavailable\n"
 
     try:
         cmd = [
-            "ffmpeg",
+            ffmpeg_bin,
             "-v",
             "quiet",
             "-i",
@@ -419,10 +424,11 @@ def stream_remux_pipe(
 ) -> Generator[bytes]:
     """Streams container-remuxed fragmented MP4 directly from FFmpeg stdout."""
     file_path = Path(file_path)
-    if not shutil.which("ffmpeg") or not file_path.exists():
+    ffmpeg_bin = get_ffmpeg_binary()
+    if not ffmpeg_bin or not file_path.exists():
         return
 
-    cmd = ["ffmpeg"]
+    cmd = [ffmpeg_bin]
     if seek_seconds > 0:
         cmd.extend(["-ss", str(seek_seconds)])
     cmd.extend(["-i", str(file_path)])
@@ -588,7 +594,8 @@ class TranscodeSupervisor:
         detected_vaapi = detect_vaapi_device(vaapi_device)
 
         # Build FFmpeg command line
-        cmd = ["ffmpeg", "-y"]
+        ffmpeg_bin = get_ffmpeg_binary() or "ffmpeg"
+        cmd = [ffmpeg_bin, "-y"]
 
         if seek_offset > 0:
             cmd.extend(["-ss", str(seek_offset)])
@@ -678,7 +685,7 @@ class TranscodeSupervisor:
         )
 
         proc: subprocess.Popen | None = None
-        if shutil.which("ffmpeg"):
+        if get_ffmpeg_binary():
             try:
                 proc = subprocess.Popen(
                     cmd,

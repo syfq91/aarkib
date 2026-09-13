@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -83,13 +82,15 @@ class VideoMediaPlugin(MediaPlugin):
 
     def check_health(self) -> dict[str, Any]:
         """Performs health check for video plugin."""
+        from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
+
         return {
             "status": "ok",
             "plugin": self.name,
             "media_type": self.media_type,
             "supported_extensions": sorted(self.supported_extensions),
-            "ffmpeg_available": bool(shutil.which("ffmpeg")),
-            "ffprobe_available": bool(shutil.which("ffprobe")),
+            "ffmpeg_available": bool(get_ffmpeg_binary()),
+            "ffprobe_available": bool(get_ffprobe_binary()),
         }
 
 

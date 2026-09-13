@@ -4,12 +4,12 @@ import io
 import json
 import logging
 import re
-import shutil
 import struct
 import subprocess
 from pathlib import Path
 from typing import Any
 
+from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
 from aarkib.services.parsers.base import ParsedVideoMetadata
 
 logger = logging.getLogger(__name__)
@@ -230,12 +230,13 @@ def _parse_moov_payload(payload: bytes, meta: dict[str, Any]) -> None:
 
 def read_ffprobe_metadata(file_path: Path) -> dict[str, Any] | None:
     """Uses ffprobe CLI if available to extract container and stream metadata."""
-    if not shutil.which("ffprobe"):
+    ffprobe_bin = get_ffprobe_binary()
+    if not ffprobe_bin:
         return None
 
     try:
         cmd = [
-            "ffprobe",
+            ffprobe_bin,
             "-v",
             "quiet",
             "-print_format",
@@ -315,10 +316,11 @@ def extract_video_cover(file_path: Path) -> bytes | None:
                 logger.debug("Failed to read cover file %s: %s", c_path, exc_info=True)
 
     # 2. If ffmpeg is installed, grab a snapshot frame at 5 seconds (or 10%)
-    if shutil.which("ffmpeg"):
+    ffmpeg_bin = get_ffmpeg_binary()
+    if ffmpeg_bin:
         try:
             cmd = [
-                "ffmpeg",
+                ffmpeg_bin,
                 "-ss",
                 "00:00:05",
                 "-i",

@@ -13,7 +13,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
 
 ## ✨ Features
 
-- 📖 **E-Books & Comics**: Read `.epub`, `.cbz`, `.cbr`, and `.zip` files directly in your browser or on your favorite e-reader. Includes customizable themes (Dark, Sepia, OLED, Light), font sizing, bookmarks, continuous vertical scroll, and two-page spread modes.
+- 📖 **E-Books, Comics & Documents**: Read `.epub`, `.pdf`, `.cbz`, `.cbr`, and `.zip` files directly in your browser or on your favorite e-reader. Includes dedicated PDF web reader, customizable themes (Dark, Sepia, OLED, Light), font sizing, bookmarks, continuous vertical scroll, and two-page spread modes.
 - 🎬 **Movies & TV Shows**: Stream video files (`.mp4`, `.mkv`, `.webm`, etc.) with instant seeking, automatic TV show detection (`S01E02`), resume playback, and next-episode autoplay.
 - 🎵 **Audiobooks & Music**: Listen in-browser with album artwork, playback speed controls ($0.75\times$–$2.0\times$), track scrubbing, and saved listening positions.
 - 🎙️ **Podcasts**: Organize audio shows, import OPML subscriptions, stream episodes, and search online directory details.
@@ -24,7 +24,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
   - **TV & Mobile Streaming Apps (Jellyfin)**: Connect official and third-party Jellyfin clients (Jellyfin Mobile for Android/iOS, Android TV, Swiftfin, Findroid, Jellyfin Media Player) to browse and stream movies, TV shows, and music.
 - 🎨 **Modern Web App & PWA**: Responsive interface with Dark, Light, and OLED themes. Installable on phones and tablets as a Progressive Web App.
 - 👥 **Multi-User**: Dedicated accounts for family members with individual reading progress, bookmarks, and viewing history.
-- 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, TMDB, and MusicBrainz, with a built-in metadata editor.
+- 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, and MusicBrainz, with per-library customization and a built-in metadata editor.
 
 ---
 
@@ -120,6 +120,12 @@ All server management is handled directly through the web interface under **Sett
 - **⚙️ System Preferences**: Configure startup auto-scanning, real-time filesystem watchers, and automatic metadata enrichment.
 - **🔌 Plugins & Integrations**: View available media formats and access OPDS and Subsonic connection endpoints.
 - **⚡ Background Tasks**: Monitor active library scans, enrichment jobs, and search index status.
+
+---
+
+## 🛠️ Architecture & Developer Guidelines
+
+For architectural blueprints, engineering standards, safety invariants, and developer guidelines for human contributors and AI assistants, see [**`AGENTS.md`**](AGENTS.md).
 
 ---
 

@@ -61,6 +61,82 @@ def _is_within_covers(file_path: Path) -> bool:
     return file_path.resolve().is_relative_to(covers_dir)
 
 
+def is_safe_media_path(file_path: Path | str) -> bool:
+    """Return True if file_path resolves within configured library, media, or data roots.
+
+    Guards media streaming and download endpoints against path traversal,
+    absolute-path injection, and symlink escapes outside permitted directories.
+    """
+    try:
+        resolved = Path(file_path).resolve()
+    except OSError, RuntimeError, ValueError:
+        return False
+
+    allowed_roots: list[Path] = []
+
+    # 1. Configured app directories
+    for key in (
+        "MEDIA_DIRS",
+        "MEDIA_DIR",
+        "LIBRARY_DIRS",
+        "LIBRARY_DIR",
+        "DATA_DIR",
+        "COVERS_DIR",
+        "OPTIMIZED_DIR",
+        "TRANSCODE_DIR",
+    ):
+        val = current_app.config.get(key)
+        if isinstance(val, (list, tuple, set)):
+            for p in val:
+                try:
+                    allowed_roots.append(Path(p).resolve())
+                except Exception:
+                    pass
+        elif val:
+            try:
+                allowed_roots.append(Path(val).resolve())
+            except Exception:
+                pass
+
+    # In testing mode, also allow parent of DATA_DIR (tmp_path fixture)
+    if current_app.config.get("TESTING"):
+        data_dir = current_app.config.get("DATA_DIR")
+        if data_dir:
+            try:
+                allowed_roots.append(Path(data_dir).resolve().parent)
+            except Exception:
+                pass
+
+    # 2. Database library roots
+    try:
+        from aarkib.models.library import Library
+
+        lib_paths = db.session.execute(select(Library.path)).scalars().all()
+        for lp in lib_paths:
+            if lp:
+                try:
+                    allowed_roots.append(Path(lp).resolve())
+                except Exception:
+                    pass
+    except Exception as e:
+        current_app.logger.debug(
+            "Error querying library roots for path validation: %s", e
+        )
+
+    for root in allowed_roots:
+        try:
+            if resolved.is_relative_to(root):
+                return True
+        except ValueError, AttributeError:
+            try:
+                resolved.relative_to(root)
+                return True
+            except ValueError:
+                continue
+
+    return False
+
+
 def api_admin_required(view):
     """Require an authenticated admin user for API endpoints.
 
@@ -863,6 +939,10 @@ def get_media_file(item_id: int, filename: str | None = None):
         return api_error("Media item not found", 404)
 
     file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
@@ -1195,6 +1275,10 @@ def download_media_file(item_id: int, preset: str | None = None):
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
     file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 

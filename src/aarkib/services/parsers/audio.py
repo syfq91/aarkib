@@ -6,12 +6,12 @@ import io
 import json
 import logging
 import re
-import shutil
 import struct
 import subprocess
 from pathlib import Path
 from typing import Any
 
+from aarkib.config import get_ffprobe_binary
 from aarkib.services.parsers.base import (
     ParsedAudiobookMetadata,
     ParsedAudioMetadata,
@@ -596,12 +596,13 @@ def parse_mp4_chapters(file_path: Path) -> list[dict[str, Any]]:
 
 def read_ffprobe_chapters(file_path: Path) -> list[dict[str, Any]]:
     """Uses ffprobe CLI if available to extract container chapters."""
-    if not shutil.which("ffprobe"):
+    ffprobe_bin = get_ffprobe_binary()
+    if not ffprobe_bin:
         return []
 
     try:
         cmd = [
-            "ffprobe",
+            ffprobe_bin,
             "-v",
             "quiet",
             "-print_format",

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from pathlib import Path
+from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -83,6 +85,40 @@ def discover_media_dirs(
 discover_library_dirs = discover_media_dirs
 
 
+def get_ffmpeg_binary(app_config: dict[str, Any] | None = None) -> str | None:
+    """Returns the executable path for ffmpeg or None if not available."""
+    configured: str | None = None
+    if app_config:
+        configured = app_config.get("FFMPEG_PATH")
+    if not configured:
+        configured = os.getenv("AARKIB_FFMPEG_PATH") or "ffmpeg"
+    if not configured:
+        return None
+    found = shutil.which(configured)
+    if found:
+        return found
+    if os.path.isfile(configured) and os.access(configured, os.X_OK):
+        return configured
+    return None
+
+
+def get_ffprobe_binary(app_config: dict[str, Any] | None = None) -> str | None:
+    """Returns the executable path for ffprobe or None if not available."""
+    configured: str | None = None
+    if app_config:
+        configured = app_config.get("FFPROBE_PATH")
+    if not configured:
+        configured = os.getenv("AARKIB_FFPROBE_PATH") or "ffprobe"
+    if not configured:
+        return None
+    found = shutil.which(configured)
+    if found:
+        return found
+    if os.path.isfile(configured) and os.access(configured, os.X_OK):
+        return configured
+    return None
+
+
 class Config:
     """Base application configuration."""
 
@@ -131,6 +167,8 @@ class Config:
         os.getenv("AARKIB_TRANSCODE_DIR", DATA_DIR / "transcode")
     )
     VAAPI_DEVICE: str | None = os.getenv("AARKIB_VAAPI_DEVICE")
+    FFMPEG_PATH: str = os.getenv("AARKIB_FFMPEG_PATH", "ffmpeg")
+    FFPROBE_PATH: str = os.getenv("AARKIB_FFPROBE_PATH", "ffprobe")
 
     # Database
     SQLALCHEMY_DATABASE_URI: str = os.getenv(
