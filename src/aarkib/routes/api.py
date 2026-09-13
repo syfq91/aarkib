@@ -808,18 +808,18 @@ def get_media_cover(item_id: int):
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
         <defs>
             <linearGradient id="vidGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#0f172a"/>
-                <stop offset="100%" stop-color="#1e1b4b"/>
+                <stop offset="0%" stop-color="#0b0e14"/>
+                <stop offset="100%" stop-color="#181f2e"/>
             </linearGradient>
         </defs>
-        <rect width="300" height="450" fill="url(#vidGrad)" rx="8"/>
-        <rect x="12" y="12" width="276" height="426" fill="none" stroke="#4338ca" stroke-width="2" rx="6" stroke-dasharray="6,4"/>
+        <rect width="300" height="450" fill="url(#vidGrad)" rx="16"/>
+        <rect x="12" y="12" width="276" height="426" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" rx="12"/>
         <text x="150" y="130" font-size="48" text-anchor="middle">🎬</text>
-        <text x="150" y="210" fill="#f8fafc" font-size="18" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
-        <text x="150" y="250" fill="#a5b4fc" font-size="14" font-family="system-ui, sans-serif" text-anchor="middle">{sub}</text>
-        <rect x="90" y="295" width="120" height="28" rx="6" fill="#4338ca"/>
-        <text x="150" y="314" fill="#ffffff" font-size="12" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{(item.file_format or "video").upper()}</text>
-        <text x="150" y="410" fill="#6366f1" font-size="12" font-family="system-ui, sans-serif" letter-spacing="2" text-anchor="middle">AARKIB VIDEO</text>
+        <text x="150" y="210" fill="#f8fafc" font-size="18" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
+        <text x="150" y="250" fill="#94a3b8" font-size="14" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">{sub}</text>
+        <rect x="90" y="295" width="120" height="28" rx="6" fill="#0f172a" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+        <text x="150" y="314" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" font-weight="bold" letter-spacing="1" text-anchor="middle">{(item.file_format or "video").upper()}</text>
+        <text x="150" y="410" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" letter-spacing="2" font-weight="600" text-anchor="middle">AARKIB VIDEO</text>
     </svg>"""
         return (
             io.BytesIO(svg.encode("utf-8")).getvalue(),
@@ -830,11 +830,11 @@ def get_media_cover(item_id: int):
     title = item.title[:30] + ("..." if len(item.title) > 30 else "")
     author = item.authors_display[:25]
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
-        <rect width="300" height="450" fill="#1e293b" rx="8"/>
-        <rect x="12" y="12" width="276" height="426" fill="none" stroke="#475569" stroke-width="2" rx="6"/>
-        <text x="150" y="160" fill="#f8fafc" font-size="20" font-family="system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
-        <text x="150" y="240" fill="#94a3b8" font-size="14" font-family="system-ui, sans-serif" text-anchor="middle">{author}</text>
-        <text x="150" y="380" fill="#64748b" font-size="12" font-family="system-ui, sans-serif" text-anchor="middle">AARKIB</text>
+        <rect width="300" height="450" fill="#181f2e" rx="16"/>
+        <rect x="12" y="12" width="276" height="426" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" rx="12"/>
+        <text x="150" y="160" fill="#f8fafc" font-size="20" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="bold" text-anchor="middle">{title}</text>
+        <text x="150" y="240" fill="#94a3b8" font-size="14" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">{author}</text>
+        <text x="150" y="380" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" letter-spacing="2" font-weight="bold" text-anchor="middle">AARKIB</text>
     </svg>"""
     return (
         io.BytesIO(svg.encode("utf-8")).getvalue(),

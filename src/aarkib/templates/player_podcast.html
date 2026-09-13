@@ -12,10 +12,10 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background-color: #0b0f19;
+      background-color: #0b0e14;
       color: #f8fafc;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
     .podcast-page {
@@ -27,7 +27,7 @@
       align-items: center;
       padding: 1.5rem 1.5rem 2.5rem 1.5rem;
       box-sizing: border-box;
-      background: radial-gradient(circle at center top, #1e1b4b 0%, #0b0f19 80%);
+      background: radial-gradient(circle at center top, #181f2e 0%, #0b0e14 80%);
       position: relative;
     }
 
@@ -94,7 +94,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #1e1b4b;
+      background: #181f2e;
       margin: auto 0;
       position: relative;
     }
@@ -105,13 +105,13 @@
     }
     .cover-fallback {
       font-size: 5rem;
-      color: #6366f1;
+      color: #00d2ff;
       display: flex;
       align-items: center;
       justify-content: center;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      background: linear-gradient(135deg, #181f2e 0%, #1f293d 100%);
     }
 
     .player-content {
@@ -135,16 +135,18 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: rgba(0, 210, 255, 0.15);
+      color: #a5e7ff;
+      border: 1px solid rgba(0, 210, 255, 0.3);
       padding: 0.2rem 0.6rem;
       border-radius: 9999px;
       margin-bottom: 0.4rem;
     }
     .item-title {
+      font-family: var(--font-display, 'Plus Jakarta Sans', sans-serif);
       font-size: 1.35rem;
       font-weight: 700;
+      letter-spacing: -0.01em;
       line-height: 1.3;
       margin: 0 0 0.3rem 0;
       display: -webkit-box;
@@ -178,7 +180,8 @@
     }
     .progress-fill {
       height: 100%;
-      background: #6366f1;
+      background: #00d2ff;
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
       border-radius: 4px;
       width: 0%;
       position: relative;
@@ -226,7 +229,7 @@
       transition: transform 0.1s, color 0.2s;
     }
     .main-btn:hover {
-      color: #a5b4fc;
+      color: #00d2ff;
     }
     .main-btn:active {
       transform: scale(0.92);
@@ -235,13 +238,15 @@
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: #6366f1;
-      color: #ffffff;
-      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
+      background: #00d2ff;
+      color: #0b0e14;
+      box-shadow: 0 0 24px rgba(0, 210, 255, 0.4);
+      transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
     }
     .play-btn:hover {
-      background: #4f46e5;
-      color: #ffffff;
+      background: #38bdf8;
+      color: #0b0e14;
+      box-shadow: 0 0 32px rgba(0, 210, 255, 0.6);
     }
     .jump-btn {
       font-size: 1rem;
@@ -352,9 +357,10 @@
       color: #f8fafc;
     }
     .episode-list-item.active {
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
+      background: rgba(0, 210, 255, 0.15);
+      color: #00d2ff;
       font-weight: 600;
+      border-left: 3px solid #00d2ff;
     }
   </style>
 </head>

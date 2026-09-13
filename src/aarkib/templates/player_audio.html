@@ -12,10 +12,10 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background-color: #0b0f19;
+      background-color: #0b0e14;
       color: #f8fafc;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
     .audio-player-page {
@@ -27,7 +27,7 @@
       align-items: center;
       padding: 2rem 1.5rem 3rem 1.5rem;
       box-sizing: border-box;
-      background: radial-gradient(circle at center top, #1e293b 0%, #0b0f19 80%);
+      background: radial-gradient(circle at center top, #181f2e 0%, #0b0e14 80%);
     }
 
     .audio-header {
@@ -149,7 +149,8 @@
     .scrubber-fill {
       height: 100%;
       border-radius: 3px;
-      background: #6366f1;
+      background: #00d2ff;
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.6);
       width: 0%;
       pointer-events: none;
     }
@@ -182,8 +183,8 @@
       transition: color 0.15s, transform 0.1s, background 0.15s;
     }
     .ctrl-btn:hover {
-      color: #ffffff;
-      background: rgba(255, 255, 255, 0.08);
+      color: #00d2ff;
+      background: rgba(0, 210, 255, 0.12);
     }
     .ctrl-btn:active {
       transform: scale(0.92);
@@ -193,13 +194,15 @@
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: #6366f1;
-      color: #ffffff;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+      background: #00d2ff;
+      color: #0b0e14;
+      box-shadow: 0 0 24px rgba(0, 210, 255, 0.4);
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
     }
     .play-pause-btn:hover {
-      background: #4f46e5;
-      color: #ffffff;
+      background: #38bdf8;
+      color: #0b0e14;
+      box-shadow: 0 0 32px rgba(0, 210, 255, 0.6);
     }
 
     .extra-controls {
@@ -232,7 +235,7 @@
     .volume-slider {
       width: 90px;
       height: 4px;
-      accent-color: #6366f1;
+      accent-color: #00d2ff;
       cursor: pointer;
     }
   </style>

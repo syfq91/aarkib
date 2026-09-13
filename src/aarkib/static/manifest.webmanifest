@@ -4,8 +4,8 @@
   "description": "Lightweight self-hosted book, comic, and media server with OPDS and Web Readers",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#6366f1",
+  "background_color": "#0b0e14",
+  "theme_color": "#00d2ff",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",

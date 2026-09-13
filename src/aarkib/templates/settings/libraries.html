@@ -638,7 +638,7 @@ async function loadFolderPickerDirectories(targetPath) {
           item.style.transition = "background 0.15s";
           item.title = dir.path;
 
-          item.onmouseover = () => item.style.background = "rgba(99, 102, 241, 0.15)";
+          item.onmouseover = () => item.style.background = "rgba(0, 210, 255, 0.15)";
           item.onmouseout = () => item.style.background = "var(--bg-tertiary)";
           
           item.innerHTML = `<span style="font-size: 1.1rem;">📁</span> <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${dir.name}</span>`;

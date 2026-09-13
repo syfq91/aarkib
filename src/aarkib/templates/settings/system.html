@@ -41,7 +41,7 @@
             Automatically scan and index all media folders when the server boots.
           </p>
           {% if system_settings and system_settings.settings.AUTO_SCAN_ON_START.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_SCAN_ON_START.default_value if system_settings.settings.AUTO_SCAN_ON_START.default_value is defined else system_settings.settings.AUTO_SCAN_ON_START.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_SCAN_ON_START.default_value if system_settings.settings.AUTO_SCAN_ON_START.default_value is defined else system_settings.settings.AUTO_SCAN_ON_START.env_default }})</span></div>
           {% endif %}
         </div>
 
@@ -55,7 +55,7 @@
             Continuously watch library folders for added, changed, or deleted files. (Disable if on slow network/SMB mounts).
           </p>
           {% if system_settings and system_settings.settings.WATCH_LIBRARY.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.WATCH_LIBRARY.default_value if system_settings.settings.WATCH_LIBRARY.default_value is defined else system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.WATCH_LIBRARY.default_value if system_settings.settings.WATCH_LIBRARY.default_value is defined else system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
           {% endif %}
         </div>
       </div>
@@ -76,7 +76,7 @@
             Automatically query online providers for book synopses, genres, and high-res covers during scans.
           </p>
           {% if system_settings and system_settings.settings.AUTO_ENRICH.is_overridden %}
-            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_ENRICH.default_value if system_settings.settings.AUTO_ENRICH.default_value is defined else system_settings.settings.AUTO_ENRICH.env_default }})</span></div>
+            <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.AUTO_ENRICH.default_value if system_settings.settings.AUTO_ENRICH.default_value is defined else system_settings.settings.AUTO_ENRICH.env_default }})</span></div>
           {% endif %}
         </div>
 
@@ -92,7 +92,7 @@
             Preferred provider when fetching book metadata and cover art.
           </p>
           {% if system_settings and system_settings.settings.METADATA_PROVIDER.is_overridden %}
-            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.METADATA_PROVIDER.default_value if system_settings.settings.METADATA_PROVIDER.default_value is defined else system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.METADATA_PROVIDER.default_value if system_settings.settings.METADATA_PROVIDER.default_value is defined else system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
           {% endif %}
         </div>
       </div>
@@ -117,7 +117,7 @@
             Number of media cards displayed per page on library, books, and series catalog views.
           </p>
           {% if system_settings and system_settings.settings.PAGE_SIZE.is_overridden %}
-            <div style="margin-top: 0.25rem;"><span class="badge" style="background: rgba(99, 102, 241, 0.2); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.PAGE_SIZE.default_value if system_settings.settings.PAGE_SIZE.default_value is defined else system_settings.settings.PAGE_SIZE.env_default }})</span></div>
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.PAGE_SIZE.default_value if system_settings.settings.PAGE_SIZE.default_value is defined else system_settings.settings.PAGE_SIZE.env_default }})</span></div>
           {% endif %}
         </div>
       </div>

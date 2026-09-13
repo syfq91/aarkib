@@ -492,7 +492,7 @@ function renderGroupedSearchResults(data, query) {
             <span style="background: var(--bg-surface-elevated, rgba(255,255,255,0.08)); padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.8rem; color: var(--text-secondary); border: 1px solid var(--border);">${grp.count}</span>
           </div>
           ${grp.count > grp.items.length ? `
-            <button type="button" class="btn btn-sm btn-ghost" onclick="filterByGroup('${key}')" style="font-size: 0.85rem; color: var(--primary, #6366f1); cursor: pointer; padding: 0.2rem 0.5rem;">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="filterByGroup('${key}')" style="font-size: 0.85rem; color: var(--accent, #00d2ff); cursor: pointer; padding: 0.2rem 0.5rem;">
               View all ${grp.count} →
             </button>
           ` : ""}
