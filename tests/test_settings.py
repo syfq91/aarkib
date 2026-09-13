@@ -14,21 +14,29 @@ from aarkib.services.settings_service import (
 
 
 def _create_admin(app):
-    admin = User(username="admin_test", is_admin=True)
-    admin.set_password("adminpass")
+    from sqlalchemy import select
+
     with app.app_context():
-        db.session.add(admin)
-        db.session.commit()
-        return admin.id
+        user = db.session.scalar(select(User).where(User.username == "admin_test"))
+        if not user:
+            user = User(username="admin_test", is_admin=True)
+            user.set_password("adminpass")
+            db.session.add(user)
+            db.session.commit()
+        return user.id
 
 
 def _create_reader(app):
-    reader = User(username="reader_test", is_admin=False)
-    reader.set_password("readerpass")
+    from sqlalchemy import select
+
     with app.app_context():
-        db.session.add(reader)
-        db.session.commit()
-        return reader.id
+        user = db.session.scalar(select(User).where(User.username == "reader_test"))
+        if not user:
+            user = User(username="reader_test", is_admin=False)
+            user.set_password("readerpass")
+            db.session.add(user)
+            db.session.commit()
+        return user.id
 
 
 def _login_admin(client, app):
@@ -340,3 +348,70 @@ def test_runtime_settings_defaults_and_env_independence(monkeypatch):
     assert cfg.AUTO_ENRICH is False
     assert cfg.METADATA_PROVIDER == "all"
     assert cfg.PAGE_SIZE == 24
+
+
+def test_settings_integrations_hides_disabled_plugins(client, app):
+    """Verifies that disabled plugins are not rendered on the integrations page,
+    an empty state is shown when all are disabled, and cards reappear when re-enabled."""
+    _login_admin(client, app)
+
+    # 1. Default state: all 4 cards should be visible
+    res = client.get("/settings/integrations")
+    assert res.status_code == 200
+    assert b"OPDS Catalog Feeds" in res.data
+    assert b"Subsonic Mobile Streaming API" in res.data
+    assert b"Jellyfin Client API" in res.data
+    assert b"E-Ink Device Optimizer" in res.data
+    assert b"No Integrations Enabled" not in res.data
+
+    # 2. Disable OPDS only: OPDS card should disappear, others remain
+    client.patch("/api/settings", json={"ENABLE_OPDS": False})
+    res_no_opds = client.get("/settings/integrations")
+    assert res_no_opds.status_code == 200
+    assert b"OPDS Catalog Feeds" not in res_no_opds.data
+    assert b"Subsonic Mobile Streaming API" in res_no_opds.data
+    assert b"Jellyfin Client API" in res_no_opds.data
+    assert b"E-Ink Device Optimizer" in res_no_opds.data
+    assert b"No Integrations Enabled" not in res_no_opds.data
+
+    # 3. Disable Subsonic and Jellyfin as well
+    client.patch(
+        "/api/settings", json={"ENABLE_SUBSONIC": False, "ENABLE_JELLYFIN": False}
+    )
+    res_only_eink = client.get("/settings/integrations")
+    assert res_only_eink.status_code == 200
+    assert b"OPDS Catalog Feeds" not in res_only_eink.data
+    assert b"Subsonic Mobile Streaming API" not in res_only_eink.data
+    assert b"Jellyfin Client API" not in res_only_eink.data
+    assert b"E-Ink Device Optimizer" in res_only_eink.data
+    assert b"No Integrations Enabled" not in res_only_eink.data
+
+    # 4. Disable E-Ink Optimizer too: all 4 are now disabled -> empty state banner should show
+    client.patch("/api/settings", json={"ENABLE_EINK_OPTIMIZER": False})
+    res_all_disabled = client.get("/settings/integrations")
+    assert res_all_disabled.status_code == 200
+    assert b"OPDS Catalog Feeds" not in res_all_disabled.data
+    assert b"Subsonic Mobile Streaming API" not in res_all_disabled.data
+    assert b"Jellyfin Client API" not in res_all_disabled.data
+    assert b"E-Ink Device Optimizer" not in res_all_disabled.data
+    assert b"No Integrations Enabled" in res_all_disabled.data
+    assert b"/settings/plugins" in res_all_disabled.data
+
+    # 5. Non-admin reader viewing when all disabled should also see empty state (with reader message)
+    _login_reader(client, app)
+    res_reader_empty = client.get("/settings/integrations")
+    assert res_reader_empty.status_code == 200
+    assert b"No Integrations Enabled" in res_reader_empty.data
+    assert b"Please contact an administrator" in res_reader_empty.data
+
+    # 6. Re-enable OPDS via admin: OPDS card reappears, empty state disappears
+    _login_admin(client, app)
+    client.patch("/api/settings", json={"ENABLE_OPDS": True})
+    res_re_opds = client.get("/settings/integrations")
+    assert res_re_opds.status_code == 200
+    assert b"OPDS Catalog Feeds" in res_re_opds.data
+    assert b"Subsonic Mobile Streaming API" not in res_re_opds.data
+    assert b"No Integrations Enabled" not in res_re_opds.data
+
+    # Cleanup: Reset back to defaults
+    client.post("/api/settings/reset")

@@ -254,10 +254,12 @@ def settings(category: str | None = None):
 
     system_settings = get_effective_settings(current_app)
 
+    from aarkib.plugins import plugin_registry
+
+    enabled_plugins = {p.name: p.enabled for p in plugin_registry.get_all_plugins()}
+
     plugins_info = None
     if is_admin:
-        from aarkib.plugins import plugin_registry
-
         plugins_info = [
             {
                 "name": p.name,
@@ -295,6 +297,7 @@ def settings(category: str | None = None):
         series_count=series_count,
         system_settings=system_settings,
         plugins_info=plugins_info,
+        enabled_plugins=enabled_plugins,
     )
 
 
