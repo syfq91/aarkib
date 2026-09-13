@@ -41,6 +41,24 @@ class PodcastMediaPlugin(MediaPlugin):
         """Returns the dedicated podcast player URL."""
         return f"/reader/podcast/{item_id}"
 
+    def get_playback_info(
+        self, item: Any, user_id: int | None = None
+    ) -> dict[str, Any]:
+        """Returns podcast playback descriptor including feed URL, episode type, and GUID."""
+        info = super().get_playback_info(item, user_id=user_id)
+        info.update(
+            {
+                "playback_strategy": "direct_play",
+                "stream_url": f"/api/media/{item.id}/stream",
+                "episode_type": getattr(item, "episode_type", None),
+                "podcast_feed_url": getattr(item, "podcast_feed_url", None),
+                "podcast_guid": getattr(item, "podcast_guid", None),
+                "season": getattr(item, "season", None),
+                "episode": getattr(item, "episode", None),
+            }
+        )
+        return info
+
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
         return None
 

@@ -489,7 +489,11 @@ def opds2_recent(preset: str | None = None):
                     "href": acq_href,
                     "type": "application/epub+zip"
                     if b.file_format == "epub"
-                    else "application/vnd.comicbook+zip",
+                    else (
+                        "application/pdf"
+                        if b.file_format == "pdf"
+                        else "application/vnd.comicbook+zip"
+                    ),
                 },
                 {
                     "rel": "http://opds-spec.org/progression",

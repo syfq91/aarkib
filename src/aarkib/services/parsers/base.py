@@ -177,6 +177,10 @@ def extract_metadata_from_file(file_path: Path) -> BaseParsedMetadata | None:
         from aarkib.services.parsers.video import parse_video
 
         return parse_video(file_path)
+    elif ext == ".pdf":
+        from aarkib.services.parsers.pdf import parse_pdf
+
+        return parse_pdf(file_path)
     elif ext in (
         ".mp3",
         ".m4a",

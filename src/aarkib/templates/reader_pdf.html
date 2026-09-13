@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ book.title }} - Aarkib PDF Reader</title>
+  
+  <link rel="stylesheet" href="/static/css/app.css?v=2">
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #0b0e14;
+      color: #f8fafc;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .pdf-header {
+      height: 52px;
+      background: rgba(18, 23, 33, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      z-index: 100;
+      user-select: none;
+    }
+    .pdf-header-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 40vw;
+    }
+    .pdf-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-control {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f8fafc;
+      padding: 0.35rem 0.65rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn-control:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #00d2ff;
+    }
+    .page-input {
+      width: 48px;
+      text-align: center;
+      background: rgba(11, 14, 20, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 0.3rem 0.4rem;
+      border-radius: 0.375rem;
+      font-size: 0.85rem;
+    }
+    .page-input:focus {
+      outline: none;
+      border-color: #00d2ff;
+    }
+    .pdf-container {
+      flex: 1;
+      width: 100%;
+      height: calc(100% - 52px);
+      position: relative;
+      background: #121721;
+    }
+    .pdf-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #181f2e;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="pdf-header">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="/media/{{ book.id }}" class="btn-control" title="Exit to Details">← Back</a>
+      <span class="pdf-header-title" title="{{ book.title }}">{{ book.title }}</span>
+    </div>
+
+    <div class="pdf-controls">
+      <button id="prev-page-btn" class="btn-control" title="Previous Page">‹</button>
+      <span style="font-size: 0.85rem; color: #94a3b8;">Page</span>
+      <input type="number" id="page-number-input" class="page-input" min="1" max="{{ total_pages }}" value="{{ initial_page }}">
+      <span style="font-size: 0.85rem; color: #94a3b8;">of {{ total_pages }}</span>
+      <button id="next-page-btn" class="btn-control" title="Next Page">›</button>
+      
+      <a href="/api/media/{{ book.id }}/file" download class="btn-control" title="Download PDF">⬇ Download</a>
+      <button id="fullscreen-btn" class="btn-control" title="Fullscreen">⛶</button>
+    </div>
+  </header>
+
+  <!-- PDF Viewport Container -->
+  <main class="pdf-container">
+    <iframe id="pdf-frame" class="pdf-frame" src="/api/media/{{ book.id }}/file#page={{ initial_page }}"></iframe>
+  </main>
+
+  <script>
+    const BOOK_ID = {{ book.id }};
+    const TOTAL_PAGES = {{ total_pages }};
+    let currentPage = {{ initial_page }};
+
+    const pageInput = document.getElementById('page-number-input');
+    const prevBtn = document.getElementById('prev-page-btn');
+    const nextBtn = document.getElementById('next-page-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const pdfFrame = document.getElementById('pdf-frame');
+
+    function saveProgress(page) {
+      if (!page || page < 1) return;
+      const percentage = Math.min(100.0, Math.max(0.0, (page / TOTAL_PAGES) * 100.0));
+      const payload = {
+        location: String(page),
+        percentage: Number(percentage.toFixed(1)),
+        is_completed: page >= TOTAL_PAGES
+      };
+
+      fetch(`/api/media/${BOOK_ID}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.debug('Failed to save PDF progress:', err));
+    }
+
+    function setPage(pageNum) {
+      const page = Math.max(1, Math.min(TOTAL_PAGES, parseInt(pageNum, 10) || 1));
+      currentPage = page;
+      pageInput.value = page;
+      pdfFrame.src = `/api/media/${BOOK_ID}/file#page=${page}`;
+      saveProgress(page);
+    }
+
+    pageInput.addEventListener('change', () => setPage(pageInput.value));
+    pageInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        setPage(pageInput.value);
+        pageInput.blur();
+      }
+    });
+
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        setPage(currentPage - 1);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < TOTAL_PAGES) {
+        setPage(currentPage + 1);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (document.activeElement === pageInput) return;
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        if (currentPage > 1) setPage(currentPage - 1);
+      } else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+        if (currentPage < TOTAL_PAGES) setPage(currentPage + 1);
+      }
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.debug(err));
+      } else {
+        document.exitFullscreen().catch(err => console.debug(err));
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      saveProgress(currentPage);
+    });
+  </script>
+</body>
+</html>

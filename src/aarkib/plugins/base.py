@@ -72,6 +72,50 @@ class MediaPlugin(BasePlugin, ABC):
         """Returns the web player or reader URL for an item, or None."""
         return None
 
+    def get_playback_info(
+        self, item: Any, user_id: int | None = None
+    ) -> dict[str, Any]:
+        """Returns client-agnostic playback or reading descriptor for this media item."""
+        res: dict[str, Any] = {
+            "media_id": item.id,
+            "media_type": getattr(item, "media_type", None) or self.media_type,
+            "title": item.title,
+            "file_format": item.file_format,
+            "player_url": self.get_player_url(item.id, item.file_format),
+            "file_url": f"/api/media/{item.id}/file",
+            "cover_url": f"/api/media/{item.id}/cover",
+            "duration": getattr(item, "duration", None),
+            "resume_position": None,
+            "progress_percentage": 0.0,
+            "is_completed": False,
+        }
+        if user_id is not None:
+            from sqlalchemy import select
+
+            from aarkib.extensions import db
+            from aarkib.models.progress import UserProgress
+
+            progress = db.session.scalar(
+                select(UserProgress).where(
+                    UserProgress.user_id == user_id,
+                    UserProgress.media_item_id == item.id,
+                )
+            )
+            if progress:
+                res["progress_percentage"] = progress.percentage
+                res["is_completed"] = progress.is_completed
+                res["playback_speed"] = progress.playback_speed or 1.0
+                res["playback_type"] = progress.playback_type or item.media_type
+                if progress.position_seconds is not None:
+                    res["resume_position"] = progress.position_seconds
+                else:
+                    loc = progress.progress_location
+                    try:
+                        res["resume_position"] = float(loc) if loc else None
+                    except ValueError, TypeError:
+                        res["resume_position"] = loc
+        return res
+
     def check_health(self) -> dict[str, Any]:
         """Performs health / dependency checks for the plugin."""
         res = super().check_health()

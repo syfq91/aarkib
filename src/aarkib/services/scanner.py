@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_EXTENSIONS = {
     ".epub",
+    ".pdf",
     ".cbz",
     ".zip",
     ".cbr",
@@ -557,6 +558,7 @@ def index_media_file(
     auto_enrich: bool = False,
     library_media_type: str | None = None,
     library_id: int | None = None,
+    metadata_provider: str | None = None,
 ) -> MediaItem | None:
     """Parses and updates or inserts a single media record in the database."""
     supported = get_supported_extensions()
@@ -700,7 +702,12 @@ def index_media_file(
             try:
                 from aarkib.services.enricher import enrich_media_item
 
-                enrich_media_item(book, covers_dir, overwrite=False)
+                enrich_media_item(
+                    book,
+                    covers_dir,
+                    overwrite=False,
+                    provider=metadata_provider or "all",
+                )
             except Exception as e:
                 logger.debug("Auto enrich error for %s: %s", book.title, e)
 
@@ -772,12 +779,20 @@ def scan_library(
 
         for idx, (lib, file_path) in enumerate(candidate_files):
             existing_files.add(str(file_path.resolve()))
+            lib_auto_enrich = (
+                lib.auto_enrich
+                if getattr(lib, "auto_enrich", None) is not None
+                else auto_enrich
+            )
+            lib_provider = getattr(lib, "metadata_provider", None)
+
             book = index_single_book(
                 file_path,
                 covers_dir,
-                auto_enrich=auto_enrich,
+                auto_enrich=lib_auto_enrich,
                 library_media_type=lib.media_type,
                 library_id=getattr(lib, "id", None),
+                metadata_provider=lib_provider,
             )
             if book:
                 added += 1

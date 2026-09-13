@@ -61,3 +61,6 @@ tmdb_limiter = TokenBucketRateLimiter(rate=4.0, capacity=40.0)
 
 # Google Books / Open Library: 5 requests per second, capacity 20
 books_limiter = TokenBucketRateLimiter(rate=5.0, capacity=20.0)
+
+# ComicVine: 1 request per second
+comicvine_limiter = TokenBucketRateLimiter(rate=1.0, capacity=2.0)

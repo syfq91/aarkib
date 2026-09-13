@@ -127,3 +127,24 @@ def sample_cbz(tmp_path: Path) -> Path:
         zf.writestr("002.jpg", img_bytes)
 
     return cbz_path
+
+
+@pytest.fixture
+def sample_pdf(tmp_path: Path) -> Path:
+    from pypdf import PdfWriter
+
+    pdf_path = tmp_path / "sample.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=300, height=450)
+    writer.add_blank_page(width=300, height=450)
+    writer.add_metadata(
+        {
+            "/Title": "Sample PDF Document",
+            "/Author": "Dr. Alice Smith",
+            "/Subject": "A sample PDF document for automated testing",
+            "/CreationDate": "D:20240101120000",
+        }
+    )
+    with open(pdf_path, "wb") as f:
+        writer.write(f)
+    return pdf_path

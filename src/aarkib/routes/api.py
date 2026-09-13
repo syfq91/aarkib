@@ -524,13 +524,18 @@ def add_library():
     if media_type not in MEDIA_TYPE_CHOICES:
         media_type = "all"
 
+    import json
+
     slug = generate_slug(name if name else folder_name)
+    settings_val = data.get("settings")
+    settings_json = json.dumps(settings_val) if isinstance(settings_val, dict) else None
 
     new_lib = Library(
         slug=slug,
         name=name,
         path=norm_path,
         media_type=media_type,
+        settings_json=settings_json,
     )
     db.session.add(new_lib)
     db.session.commit()
@@ -576,6 +581,11 @@ def update_library(identifier: str):
     data = request.get_json(silent=True) or {}
     if "name" in data and str(data["name"]).strip():
         lib.name = str(data["name"]).strip()
+
+    if "settings" in data and isinstance(data["settings"], dict):
+        import json
+
+        lib.settings_json = json.dumps(data["settings"])
 
     if "media_type" in data:
         new_media_type = str(data["media_type"]).strip().lower()
@@ -887,6 +897,36 @@ def get_media_file(item_id: int, filename: str | None = None):
         mimetype = "application/octet-stream"
 
     return send_file(file_path, mimetype=mimetype, conditional=True)
+
+
+@api_bp.route("/media/<int:item_id>/playback", methods=["GET"])
+def get_media_playback(item_id: int):
+    """Retrieve format-agnostic playback or reading descriptor for any media item."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    from aarkib.plugins import plugin_registry
+
+    plugin = plugin_registry.get_plugin_for_media_type(item.media_type or "")
+    if not plugin:
+        plugin = plugin_registry.get_plugin_for_extension(f".{item.file_format}")
+
+    if plugin:
+        descriptor = plugin.get_playback_info(item, user_id=user_id)
+    else:
+        descriptor = {
+            "media_id": item.id,
+            "media_type": item.media_type,
+            "title": item.title,
+            "file_format": item.file_format,
+            "file_url": f"/api/media/{item.id}/file",
+            "cover_url": f"/api/media/{item.id}/cover",
+            "player_url": item.player_url,
+        }
+
+    return jsonify({"status": "ok", "playback": descriptor})
 
 
 # ---------------------------------------------------------------------------
@@ -1388,6 +1428,39 @@ def media_progress(item_id: int):
         if percentage > 0.0 or not record.percentage:
             record.percentage = percentage
 
+        # Enriched playback & consumption metrics
+        pos_sec = data.get("position_seconds")
+        if pos_sec is None and "position" in data:
+            pos_sec = data.get("position")
+        if pos_sec is not None:
+            try:
+                record.position_seconds = float(pos_sec)
+            except ValueError, TypeError:
+                pass
+        elif location:
+            try:
+                record.position_seconds = float(location)
+            except ValueError, TypeError:
+                pass
+
+        duration_val = data.get("duration") or getattr(item, "duration", None)
+        if duration_val is not None:
+            try:
+                record.duration = float(duration_val)
+            except ValueError, TypeError:
+                pass
+
+        speed_val = data.get("playback_speed")
+        if speed_val is not None:
+            try:
+                record.playback_speed = max(0.25, min(4.0, float(speed_val)))
+            except ValueError, TypeError:
+                pass
+
+        pb_type = data.get("playback_type") or item.media_type
+        if pb_type:
+            record.playback_type = str(pb_type)
+
         record.is_completed = is_completed
         record.last_read_at = datetime.now(UTC)
         db.session.add(record)
@@ -1398,6 +1471,10 @@ def media_progress(item_id: int):
                 "status": "ok",
                 "percentage": record.percentage,
                 "location": record.progress_location,
+                "position_seconds": record.position_seconds,
+                "duration": record.duration,
+                "playback_speed": record.playback_speed,
+                "playback_type": record.playback_type,
             }
         )
 
@@ -1411,11 +1488,25 @@ def media_progress(item_id: int):
             {
                 "percentage": record.percentage,
                 "location": record.progress_location,
+                "position_seconds": record.position_seconds,
+                "duration": record.duration,
+                "playback_speed": record.playback_speed,
+                "playback_type": record.playback_type,
                 "is_completed": record.is_completed,
                 "last_read_at": record.last_read_at.isoformat(),
             }
         )
-    return jsonify({"percentage": 0.0, "location": "0", "is_completed": False})
+    return jsonify(
+        {
+            "percentage": 0.0,
+            "location": "0",
+            "position_seconds": None,
+            "duration": getattr(item, "duration", None),
+            "playback_speed": 1.0,
+            "playback_type": item.media_type,
+            "is_completed": False,
+        }
+    )
 
 
 @api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])

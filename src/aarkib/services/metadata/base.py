@@ -68,7 +68,9 @@ class MediaMetadataDetails:
     narrator: str | None = None
     chapters: list[dict[str, Any]] = field(default_factory=list)
 
-    # Book-specific
+    # Book and Comic-specific
+    series: str | None = None
+    series_index: float | None = None
     isbn: str | None = None
     page_count: int | None = None
 
@@ -96,6 +98,8 @@ class MediaMetadataDetails:
             "disc_number": self.disc_number,
             "narrator": self.narrator,
             "chapters_count": len(self.chapters),
+            "series": self.series,
+            "series_index": self.series_index,
             "isbn": self.isbn,
             "page_count": self.page_count,
             "extra": self.extra,

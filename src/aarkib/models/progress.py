@@ -55,6 +55,14 @@ class UserProgress(db.Model):
     chapter_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     references_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Enriched consumption & playback metrics
+    position_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    playback_speed: Mapped[float | None] = mapped_column(
+        Float, default=1.0, nullable=True
+    )
+    playback_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="progress_records")
     media_item: Mapped[MediaItem] = relationship(

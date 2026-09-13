@@ -44,6 +44,30 @@ class AudioMediaPlugin(MediaPlugin):
         """Returns the in-browser audio player URL."""
         return f"/reader/audio/{item_id}"
 
+    def get_playback_info(
+        self, item: Any, user_id: int | None = None
+    ) -> dict[str, Any]:
+        """Returns audio playback descriptor including stream URL, bitrate, album, and track info."""
+        info = super().get_playback_info(item, user_id=user_id)
+        info.update(
+            {
+                "playback_strategy": "direct_play",
+                "stream_url": f"/api/media/{item.id}/stream",
+                "bitrate": getattr(item, "bitrate", None),
+                "album": getattr(item, "album", None),
+                "album_artist": getattr(item, "album_artist", None),
+                "track_number": getattr(item, "track_number", None),
+                "disc_number": getattr(item, "disc_number", None),
+                "genre": getattr(item, "genre", None),
+                "release_year": getattr(item, "release_year", None),
+            }
+        )
+        if getattr(item, "is_audiobook", False) or getattr(item, "narrator", None):
+            info["narrator"] = getattr(item, "narrator", None)
+            info["chapters"] = getattr(item, "chapters", [])
+            info["abridged"] = getattr(item, "abridged", False)
+        return info
+
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
         return None
 
@@ -82,6 +106,23 @@ class AudiobookMediaPlugin(MediaPlugin):
         """Returns the dedicated audiobook player URL."""
         return f"/reader/audiobook/{item_id}"
 
+    def get_playback_info(
+        self, item: Any, user_id: int | None = None
+    ) -> dict[str, Any]:
+        """Returns audiobook playback descriptor including chapters and narrator."""
+        info = super().get_playback_info(item, user_id=user_id)
+        info.update(
+            {
+                "playback_strategy": "direct_play",
+                "stream_url": f"/api/media/{item.id}/stream",
+                "bitrate": getattr(item, "bitrate", None),
+                "narrator": getattr(item, "narrator", None),
+                "chapters": getattr(item, "chapters", []),
+                "abridged": getattr(item, "abridged", False),
+            }
+        )
+        return info
+
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
         return None
 
@@ -94,7 +135,7 @@ class AudiobookMediaPlugin(MediaPlugin):
         }
 
 
-class MusicMediaPlugin(MediaPlugin):
+class MusicMediaPlugin(AudioMediaPlugin):
     """Built-in media plugin for dedicated music tracks, albums, and playlists."""
 
     name = "music"

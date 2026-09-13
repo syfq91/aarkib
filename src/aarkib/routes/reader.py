@@ -80,6 +80,39 @@ def read_cbz(item_id: int):
     )
 
 
+@reader_bp.route("/pdf/<int:item_id>")
+@require_auth
+def read_pdf(item_id: int):
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        abort(404, description="Item not found")
+    if item.file_format != "pdf":
+        abort(400, description="Item is not a PDF")
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    progress = db.session.scalar(
+        select(UserProgress).where(
+            UserProgress.user_id == user_id,
+            UserProgress.media_item_id == item.id,
+        )
+    )
+
+    initial_page = 1
+    if progress and progress.progress_location:
+        try:
+            initial_page = max(1, int(float(progress.progress_location)))
+        except ValueError, TypeError:
+            initial_page = 1
+
+    return render_template(
+        "reader_pdf.html",
+        item=item,
+        book=item,
+        initial_page=initial_page,
+        total_pages=item.page_count or 1,
+    )
+
+
 @reader_bp.route("/video/<int:item_id>")
 @require_auth
 def watch_video(item_id: int):

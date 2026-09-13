@@ -8,6 +8,7 @@ from aarkib.services.metadata.base import (
     MetadataProvider,
     MetadataSearchResult,
 )
+from aarkib.services.metadata.providers.comicvine import ComicVineProvider
 from aarkib.services.metadata.providers.google_books import GoogleBooksProvider
 from aarkib.services.metadata.providers.itunes import iTunesPodcastProvider
 from aarkib.services.metadata.providers.musicbrainz import MusicBrainzProvider
@@ -23,7 +24,7 @@ class MetadataProviderRegistry:
 
     DEFAULT_WATERFALLS: ClassVar[dict[str, list[str]]] = {
         "book": ["googlebooks", "openlibrary"],
-        "comic": ["openlibrary", "googlebooks"],
+        "comic": ["comicvine", "openlibrary", "googlebooks"],
         "video": ["tmdb"],
         "movie": ["tmdb"],
         "tv": ["tmdb"],
@@ -33,6 +34,7 @@ class MetadataProviderRegistry:
         "podcast": ["itunes", "podcastindex"],
         "all": [
             "tmdb",
+            "comicvine",
             "musicbrainz",
             "googlebooks",
             "openlibrary",
@@ -45,6 +47,7 @@ class MetadataProviderRegistry:
         self._providers: dict[str, MetadataProvider] = {}
         self.register(GoogleBooksProvider())
         self.register(OpenLibraryProvider())
+        self.register(ComicVineProvider())
         self.register(TMDBProvider())
         self.register(MusicBrainzProvider())
         self.register(iTunesPodcastProvider())

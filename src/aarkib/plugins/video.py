@@ -44,6 +44,39 @@ class VideoMediaPlugin(MediaPlugin):
         """Returns the in-browser video player URL."""
         return f"/reader/video/{item_id}"
 
+    def get_playback_info(
+        self, item: Any, user_id: int | None = None
+    ) -> dict[str, Any]:
+        """Returns video playback descriptor including transcoding strategy and stream URLs."""
+        info = super().get_playback_info(item, user_id=user_id)
+        from aarkib.services.transcoder import evaluate_playback_strategy
+
+        strategy = "direct_play"
+        file_path_str = getattr(item, "original_file_path", None)
+        if file_path_str:
+            file_p = Path(file_path_str)
+            if file_p.exists():
+                try:
+                    probe_res = evaluate_playback_strategy(file_p)
+                    strategy = probe_res.get("strategy", "direct_play")
+                except Exception:
+                    pass
+
+        info.update(
+            {
+                "playback_strategy": strategy,
+                "stream_url": f"/api/media/{item.id}/stream",
+                "hls_url": f"/api/media/{item.id}/hls/master.m3u8",
+                "mime_type": "video/mp4",
+                "resolution_width": getattr(item, "resolution_width", None),
+                "resolution_height": getattr(item, "resolution_height", None),
+                "codec": getattr(item, "codec", None),
+                "season": getattr(item, "season", None),
+                "episode": getattr(item, "episode", None),
+            }
+        )
+        return info
+
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
         """Video routes are served under the reader blueprint."""
         return None

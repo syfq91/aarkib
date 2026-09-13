@@ -60,6 +60,8 @@
       {% else %}
       <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="{{ base_url }}/api/media/{{ book.id }}/download" length="{{ book.file_size }}"/>
       {% endif %}
+    {% elif book.file_format == 'pdf' %}
+    <link rel="http://opds-spec.org/acquisition" type="application/pdf" href="{{ base_url }}/api/media/{{ book.id }}/download" length="{{ book.file_size }}"/>
     {% else %}
     <link rel="http://opds-spec.org/acquisition" type="application/vnd.comicbook+zip" href="{{ base_url }}/api/media/{{ book.id }}/download" length="{{ book.file_size }}"/>
     {% endif %}
