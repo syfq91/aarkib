@@ -12,11 +12,31 @@
         Enable or disable media decoders, streaming protocols, and optimizer engines dynamically.
       </p>
     </div>
+
+    <!-- Status Filter Control -->
+    <div class="plugin-filter-bar" role="group" aria-label="Plugin status filter">
+      <button type="button" id="filter-btn-all" class="plugin-filter-btn active" onclick="setPluginFilter('all')">
+        All <span class="badge" id="count-all" style="background: var(--bg-canvas-elevated); color: var(--text-secondary);">0</span>
+      </button>
+      <button type="button" id="filter-btn-enabled" class="plugin-filter-btn" onclick="setPluginFilter('enabled')">
+        🟢 Enabled <span class="badge" id="count-enabled" style="background: rgba(34, 197, 94, 0.2); color: #4ade80;">0</span>
+      </button>
+      <button type="button" id="filter-btn-disabled" class="plugin-filter-btn" onclick="setPluginFilter('disabled')">
+        ⚪ Disabled <span class="badge" id="count-disabled" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary);">0</span>
+      </button>
+    </div>
   </div>
 </div>
 
+<!-- Empty filter state banner -->
+<div id="plugin-filter-empty" style="display: none; background: var(--bg-secondary); border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 3rem 2rem; text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
+  <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🧩</div>
+  <h4 id="plugin-filter-empty-title" style="color: var(--text-primary); margin-bottom: 0.25rem;">No plugins match this filter</h4>
+  <p id="plugin-filter-empty-desc" style="font-size: 0.85rem; margin: 0;">Try switching to "All" to view all registered plugins.</p>
+</div>
+
 <!-- Group 1: Media Format Plugins -->
-<div style="margin-bottom: 2.5rem;">
+<div style="margin-bottom: 2.5rem;" class="plugin-group-section" id="group-media">
   <h4 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
     <span>🎬</span> Media Format Plugins
     <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">EPUB, Comics, Video, Audio &amp; Podcasts</span>
@@ -24,7 +44,7 @@
 
   <div class="plugin-grid">
     {% for p in plugins_info if p.type == 'media' %}
-    <div class="plugin-card" id="card-{{ p.name }}">
+    <div class="plugin-card" id="card-{{ p.name }}" data-enabled="{{ 'true' if p.enabled else 'false' }}" data-plugin-name="{{ p.name }}">
       <div>
         <div class="plugin-header">
           <div>
@@ -70,7 +90,7 @@
 </div>
 
 <!-- Group 2: Protocol & Streaming Plugins -->
-<div style="margin-bottom: 2.5rem;">
+<div style="margin-bottom: 2.5rem;" class="plugin-group-section" id="group-protocol">
   <h4 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
     <span>📡</span> Protocols &amp; Streaming Services
     <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">OPDS Feeds, Subsonic &amp; Jellyfin API</span>
@@ -78,7 +98,7 @@
 
   <div class="plugin-grid">
     {% for p in plugins_info if p.type == 'protocol' %}
-    <div class="plugin-card" id="card-{{ p.name }}">
+    <div class="plugin-card" id="card-{{ p.name }}" data-enabled="{{ 'true' if p.enabled else 'false' }}" data-plugin-name="{{ p.name }}">
       <div>
         <div class="plugin-header">
           <div>
@@ -127,7 +147,7 @@
 </div>
 
 <!-- Group 3: Optimizer & Performance Plugins -->
-<div style="margin-bottom: 2rem;">
+<div style="margin-bottom: 2rem;" class="plugin-group-section" id="group-optimizer">
   <h4 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
     <span>⚡</span> Optimizers &amp; Hardware Acceleration
     <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">E-Ink &amp; Device Adaptation</span>
@@ -135,7 +155,7 @@
 
   <div class="plugin-grid">
     {% for p in plugins_info if p.type == 'optimizer' %}
-    <div class="plugin-card" id="card-{{ p.name }}">
+    <div class="plugin-card" id="card-{{ p.name }}" data-enabled="{{ 'true' if p.enabled else 'false' }}" data-plugin-name="{{ p.name }}">
       <div>
         <div class="plugin-header">
           <div>
@@ -180,8 +200,111 @@
 
 {% block scripts %}
 <script>
+let currentPluginFilter = "all";
+
+function updateFilterCounts() {
+  const allCards = document.querySelectorAll(".plugin-card");
+  let enabledCount = 0;
+  let disabledCount = 0;
+
+  allCards.forEach(card => {
+    if (card.dataset.enabled === "true") {
+      enabledCount++;
+    } else {
+      disabledCount++;
+    }
+  });
+
+  const countAll = document.getElementById("count-all");
+  const countEnabled = document.getElementById("count-enabled");
+  const countDisabled = document.getElementById("count-disabled");
+
+  if (countAll) countAll.innerText = allCards.length;
+  if (countEnabled) countEnabled.innerText = enabledCount;
+  if (countDisabled) countDisabled.innerText = disabledCount;
+}
+
+function applyCurrentFilter() {
+  const allCards = document.querySelectorAll(".plugin-card");
+  let totalVisible = 0;
+
+  allCards.forEach(card => {
+    const isEnabled = card.dataset.enabled === "true";
+    let show = false;
+    if (currentPluginFilter === "all") {
+      show = true;
+    } else if (currentPluginFilter === "enabled") {
+      show = isEnabled;
+    } else if (currentPluginFilter === "disabled") {
+      show = !isEnabled;
+    }
+
+    card.style.display = show ? "flex" : "none";
+    if (show) totalVisible++;
+  });
+
+  // Update visibility of each group section
+  const groupSections = document.querySelectorAll(".plugin-group-section");
+  groupSections.forEach(section => {
+    const cardsInSection = section.querySelectorAll(".plugin-card");
+    const hasVisibleCard = Array.from(cardsInSection).some(c => c.style.display !== "none");
+    section.style.display = hasVisibleCard ? "block" : "none";
+  });
+
+  // Empty state handling
+  const emptyState = document.getElementById("plugin-filter-empty");
+  const emptyTitle = document.getElementById("plugin-filter-empty-title");
+  const emptyDesc = document.getElementById("plugin-filter-empty-desc");
+
+  if (emptyState) {
+    if (totalVisible === 0) {
+      emptyState.style.display = "block";
+      if (currentPluginFilter === "enabled") {
+        emptyTitle.innerText = "No Enabled Plugins";
+        emptyDesc.innerText = "All plugins are currently disabled. Switch to 'All' or 'Disabled' to manage them.";
+      } else if (currentPluginFilter === "disabled") {
+        emptyTitle.innerText = "No Disabled Plugins";
+        emptyDesc.innerText = "All registered plugins are currently active!";
+      } else {
+        emptyTitle.innerText = "No Plugins Found";
+        emptyDesc.innerText = "No plugins are registered in this system.";
+      }
+    } else {
+      emptyState.style.display = "none";
+    }
+  }
+}
+
+function setPluginFilter(filter) {
+  currentPluginFilter = filter;
+
+  // Update button active classes
+  const buttons = document.querySelectorAll(".plugin-filter-btn");
+  buttons.forEach(btn => {
+    if (btn.id === `filter-btn-${filter}`) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Update URL query parameter without page reload
+  try {
+    const url = new URL(window.location);
+    if (filter === "all") {
+      url.searchParams.delete("status");
+    } else {
+      url.searchParams.set("status", filter);
+    }
+    window.history.replaceState({}, "", url);
+  } catch (e) {}
+
+  applyCurrentFilter();
+}
+
 async function togglePlugin(settingKey, pluginName, isEnabled) {
   const badge = document.getElementById(`badge-${pluginName}`);
+  const card = document.getElementById(`card-${pluginName}`);
   try {
     const res = await fetch("/api/settings", {
       method: "PATCH",
@@ -190,6 +313,9 @@ async function togglePlugin(settingKey, pluginName, isEnabled) {
     });
     const data = await res.json();
     if (res.ok && data.status === "success") {
+      if (card) {
+        card.dataset.enabled = isEnabled ? "true" : "false";
+      }
       if (badge) {
         if (isEnabled) {
           badge.style.background = "rgba(34, 197, 94, 0.2)";
@@ -201,6 +327,8 @@ async function togglePlugin(settingKey, pluginName, isEnabled) {
           badge.innerText = "⚪ Inactive";
         }
       }
+      updateFilterCounts();
+      applyCurrentFilter();
       showToast(`${isEnabled ? 'Enabled' : 'Disabled'} plugin '${pluginName}'`, "success");
     } else {
       showToast(data.error || "Failed to update plugin state", "error");
@@ -213,5 +341,16 @@ async function togglePlugin(settingKey, pluginName, isEnabled) {
     if (checkbox) checkbox.checked = !isEnabled;
   }
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  updateFilterCounts();
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialStatus = (urlParams.get("status") || "all").toLowerCase();
+  if (["all", "enabled", "disabled"].includes(initialStatus)) {
+    setPluginFilter(initialStatus);
+  } else {
+    setPluginFilter("all");
+  }
+});
 </script>
 {% endblock %}

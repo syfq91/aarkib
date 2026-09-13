@@ -415,3 +415,29 @@ def test_settings_integrations_hides_disabled_plugins(client, app):
 
     # Cleanup: Reset back to defaults
     client.post("/api/settings/reset")
+
+
+def test_plugins_page_filter_ui(client, app):
+    """Verifies that /settings/plugins renders the status filter controls,
+    live count badges, and plugin cards with data-enabled metadata."""
+    _login_admin(client, app)
+
+    res = client.get("/settings/plugins")
+    assert res.status_code == 200
+
+    # Filter buttons exist
+    assert b"plugin-filter-bar" in res.data
+    assert b"filter-btn-all" in res.data
+    assert b"filter-btn-enabled" in res.data
+    assert b"filter-btn-disabled" in res.data
+
+    # Count badges exist
+    assert b"count-all" in res.data
+    assert b"count-enabled" in res.data
+    assert b"count-disabled" in res.data
+
+    # Group sections and card metadata exist
+    assert b"plugin-group-section" in res.data
+    assert b"data-enabled=" in res.data
+    assert b"setPluginFilter" in res.data
+    assert b"plugin-filter-empty" in res.data
