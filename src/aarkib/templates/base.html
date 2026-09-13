@@ -19,7 +19,7 @@
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
 
-  <link rel="stylesheet" href="/static/css/app.css?v=5">
+  <link rel="stylesheet" href="/static/css/app.css?v=6">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -34,13 +34,15 @@
       <span>Aarkib</span>
     </a>
 
-    <!-- Primary Nav Links -->
-    <ul class="nav-links">
-      <li><a href="/" class="nav-link {{ 'active' if request.path == '/' }}">Library</a></li>
-      <li><a href="/authors" class="nav-link {{ 'active' if request.path == '/authors' }}">Authors</a></li>
-      <li><a href="/series" class="nav-link {{ 'active' if request.path == '/series' }}">Series</a></li>
-      <li><a href="/tags" class="nav-link {{ 'active' if request.path == '/tags' }}">Tags</a></li>
-    </ul>
+    <!-- Global Search Bar in Header -->
+    <div class="nav-search">
+      <form action="/" method="GET" id="search-form" class="nav-search-form">
+        <div class="nav-search-wrapper">
+          <span class="nav-search-icon">🔍</span>
+          <input type="text" id="search-input" name="q" class="input-text nav-search-input" placeholder="Search title, author, series, tag..." autocomplete="off">
+        </div>
+      </form>
+    </div>
 
     <!-- Top Right User Avatar & Consolidated Dropdown Menu -->
     <div class="nav-actions">
@@ -102,6 +104,18 @@
       </div>
     </div>
   </header>
+
+  <!-- Sub-Header Navigation Bar -->
+  <nav class="subnav-bar" aria-label="Primary Navigation">
+    <div class="subnav-container">
+      <ul class="subnav-links">
+        <li><a href="/" class="subnav-link {{ 'active' if request.path in ('/', '/library') }}">Library</a></li>
+        <li><a href="/authors" class="subnav-link {{ 'active' if request.path == '/authors' }}">Authors</a></li>
+        <li><a href="/series" class="subnav-link {{ 'active' if request.path == '/series' }}">Series</a></li>
+        <li><a href="/tags" class="subnav-link {{ 'active' if request.path == '/tags' }}">Tags</a></li>
+      </ul>
+    </div>
+  </nav>
 
   <!-- Main View Container -->
   <main class="main-content">

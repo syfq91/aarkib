@@ -3,6 +3,13 @@ def test_ui_index(client):
     assert response.status_code == 200
     assert b"Aarkib" in response.data
     assert b"Library" in response.data
+    assert b'class="nav-search"' in response.data
+    assert b'id="search-input"' in response.data
+    assert b'class="subnav-bar"' in response.data
+    assert b'href="/authors"' in response.data
+    assert b'href="/series"' in response.data
+    assert b'href="/tags"' in response.data
+    assert b'id="scan-now-btn"' not in response.data
 
 
 def test_pwa_manifest(client):
