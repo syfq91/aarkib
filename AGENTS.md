@@ -173,6 +173,8 @@ aarkib/
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
+├── ARCHITECTURE.md           # Canonical system architecture, data models, and subsystems
+├── DESIGN.md                 # Visual identity tokens and Cinematic Obsidian design system (Google DESIGN.md spec)
 └── README.md                 # Documentation
 ```
 

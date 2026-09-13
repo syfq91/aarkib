@@ -125,7 +125,9 @@ All server management is handled directly through the web interface under **Sett
 
 ## 🛠️ Architecture & Developer Guidelines
 
-For architectural blueprints, engineering standards, safety invariants, and developer guidelines for human contributors and AI assistants, see [**`AGENTS.md`**](AGENTS.md).
+- [**`ARCHITECTURE.md`**](ARCHITECTURE.md): System architecture, core subsystems, data models, ER diagrams, and technical design.
+- [**`DESIGN.md`**](DESIGN.md): Visual identity, design tokens, and UI/UX design system (Cinematic Obsidian).
+- [**`AGENTS.md`**](AGENTS.md): Engineering standards, safety invariants, and developer guidelines for AI agents and human contributors.
 
 ---
 
