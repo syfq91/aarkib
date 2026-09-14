@@ -79,7 +79,8 @@ class UserProgress(db.Model):
         self.media_item_id = value
 
     def __repr__(self) -> str:
-        return f"<UserProgress user={self.user_id} item={self.media_item_id} progress={self.percentage:.1f}%>"
+        pct = self.percentage or 0.0
+        return f"<UserProgress user={self.user_id} item={self.media_item_id} progress={pct:.1f}%>"
 
 
 class Bookmark(db.Model):

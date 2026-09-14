@@ -16,8 +16,10 @@ from flask import (
     current_app,
     g,
     jsonify,
+    render_template,
     request,
     send_file,
+    url_for,
 )
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user
@@ -32,6 +34,7 @@ from aarkib.models import (
     MediaItem,
     Tag,
     User,
+    UserProgress,
 )
 from aarkib.services.job_manager import job_manager
 from aarkib.services.media_service import (
@@ -247,7 +250,16 @@ def require_token_scope(required_scope: str):
 def enforce_api_auth():
     """Authenticate the API request (Bearer token, HTTP Basic, or session) and enforce auth settings."""
     # Endpoints exempt from authentication
-    if request.endpoint in ("api.get_media_cover", "api.health"):
+    AUTH_EXEMPT_ENDPOINTS = {
+        "api.get_media_cover",
+        "api.health",
+        "api.api_login",
+        "api.request_device_code",
+        "api.poll_device_token",
+        "api.api_docs",
+        "api.openapi_json",
+    }
+    if request.endpoint in AUTH_EXEMPT_ENDPOINTS:
         return None
 
     # Authenticate via Bearer token (DeviceToken) if provided
@@ -329,6 +341,234 @@ def health() -> ResponseReturnValue:
     return jsonify({"status": "healthy", "app": "aarkib"})
 
 
+# ---------------------------------------------------------------------------
+# Native Mobile & TV Authentication & Pairing Endpoints
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/auth/login", methods=["POST"])
+def api_login() -> ResponseReturnValue:
+    """Authenticate with username and password, returning an API Bearer token."""
+    from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+    client_ip = get_client_ip()
+    limited, retry_after = auth_rate_limiter.is_rate_limited(client_ip)
+    if limited:
+        return (
+            jsonify(
+                {
+                    "error": f"Too many failed login attempts. Retry after {retry_after}s."
+                }
+            ),
+            HTTPStatus.TOO_MANY_REQUESTS,
+            {"Retry-After": str(retry_after)},
+        )
+
+    data = request.get_json(silent=True) or {}
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", ""))
+    device_name = str(data.get("device_name", "")).strip() or "API Client"
+
+    if not username:
+        return api_error("Username is required", 400)
+
+    user = db.session.scalar(select(User).where(User.username == username))
+    allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+
+    if user and user.check_password(
+        password,
+        client_ip=client_ip,
+        allow_remote_passwordless=allow_remote_pwless,
+    ):
+        auth_rate_limiter.reset(client_ip)
+        from aarkib.models.token import DeviceToken
+
+        token_obj, raw_token = DeviceToken.create_token(
+            user_id=user.id,
+            name=device_name,
+            scopes=["*"],
+        )
+        db.session.add(token_obj)
+        safe_commit()
+        return jsonify(
+            {
+                "status": "success",
+                "token": raw_token,
+                "token_type": "Bearer",
+                "token_id": token_obj.id,
+                "token_prefix": token_obj.token_prefix,
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "is_admin": user.is_admin,
+                },
+            }
+        )
+    else:
+        auth_rate_limiter.record_failure(client_ip)
+        return api_error("Invalid credentials", 401)
+
+
+@api_bp.route("/auth/device-code", methods=["POST"])
+def request_device_code() -> ResponseReturnValue:
+    """Request a TV / 10-foot device pairing code."""
+    from aarkib.services.device_auth_service import create_device_pairing_code
+
+    data = request.get_json(silent=True) or {}
+    device_name = str(data.get("device_name", "")).strip() or "TV Client"
+    _, device_code, user_code = create_device_pairing_code(device_name=device_name)
+    verification_url = url_for("ui.pair_device", _external=True)
+    return jsonify(
+        {
+            "status": "success",
+            "device_code": device_code,
+            "user_code": user_code,
+            "verification_url": verification_url,
+            "verification_uri": verification_url,
+            "verification_uri_complete": f"{verification_url}?code={user_code}",
+            "expires_in": 300,
+            "interval": 5,
+        }
+    )
+
+
+@api_bp.route("/auth/device-code/token", methods=["POST"])
+def poll_device_token() -> ResponseReturnValue:
+    """Poll for token after TV user authorizes the pairing code."""
+    from aarkib.services.device_auth_service import poll_device_pairing_code
+
+    data = request.get_json(silent=True) or {}
+    device_code = str(data.get("device_code", "")).strip()
+    if not device_code:
+        return api_error("device_code is required", 400)
+
+    res = poll_device_pairing_code(device_code)
+    status_str = res.get("status")
+    if status_str in ("error", "pending"):
+        return jsonify(res), 400
+    return jsonify(res), 200
+
+
+# ---------------------------------------------------------------------------
+# Home Screen Feed & Taxonomy REST Endpoints
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/home", methods=["GET"])
+@require_token_scope("media:read")
+def home_feed() -> ResponseReturnValue:
+    """Retrieve aggregated rails for mobile and TV home screen dashboards."""
+    from aarkib.services.media_service import get_home_feed_service
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    feed = get_home_feed_service(user_id)
+    return jsonify({"status": "success", **feed})
+
+
+@api_bp.route("/creators", methods=["GET"])
+@api_bp.route("/authors", methods=["GET"])
+@require_token_scope("media:read")
+def list_creators() -> ResponseReturnValue:
+    """List creators / authors with filtering, search, and pagination."""
+    from aarkib.services.media_service import list_creators_service
+
+    q = request.args.get("q")
+    media_type = request.args.get("media_type") or request.args.get("type")
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = max(1, min(request.args.get("per_page", 24, type=int), 100))
+    sort = request.args.get("sort", "name")
+    return jsonify(
+        list_creators_service(
+            media_type=media_type,
+            query=q,
+            page=page,
+            per_page=per_page,
+            sort_by=sort,
+        )
+    )
+
+
+@api_bp.route("/creators/<int:creator_id>", methods=["GET"])
+@api_bp.route("/authors/<int:creator_id>", methods=["GET"])
+@require_token_scope("media:read")
+def get_creator_detail(creator_id: int) -> ResponseReturnValue:
+    """Get creator / author details and their media items."""
+    from aarkib.services.media_service import get_creator_detail_service
+
+    res = get_creator_detail_service(creator_id)
+    if not res:
+        return api_error("Creator not found", 404)
+    return jsonify(res)
+
+
+@api_bp.route("/collections", methods=["GET"])
+@api_bp.route("/series", methods=["GET"])
+@require_token_scope("media:read")
+def list_collections() -> ResponseReturnValue:
+    """List collections / series with filtering and pagination."""
+    from aarkib.services.media_service import list_collections_service
+
+    q = request.args.get("q")
+    media_type = request.args.get("media_type") or request.args.get("type")
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = max(1, min(request.args.get("per_page", 24, type=int), 100))
+    sort = request.args.get("sort", "name")
+    return jsonify(
+        list_collections_service(
+            media_type=media_type,
+            query=q,
+            page=page,
+            per_page=per_page,
+            sort_by=sort,
+        )
+    )
+
+
+@api_bp.route("/collections/<int:collection_id>", methods=["GET"])
+@api_bp.route("/series/<int:collection_id>", methods=["GET"])
+@require_token_scope("media:read")
+def get_collection_detail(collection_id: int) -> ResponseReturnValue:
+    """Get collection / series details and its ordered media items."""
+    from aarkib.services.media_service import get_collection_detail_service
+
+    res = get_collection_detail_service(collection_id)
+    if not res:
+        return api_error("Collection not found", 404)
+    return jsonify(res)
+
+
+@api_bp.route("/tags", methods=["GET"])
+@require_token_scope("media:read")
+def list_tags() -> ResponseReturnValue:
+    """List tags / genres with media counts."""
+    from aarkib.services.media_service import list_tags_service
+
+    q = request.args.get("q")
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = max(1, min(request.args.get("per_page", 50, type=int), 100))
+    return jsonify(list_tags_service(query=q, page=page, per_page=per_page))
+
+
+# ---------------------------------------------------------------------------
+# OpenAPI Specification & Interactive Documentation Explorer
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/openapi.json", methods=["GET"])
+def openapi_json() -> ResponseReturnValue:
+    """Serve OpenAPI 3.1 specification as JSON."""
+    spec_path = Path(__file__).resolve().parent.parent / "static" / "openapi.json"
+    if not spec_path.is_file():
+        abort(404, description="OpenAPI specification not found")
+    return send_file(spec_path, mimetype="application/json")
+
+
+@api_bp.route("/docs", methods=["GET"])
+def api_docs() -> ResponseReturnValue:
+    """Interactive API documentation explorer for developers."""
+    return render_template("swagger_ui.html")
+
+
 @api_bp.route("/plugins", methods=["GET"])
 def list_plugins() -> ResponseReturnValue:
     """Lists all registered plugins with their status, type, and health metrics."""
@@ -394,6 +634,7 @@ def list_media() -> ResponseReturnValue:
         .strip()
         .lower()
     )
+    in_progress = request.args.get("in_progress", "").lower() in ("true", "1", "yes")
     sort_by = request.args.get("sort", "added_at")
     order = request.args.get("order", "desc")
     raw_page = request.args.get("page", 1, type=int)
@@ -496,6 +737,19 @@ def list_media() -> ResponseReturnValue:
         else:
             prefix = library_filter.rstrip("/\\") + "/"
             query = query.filter(MediaItem.original_file_path.startswith(prefix))
+
+    # User progress filtering
+    if in_progress:
+        user_id = current_user.id if current_user.is_authenticated else None
+        if user_id:
+            in_prog_subq = select(UserProgress.media_item_id).where(
+                UserProgress.user_id == user_id,
+                UserProgress.is_completed.is_(False),
+                UserProgress.percentage > 0,
+            )
+            query = query.filter(MediaItem.id.in_(in_prog_subq))
+        else:
+            query = query.filter(MediaItem.id == -1)
 
     # Sorting
     if not relevance_order:

@@ -574,6 +574,15 @@ erDiagram
    - Hardware e-readers (KOReader), mobile streaming apps, and third-party automations authenticate via persistent Bearer tokens (`Authorization: Bearer ark_...`).
    - Tokens are cryptographically hashed using SHA-256 with optional expiration dates and access scopes.
    - Raw tokens are only visible once upon initial generation. Revocation is instantaneous via REST API or the Web UI.
+10. **TV & 10-Foot Device Code Flow (RFC 8628, `services/device_auth_service.py`)**:
+   - Tailored for input-constrained devices (Apple TV, Android TV, Fire TV, game consoles).
+   - TV clients call `POST /api/auth/device-code` to generate an unambiguous, visually clean 6-character user code (`ABC-123`, excluding ambiguous characters like `0`, `O`, `1`, `I`, `L`) with a 300-second TTL.
+   - Users authorize the TV by entering the code at `/pair` on their smartphone or PC browser.
+   - The TV client polls `POST /api/auth/device-code/token` at the prescribed interval; once approved, a permanent Bearer token is issued and the pairing session is securely consumed.
+11. **Native Mobile & TV Dashboard Rails (`services/media_service.py`, `/api/docs`)**:
+   - `GET /api/home` aggregates personalized dashboard rails in a single query: *Continue Watching* (video <90%), *Continue Reading* (books/comics <100%), *Continue Listening* (audio <95%), *Next Up* (candidate next episodes for TV series in progress), *Recently Added*, and *Favorites*.
+   - First-class taxonomy navigation endpoints: `/api/creators` (with media type filtering), `/api/collections` (with ordered item series indexing), and `/api/tags` (with media counts).
+   - Canonical OpenAPI 3.1 specification (`/api/openapi.json`) and zero-dependency interactive documentation explorer (`/api/docs`) powered by Scalar.
 
 ---
 

@@ -114,6 +114,15 @@ Connect your favorite Jellyfin-compatible client app:
 - **Username & Password**: Your Aarkib user credentials
 - **Supported Clients**: Jellyfin Mobile (Android / iOS), Jellyfin Android TV, Swiftfin, Findroid, Jellyfin Media Player, Infuse
 
+### Native Mobile & TV Apps (REST API & 10-Foot UI)
+
+Aarkib exposes a high-performance REST API designed specifically for custom native mobile (iOS/Android) and TV (Apple TV, Android TV, Fire TV) clients:
+- **Direct Login**: `POST /api/auth/login` with username and password returns a persistent API Bearer token.
+- **TV Device Pairing (RFC 8628)**: TV apps request an unambiguous 6-character code via `POST /api/auth/device-code`. The user pairs the TV by opening `http://<your-server-ip>:5000/pair` on their phone or computer.
+- **Aggregated Home Feed**: `GET /api/home` provides ready-to-render dashboard rails including *Continue Watching*, *Continue Reading*, *Continue Listening*, *Next Up* (for episodic TV series), *Recently Added*, and *Favorites*.
+- **Taxonomy Browsing**: Full creator (`/api/creators`), collection/series (`/api/collections`), and genre tag (`/api/tags`) endpoints with item counts and media filtering.
+- **Interactive API Documentation & Explorer**: Explore the OpenAPI 3.1 specification and test endpoints interactively by visiting `http://<your-server-ip>:5000/api/docs` in any browser. Spec available at `/api/openapi.json`.
+
 ---
 
 ## ⚙️ Web Settings & Management

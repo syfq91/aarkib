@@ -8,7 +8,7 @@ import json
 import secrets
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
@@ -132,3 +132,46 @@ class DeviceToken(db.Model):
 
     def __repr__(self) -> str:
         return f"<DeviceToken id={self.id} name='{self.name}' user_id={self.user_id}>"
+
+
+class DevicePairingCode(db.Model):
+    """Temporary pairing code for TV/10-foot interfaces and quick remote login."""
+
+    __tablename__ = "device_pairing_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_code: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    user_code: Mapped[str] = mapped_column(
+        String(16), unique=True, nullable=False, index=True
+    )
+    device_name: Mapped[str] = mapped_column(String(128), default="TV Device")
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    is_authorized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.datetime.now(datetime.UTC),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    raw_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    user: Mapped[User | None] = relationship("User")
+
+    def is_expired(self) -> bool:
+        """Check if pairing code has expired."""
+        exp = (
+            self.expires_at.replace(tzinfo=datetime.UTC)
+            if self.expires_at.tzinfo is None
+            else self.expires_at
+        )
+        return exp < datetime.datetime.now(datetime.UTC)
+
+    def __repr__(self) -> str:
+        return (
+            f"<DevicePairingCode id={self.id} user_code='{self.user_code}' "
+            f"authorized={self.is_authorized}>"
+        )

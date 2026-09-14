@@ -9,10 +9,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
-from aarkib.models import Collection, Creator, Library, MediaItem, Tag
+from aarkib.models import (
+    Collection,
+    Creator,
+    Library,
+    MediaItem,
+    Tag,
+    UserFavorite,
+    UserProgress,
+    media_creators,
+    media_tags,
+)
 
 AUDIOBOOK_EXTENSIONS = frozenset({"m4b"})
 MUSIC_EXTENSIONS = frozenset({"mp3", "m4a", "flac", "ogg", "opus", "wav", "aac"})
@@ -304,3 +315,405 @@ def count_media_in_library(library: Library) -> int:
     return (
         db.session.scalar(select(func.count(MediaItem.id)).where(or_(*conditions))) or 0
     )
+
+
+# ---------------------------------------------------------------------------
+# Taxonomy Queries (Creators, Collections, Tags)
+# ---------------------------------------------------------------------------
+
+
+def list_creators_service(
+    media_type: str | None = None,
+    query: str | None = None,
+    page: int = 1,
+    per_page: int = 24,
+    sort_by: str = "name",
+) -> dict:
+    """List creators / authors with aggregated media item counts and filtering."""
+    q = (
+        select(
+            Creator.id,
+            Creator.name,
+            func.count(media_creators.c.media_item_id).label("media_count"),
+        )
+        .join(media_creators, Creator.id == media_creators.c.creator_id)
+        .join(MediaItem, media_creators.c.media_item_id == MediaItem.id)
+        .group_by(Creator.id, Creator.name)
+    )
+
+    if query:
+        q = q.where(Creator.name.ilike(f"%{query.strip()}%"))
+
+    if media_type and media_type != "all":
+        if media_type == "audio":
+            q = q.where(
+                MediaItem.media_type.in_(["audio", "audiobook", "music", "podcast"])
+            )
+        elif media_type == "book":
+            q = q.where(MediaItem.media_type.in_(["book", "comic"]))
+        elif media_type == "video":
+            q = q.where(MediaItem.media_type.in_(["video", "movie", "tv"]))
+        else:
+            q = q.where(MediaItem.media_type == media_type)
+
+    if sort_by == "count":
+        q = q.order_by(desc("media_count"), asc(Creator.name))
+    else:
+        q = q.order_by(asc(Creator.name))
+
+    total = db.session.scalar(select(func.count()).select_from(q.subquery())) or 0
+    pages = (total + per_page - 1) // per_page if total > 0 else 1
+    offset = max(0, (page - 1) * per_page)
+    rows = db.session.execute(q.offset(offset).limit(per_page)).all()
+    items = [{"id": row[0], "name": row[1], "media_count": row[2]} for row in rows]
+
+    return {
+        "creators": items,
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+def get_creator_detail_service(creator_id: int) -> dict | None:
+    """Retrieve details and media items for a specific creator."""
+    creator = db.session.get(Creator, creator_id)
+    if not creator:
+        return None
+
+    items_stmt = (
+        select(MediaItem)
+        .join(media_creators, MediaItem.id == media_creators.c.media_item_id)
+        .where(media_creators.c.creator_id == creator_id)
+        .order_by(desc(MediaItem.created_at))
+    )
+    items = db.session.scalars(items_stmt).all()
+
+    return {
+        "id": creator.id,
+        "name": creator.name,
+        "media_count": len(items),
+        "items": [
+            {
+                "id": m.id,
+                "title": m.title,
+                "media_type": m.media_type,
+                "file_format": m.file_format,
+                "cover_url": f"/api/media/{m.id}/cover",
+                "player_url": m.player_url,
+                "duration": m.duration,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in items
+        ],
+    }
+
+
+def list_collections_service(
+    media_type: str | None = None,
+    query: str | None = None,
+    page: int = 1,
+    per_page: int = 24,
+    sort_by: str = "name",
+) -> dict:
+    """List collections / series with aggregated media item counts."""
+    q = (
+        select(
+            Collection.id,
+            Collection.name,
+            func.count(MediaItem.id).label("media_count"),
+        )
+        .join(MediaItem, Collection.id == MediaItem.collection_id)
+        .group_by(Collection.id, Collection.name)
+    )
+
+    if query:
+        q = q.where(Collection.name.ilike(f"%{query.strip()}%"))
+
+    if media_type and media_type != "all":
+        if media_type == "audio":
+            q = q.where(
+                MediaItem.media_type.in_(["audio", "audiobook", "music", "podcast"])
+            )
+        elif media_type == "book":
+            q = q.where(MediaItem.media_type.in_(["book", "comic"]))
+        elif media_type == "video":
+            q = q.where(MediaItem.media_type.in_(["video", "movie", "tv"]))
+        else:
+            q = q.where(MediaItem.media_type == media_type)
+
+    if sort_by == "count":
+        q = q.order_by(desc("media_count"), asc(Collection.name))
+    else:
+        q = q.order_by(asc(Collection.name))
+
+    total = db.session.scalar(select(func.count()).select_from(q.subquery())) or 0
+    pages = (total + per_page - 1) // per_page if total > 0 else 1
+    offset = max(0, (page - 1) * per_page)
+    rows = db.session.execute(q.offset(offset).limit(per_page)).all()
+    items = [{"id": row[0], "name": row[1], "media_count": row[2]} for row in rows]
+
+    return {
+        "collections": items,
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+def get_collection_detail_service(collection_id: int) -> dict | None:
+    """Retrieve details and ordered items for a specific collection."""
+    collection = db.session.get(Collection, collection_id)
+    if not collection:
+        return None
+
+    items_stmt = (
+        select(MediaItem)
+        .where(MediaItem.collection_id == collection_id)
+        .order_by(
+            asc(MediaItem.season),
+            asc(MediaItem.episode),
+            asc(MediaItem.series_index),
+            asc(MediaItem.title),
+        )
+    )
+    items = db.session.scalars(items_stmt).all()
+
+    return {
+        "id": collection.id,
+        "name": collection.name,
+        "media_count": len(items),
+        "items": [
+            {
+                "id": m.id,
+                "title": m.title,
+                "media_type": m.media_type,
+                "file_format": m.file_format,
+                "season": m.season,
+                "episode": m.episode,
+                "series_index": m.series_index,
+                "cover_url": f"/api/media/{m.id}/cover",
+                "player_url": m.player_url,
+                "duration": m.duration,
+            }
+            for m in items
+        ],
+    }
+
+
+def list_tags_service(
+    query: str | None = None, page: int = 1, per_page: int = 50
+) -> dict:
+    """List tags / genres with aggregated media item counts."""
+    q = (
+        select(
+            Tag.id,
+            Tag.name,
+            func.count(media_tags.c.media_item_id).label("media_count"),
+        )
+        .join(media_tags, Tag.id == media_tags.c.tag_id)
+        .group_by(Tag.id, Tag.name)
+        .order_by(asc(Tag.name))
+    )
+
+    if query:
+        q = q.where(Tag.name.ilike(f"%{query.strip()}%"))
+
+    total = db.session.scalar(select(func.count()).select_from(q.subquery())) or 0
+    pages = (total + per_page - 1) // per_page if total > 0 else 1
+    offset = max(0, (page - 1) * per_page)
+    rows = db.session.execute(q.offset(offset).limit(per_page)).all()
+    items = [{"id": row[0], "name": row[1], "media_count": row[2]} for row in rows]
+
+    return {
+        "tags": items,
+        "page": page,
+        "pages": pages,
+        "total": total,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Home Feed Aggregation (Mobile & TV Dashboards)
+# ---------------------------------------------------------------------------
+
+
+def get_home_feed_service(user_id: int | None) -> dict:
+    """Aggregate personalized rails for native mobile and TV home screens."""
+    fav_item_ids: set[int] = set()
+    if user_id:
+        fav_item_ids = set(
+            db.session.scalars(
+                select(UserFavorite.media_item_id).where(
+                    UserFavorite.user_id == user_id
+                )
+            ).all()
+        )
+
+    def _serialize_item(
+        item: MediaItem, progress_rec: UserProgress | None = None
+    ) -> dict:
+        data = {
+            "id": item.id,
+            "title": item.title,
+            "media_type": item.media_type,
+            "file_format": item.file_format,
+            "creators": [a.name for a in item.creators],
+            "creators_display": item.creators_display,
+            "cover_url": f"/api/media/{item.id}/cover",
+            "player_url": item.player_url,
+            "duration": item.duration,
+            "season": item.season,
+            "episode": item.episode,
+            "series_index": item.series_index,
+            "collection": item.collection.name if item.collection else None,
+            "collection_id": item.collection_id,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "is_favorite": item.id in fav_item_ids,
+        }
+        if progress_rec:
+            data["progress"] = {
+                "percentage": progress_rec.percentage,
+                "progress": progress_rec.percentage,
+                "location": progress_rec.progress_location,
+                "is_completed": progress_rec.is_completed,
+                "last_accessed_at": (
+                    progress_rec.last_accessed_at.isoformat()
+                    if progress_rec.last_accessed_at
+                    else None
+                ),
+            }
+        return data
+
+    continue_watching: list[dict] = []
+    continue_reading: list[dict] = []
+    continue_listening: list[dict] = []
+    next_up: list[dict] = []
+
+    if user_id:
+        # 1. In-progress items
+        progress_stmt = (
+            select(UserProgress, MediaItem)
+            .join(MediaItem, UserProgress.media_item_id == MediaItem.id)
+            .options(
+                selectinload(MediaItem.creators),
+                selectinload(MediaItem.collection),
+            )
+            .where(
+                UserProgress.user_id == user_id,
+                UserProgress.is_completed.is_(False),
+                UserProgress.percentage > 0,
+            )
+            .order_by(desc(UserProgress.last_accessed_at))
+            .limit(40)
+        )
+        records = db.session.execute(progress_stmt).all()
+
+        for prog, m in records:
+            if m.media_type in ("video", "movie", "tv") and prog.percentage < 90:
+                if len(continue_watching) < 12:
+                    continue_watching.append(_serialize_item(m, prog))
+            elif m.media_type in ("book", "comic") and prog.percentage < 100:
+                if len(continue_reading) < 12:
+                    continue_reading.append(_serialize_item(m, prog))
+            elif (
+                m.media_type in ("audio", "audiobook", "music", "podcast")
+                and prog.percentage < 95
+            ):
+                if len(continue_listening) < 12:
+                    continue_listening.append(_serialize_item(m, prog))
+
+        # 2. Next Up for TV Shows: find next unwatched episode in in-progress shows
+        watched_episodes_stmt = (
+            select(MediaItem)
+            .join(UserProgress, MediaItem.id == UserProgress.media_item_id)
+            .where(
+                UserProgress.user_id == user_id,
+                MediaItem.collection_id.is_not(None),
+                MediaItem.episode.is_not(None),
+            )
+            .order_by(desc(UserProgress.last_accessed_at))
+            .limit(20)
+        )
+        watched_episodes = db.session.scalars(watched_episodes_stmt).all()
+        seen_collections: set[int] = set()
+
+        for ep in watched_episodes:
+            if not ep.collection_id or ep.collection_id in seen_collections:
+                continue
+            seen_collections.add(ep.collection_id)
+
+            # Query the candidate next episode
+            cand_stmt = (
+                select(MediaItem)
+                .options(
+                    selectinload(MediaItem.creators),
+                    selectinload(MediaItem.collection),
+                )
+                .where(
+                    MediaItem.collection_id == ep.collection_id,
+                    or_(
+                        (MediaItem.season == ep.season)
+                        & (MediaItem.episode == (ep.episode + 1)),
+                        (MediaItem.season == ((ep.season or 1) + 1))
+                        & (MediaItem.episode == 1),
+                    ),
+                )
+                .order_by(asc(MediaItem.season), asc(MediaItem.episode))
+                .limit(1)
+            )
+            cand = db.session.scalar(cand_stmt)
+            if cand:
+                # Check if user already finished this candidate
+                cand_prog = db.session.scalar(
+                    select(UserProgress).where(
+                        UserProgress.user_id == user_id,
+                        UserProgress.media_item_id == cand.id,
+                        UserProgress.is_completed.is_(True),
+                    )
+                )
+                if not cand_prog and len(next_up) < 6:
+                    next_up.append(_serialize_item(cand))
+
+    # 3. Recently Added (global catalog)
+    recent_stmt = (
+        select(MediaItem)
+        .options(
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.collection),
+        )
+        .order_by(desc(MediaItem.created_at))
+        .limit(20)
+    )
+    recent_items = [_serialize_item(m) for m in db.session.scalars(recent_stmt).all()]
+
+    # 4. User Favorites
+    favorites: list[dict] = []
+    if user_id:
+        fav_stmt = (
+            select(MediaItem)
+            .join(UserFavorite, MediaItem.id == UserFavorite.media_item_id)
+            .options(
+                selectinload(MediaItem.creators),
+                selectinload(MediaItem.collection),
+            )
+            .where(UserFavorite.user_id == user_id)
+            .order_by(desc(UserFavorite.created_at))
+            .limit(20)
+        )
+        favorites = [_serialize_item(m) for m in db.session.scalars(fav_stmt).all()]
+
+    return {
+        "continue_watching": continue_watching,
+        "continue_reading": continue_reading,
+        "continue_listening": continue_listening,
+        "next_up": next_up,
+        "recently_added": recent_items,
+        "favorites": favorites,
+    }

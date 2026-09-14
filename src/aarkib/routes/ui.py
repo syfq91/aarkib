@@ -9,6 +9,7 @@ from flask import (
     flash,
     redirect,
     render_template,
+    request,
     send_from_directory,
     url_for,
 )
@@ -229,6 +230,29 @@ def tags() -> ResponseReturnValue:
     ).all()
     tag_list = [(row[0], row[1]) for row in rows]
     return render_template("tags.html", tags=tag_list)
+
+
+@ui_bp.route("/pair", methods=["GET", "POST"])
+@require_auth
+def pair_device() -> ResponseReturnValue:
+    """Authorize a TV or remote device using a 6-character user code."""
+    from aarkib.services.device_auth_service import authorize_device_pairing_code
+
+    code_param = request.args.get("code", "").strip().upper()
+    if request.method == "POST":
+        user_code = (request.form.get("user_code") or "").strip().upper()
+        if not user_code:
+            return render_template(
+                "pair.html", code=user_code, error="Please enter a pairing code."
+            ), 400
+
+        success, msg = authorize_device_pairing_code(user_code, current_user.id)
+        if success:
+            return render_template("pair.html", success=True, message=msg)
+        else:
+            return render_template("pair.html", code=user_code, error=msg), 400
+
+    return render_template("pair.html", code=code_param)
 
 
 VALID_SETTINGS_CATEGORIES = {

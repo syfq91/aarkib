@@ -16,12 +16,13 @@ from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.setting import SystemSetting
 from aarkib.models.tag import Tag, media_tags
-from aarkib.models.token import DeviceToken
+from aarkib.models.token import DevicePairingCode, DeviceToken
 from aarkib.models.user import User
 
 __all__ = [
     "User",
     "DeviceToken",
+    "DevicePairingCode",
     "MediaItem",
     "Library",
     "SystemSetting",

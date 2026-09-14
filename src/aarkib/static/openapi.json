@@ -1,0 +1,666 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aarkib Media Server REST API",
+    "version": "0.1.0",
+    "description": "Unified REST API for Aarkib self-hosted media server. Powers native mobile and TV clients, e-readers, and web applications across books, comics, audiobooks, music, podcasts, movies, and TV shows."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current Aarkib server instance"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    },
+    {
+      "BasicAuth": []
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Healthcheck endpoint",
+        "description": "Unauthenticated endpoint for container monitoring and server reachability checks.",
+        "tags": ["System"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Authenticate with username and password",
+        "description": "Issues an API Bearer token for client authentication. Rate limited.",
+        "tags": ["Authentication"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful, token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/device-code": {
+      "post": {
+        "summary": "Request TV / 10-foot device pairing code",
+        "description": "Initiates a pairing session for TV or remote devices. Generates a short user code for /pair.",
+        "tags": ["Authentication"],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device_name": { "type": "string", "example": "Apple TV Living Room" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pairing session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCodeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/device-code/token": {
+      "post": {
+        "summary": "Poll for TV device authorization token",
+        "description": "Called periodically by TV clients until the user approves the pairing code.",
+        "tags": ["Authentication"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["device_code"],
+                "properties": {
+                  "device_code": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device authorized, token returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Authorization pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "pending" },
+                    "message": { "type": "string" },
+                    "interval": { "type": "integer", "example": 5 }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Session expired or invalid"
+          }
+        }
+      }
+    },
+    "/api/home": {
+      "get": {
+        "summary": "Personalized Home Dashboard",
+        "description": "Returns aggregated rails: Continue Watching, Continue Reading, Continue Listening, Next Up (TV), Recently Added, and Favorites.",
+        "tags": ["Discovery"],
+        "responses": {
+          "200": {
+            "description": "Home dashboard feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media": {
+      "get": {
+        "summary": "List catalog media items",
+        "description": "Query media items with full-text search, category filtering, in-progress filter, sorting, and pagination.",
+        "tags": ["Media"],
+        "parameters": [
+          { "name": "q", "in": "query", "description": "FTS search query", "schema": { "type": "string" } },
+          { "name": "media_type", "in": "query", "description": "book, comic, movie, tv, video, audio, music, audiobook, podcast", "schema": { "type": "string" } },
+          { "name": "in_progress", "in": "query", "description": "Filter to items user has actively started", "schema": { "type": "boolean" } },
+          { "name": "author_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "series_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "tag_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "format", "in": "query", "description": "epub, cbz, mp4, mkv, mp3, flac, etc.", "schema": { "type": "string" } },
+          { "name": "library", "in": "query", "description": "Library ID or slug", "schema": { "type": "string" } },
+          { "name": "sort", "in": "query", "description": "added_at, title, series_index", "schema": { "type": "string" } },
+          { "name": "order", "in": "query", "description": "asc or desc", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 24 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of media items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedMedia"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}": {
+      "get": {
+        "summary": "Get full media item details",
+        "tags": ["Media"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detailed media item object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaItemDetail"
+                }
+              }
+            }
+          },
+          "404": { "description": "Media item not found" }
+        }
+      }
+    },
+    "/api/media/{id}/cover": {
+      "get": {
+        "summary": "Get media cover or poster image",
+        "description": "Serves cached WebP artwork (or fallback). Publicly accessible for image tag caching.",
+        "tags": ["Media"],
+        "security": [],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image file data",
+            "content": {
+              "image/webp": { "schema": { "type": "string", "format": "binary" } },
+              "image/svg+xml": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "404": { "description": "Item not found" }
+        }
+      }
+    },
+    "/api/media/{id}/playback": {
+      "get": {
+        "summary": "Unified Playback & Reading Descriptor",
+        "description": "Determines optimal playback strategy (direct play, remux, transcode HLS), stream URLs, and audio/subtitle tracks.",
+        "tags": ["Streaming"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Playback strategy and endpoints descriptor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/media/{id}/stream": {
+      "get": {
+        "summary": "Direct media streaming with HTTP 206 seeking",
+        "description": "Supports standard Range requests for audio, video, and books.",
+        "tags": ["Streaming"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Full file content" },
+          "206": { "description": "Partial content byte range" }
+        }
+      }
+    },
+    "/api/media/{id}/pages": {
+      "get": {
+        "summary": "List comic / manga archive pages",
+        "description": "Returns page index, dimensions, and individual page streaming URLs for CBZ/CBR/ZIP comics.",
+        "tags": ["Comics & Books"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page list and comic manifest"
+          }
+        }
+      }
+    },
+    "/api/media/{id}/page/{page_num}": {
+      "get": {
+        "summary": "Stream comic page image",
+        "tags": ["Comics & Books"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "page_num", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Image data (WebP/JPEG/PNG)" }
+        }
+      }
+    },
+    "/api/media/{id}/progress": {
+      "get": {
+        "summary": "Get user progress for item",
+        "tags": ["Progress"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Progress state" }
+        }
+      },
+      "post": {
+        "summary": "Update user reading or playback progress",
+        "tags": ["Progress"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "percentage": { "type": "number", "example": 45.2 },
+                  "location": { "type": "string", "example": "450.2" },
+                  "is_completed": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Progress updated" }
+        }
+      }
+    },
+    "/api/media/{id}/favorite": {
+      "post": {
+        "summary": "Toggle or set favorite status",
+        "tags": ["Favorites"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "favorite": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Favorite status updated" }
+        }
+      }
+    },
+    "/api/favorites": {
+      "get": {
+        "summary": "List user favorites",
+        "tags": ["Favorites"],
+        "responses": {
+          "200": { "description": "User favorited items" }
+        }
+      }
+    },
+    "/api/creators": {
+      "get": {
+        "summary": "List creators / authors / artists",
+        "tags": ["Taxonomies"],
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "media_type", "in": "query", "schema": { "type": "string" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["name", "count"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 24 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list of creators" }
+        }
+      }
+    },
+    "/api/creators/{id}": {
+      "get": {
+        "summary": "Get creator details and media catalog",
+        "tags": ["Taxonomies"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Creator details and items" },
+          "404": { "description": "Creator not found" }
+        }
+      }
+    },
+    "/api/collections": {
+      "get": {
+        "summary": "List collections / series / TV shows",
+        "tags": ["Taxonomies"],
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "media_type", "in": "query", "schema": { "type": "string" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["name", "count"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 24 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list of collections" }
+        }
+      }
+    },
+    "/api/collections/{id}": {
+      "get": {
+        "summary": "Get collection / series details with ordered items",
+        "tags": ["Taxonomies"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Collection details and ordered items" },
+          "404": { "description": "Collection not found" }
+        }
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "summary": "List tags / genres",
+        "tags": ["Taxonomies"],
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list of tags" }
+        }
+      }
+    },
+    "/api/tokens": {
+      "get": {
+        "summary": "List active device/API tokens",
+        "tags": ["Authentication"],
+        "responses": {
+          "200": { "description": "User token list" }
+        }
+      },
+      "post": {
+        "summary": "Generate a new scoped device token",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "example": "iPad Air" },
+                  "scopes": { "type": "array", "items": { "type": "string" } },
+                  "expires_in_days": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Token created" }
+        }
+      }
+    },
+    "/api/tokens/{id}": {
+      "delete": {
+        "summary": "Revoke and delete a device token",
+        "tags": ["Authentication"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Token revoked" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "DeviceToken issued via /api/auth/login or /api/tokens"
+      },
+      "BasicAuth": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "Standard HTTP Basic Auth using username and password"
+      }
+    },
+    "schemas": {
+      "HealthStatus": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "healthy" },
+          "app": { "type": "string", "example": "aarkib" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string" },
+          "password": { "type": "string" },
+          "device_name": { "type": "string", "example": "iPhone 16 Pro" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "token": { "type": "string", "example": "ark_7a8f9c1e..." },
+          "token_id": { "type": "integer" },
+          "token_prefix": { "type": "string", "example": "ark_7a8f9c..." },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "username": { "type": "string" },
+              "is_admin": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "DeviceCodeResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "device_code": { "type": "string" },
+          "user_code": { "type": "string", "example": "H7X-92M" },
+          "verification_url": { "type": "string", "example": "/pair" },
+          "expires_in": { "type": "integer", "example": 300 },
+          "interval": { "type": "integer", "example": 5 }
+        }
+      },
+      "MediaItemSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "media_type": { "type": "string", "example": "movie" },
+          "creators": { "type": "array", "items": { "type": "string" } },
+          "creators_display": { "type": "string" },
+          "file_format": { "type": "string", "example": "mp4" },
+          "file_size": { "type": "integer" },
+          "cover_url": { "type": "string" },
+          "player_url": { "type": "string" },
+          "duration": { "type": "number", "nullable": true },
+          "season": { "type": "integer", "nullable": true },
+          "episode": { "type": "integer", "nullable": true },
+          "series_index": { "type": "number", "nullable": true },
+          "collection": { "type": "string", "nullable": true },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "percentage": { "type": "number" },
+              "location": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "MediaItemDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/MediaItemSummary" },
+          {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string", "nullable": true },
+              "publisher": { "type": "string", "nullable": true },
+              "language": { "type": "string", "nullable": true },
+              "isbn": { "type": "string", "nullable": true },
+              "resolution_width": { "type": "integer", "nullable": true },
+              "resolution_height": { "type": "integer", "nullable": true },
+              "codec": { "type": "string", "nullable": true },
+              "download_url": { "type": "string" },
+              "file_url": { "type": "string" }
+            }
+          }
+        ]
+      },
+      "HomeFeed": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "continue_watching": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "continue_reading": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "continue_listening": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "next_up": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "recently_added": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "favorites": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } }
+        }
+      },
+      "PaginatedMedia": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/MediaItemSummary" } },
+          "page": { "type": "integer" },
+          "pages": { "type": "integer" },
+          "total": { "type": "integer" },
+          "has_prev": { "type": "boolean" },
+          "has_next": { "type": "boolean" }
+        }
+      },
+      "PlaybackResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "playback": {
+            "type": "object",
+            "properties": {
+              "media_id": { "type": "integer" },
+              "media_type": { "type": "string" },
+              "title": { "type": "string" },
+              "stream_url": { "type": "string" },
+              "direct_url": { "type": "string" },
+              "duration": { "type": "number" }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "status": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
