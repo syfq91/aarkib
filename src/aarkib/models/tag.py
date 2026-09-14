@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Table
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 
@@ -41,12 +41,5 @@ class Tag(db.Model):
         "MediaItem", secondary=media_tags, back_populates="tags"
     )
 
-    # Synonyms
-    items = synonym("media_items")
-    books = synonym("media_items")
-
     def __repr__(self) -> str:
         return f"<Tag {self.name}>"
-
-
-book_tags = media_tags

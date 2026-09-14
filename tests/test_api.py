@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from aarkib.models import User
-from aarkib.services.scanner import index_single_book
+from aarkib.services.indexer import index_media_file
 
 
 def _create_admin(app):
@@ -29,7 +29,7 @@ def _login_admin(client, app):
 def test_api_books_and_progress(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 
@@ -52,24 +52,24 @@ def test_api_books_and_progress(client, app, sample_epub):
         f"/api/media/{book_id}/edit",
         json={
             "title": "Updated Sample Title",
-            "series": "Sample Chronicles",
+            "collection": "Sample Chronicles",
             "series_index": "1.5",
-            "authors": "Author Alpha, Author Beta",
+            "creators": "Author Alpha, Author Beta",
             "tags": "Sci-Fi, Space",
         },
     )
     assert res.status_code == 200
     edit_data = res.get_json()
     assert edit_data["status"] == "success"
-    assert edit_data["item"]["series"] == "Sample Chronicles"
+    assert edit_data["item"]["collection"] == "Sample Chronicles"
     assert edit_data["item"]["series_index"] == 1.5
-    assert len(edit_data["item"]["authors"]) == 2
+    assert len(edit_data["item"]["creators"]) == 2
     assert edit_data["item"]["provenance"]["title"] == "user"
 
     # Verify series in UI / API
     res = client.get(f"/api/media/{book_id}")
     assert res.status_code == 200
-    assert res.get_json()["series"] == "Sample Chronicles"
+    assert res.get_json()["collection"] == "Sample Chronicles"
     assert res.get_json()["media_type"] == "book"
     assert res.get_json()["provenance"]["title"] == "user"
     assert "locked_fields" in res.get_json()
@@ -99,7 +99,7 @@ def test_api_books_and_progress(client, app, sample_epub):
 def test_api_libraries_and_library_filter(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
 
     # Test GET /api/libraries
@@ -201,7 +201,7 @@ def test_api_library_crud_and_media_type_selection(client, app, tmp_path, sample
 def test_api_media_and_legacy_routes(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
     # Test standardized /api/media endpoint
@@ -254,7 +254,7 @@ def test_api_bookmark_authorization(client, app, sample_epub):
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         u1 = User(username="reader_bm", is_admin=False)
         u1.set_password("pass")
         db.session.add(u1)
@@ -262,7 +262,7 @@ def test_api_bookmark_authorization(client, app, sample_epub):
 
         bm = Bookmark(
             user_id=u1.id,
-            book_id=book.id,
+            media_item_id=book.id,
             location="epubcfi(/6/4)",
             title="User Bookmark",
         )

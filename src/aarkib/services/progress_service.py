@@ -39,7 +39,9 @@ def get_progress_for_items(
             "playback_speed": r.playback_speed,
             "playback_type": r.playback_type,
             "is_completed": r.is_completed,
-            "last_read_at": r.last_read_at.isoformat() if r.last_read_at else None,
+            "last_accessed_at": (
+                r.last_accessed_at.isoformat() if r.last_accessed_at else None
+            ),
         }
         for r in records
     }
@@ -65,9 +67,9 @@ def get_progress(user_id: int | None, item: MediaItem) -> dict[str, Any]:
             "playback_speed": record.playback_speed,
             "playback_type": record.playback_type,
             "is_completed": record.is_completed,
-            "last_read_at": record.last_read_at.isoformat()
-            if record.last_read_at
-            else None,
+            "last_accessed_at": (
+                record.last_accessed_at.isoformat() if record.last_accessed_at else None
+            ),
         }
 
     return {
@@ -148,7 +150,7 @@ def update_progress(
         record.playback_type = str(pb_type)
 
     record.is_completed = is_completed
-    record.last_read_at = datetime.now(UTC)
+    record.last_accessed_at = datetime.now(UTC)
     db.session.add(record)
     db.session.commit()
     return record

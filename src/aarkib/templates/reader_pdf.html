@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{{ book.title }} - Aarkib PDF Reader</title>
+  <title>{{ item.title }} - Aarkib PDF Reader</title>
   
   <link rel="stylesheet" href="/static/css/app.css?v=2">
   <style>
@@ -95,8 +95,8 @@
   <!-- Top Navigation Header -->
   <header class="pdf-header">
     <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <a href="/media/{{ book.id }}" class="btn-control" title="Exit to Details">← Back</a>
-      <span class="pdf-header-title" title="{{ book.title }}">{{ book.title }}</span>
+      <a href="/media/{{ item.id }}" class="btn-control" title="Exit to Details">← Back</a>
+      <span class="pdf-header-title" title="{{ item.title }}">{{ item.title }}</span>
     </div>
 
     <div class="pdf-controls">
@@ -106,18 +106,18 @@
       <span style="font-size: 0.85rem; color: #94a3b8;">of {{ total_pages }}</span>
       <button id="next-page-btn" class="btn-control" title="Next Page">›</button>
       
-      <a href="/api/media/{{ book.id }}/file" download class="btn-control" title="Download PDF">⬇ Download</a>
+      <a href="/api/media/{{ item.id }}/file" download class="btn-control" title="Download PDF">⬇ Download</a>
       <button id="fullscreen-btn" class="btn-control" title="Fullscreen">⛶</button>
     </div>
   </header>
 
   <!-- PDF Viewport Container -->
   <main class="pdf-container">
-    <iframe id="pdf-frame" class="pdf-frame" src="/api/media/{{ book.id }}/file#page={{ initial_page }}"></iframe>
+    <iframe id="pdf-frame" class="pdf-frame" src="/api/media/{{ item.id }}/file#page={{ initial_page }}"></iframe>
   </main>
 
   <script>
-    const BOOK_ID = {{ book.id }};
+    const BOOK_ID = {{ item.id }};
     const TOTAL_PAGES = {{ total_pages }};
     let currentPage = {{ initial_page }};
 

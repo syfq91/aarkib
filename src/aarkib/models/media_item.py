@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Float, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 from aarkib.models.creator import media_creators
@@ -90,11 +90,6 @@ class MediaItem(
         "PlaylistItem", back_populates="media_item", cascade="all, delete-orphan"
     )
 
-    # Generalized domain synonyms
-    series = synonym("collection")
-    series_id = synonym("collection_id")
-    authors = synonym("creators")
-
     def __init__(self, **kwargs: Any) -> None:
         if "media_type" not in kwargs or not kwargs["media_type"]:
             fmt = (kwargs.get("file_format") or "").lower()
@@ -106,13 +101,6 @@ class MediaItem(
                 kwargs["media_type"] = MediaType.AUDIO.value
             else:
                 kwargs["media_type"] = MediaType.BOOK.value
-        # Remap legacy kwargs if provided
-        if "series" in kwargs and "collection" not in kwargs:
-            kwargs["collection"] = kwargs.pop("series")
-        if "series_id" in kwargs and "collection_id" not in kwargs:
-            kwargs["collection_id"] = kwargs.pop("series_id")
-        if "authors" in kwargs and "creators" not in kwargs:
-            kwargs["creators"] = kwargs.pop("authors")
         super().__init__(**kwargs)
 
     @property
@@ -181,11 +169,6 @@ class MediaItem(
         return names
 
     @property
-    def authors_display(self) -> str:
-        """Alias for creators_display."""
-        return self.creators_display
-
-    @property
     def tags_display(self) -> list[str]:
         return [t.name for t in self.tags]
 
@@ -230,11 +213,3 @@ class MediaItem(
 
     def __repr__(self) -> str:
         return f"<MediaItem {self.id}: {self.title}>"
-
-
-Book = MediaItem
-Item = MediaItem
-
-db.Model.registry._class_registry["MediaItem"] = MediaItem
-db.Model.registry._class_registry["Book"] = MediaItem
-db.Model.registry._class_registry["Item"] = MediaItem

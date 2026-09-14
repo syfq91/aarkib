@@ -179,7 +179,7 @@ def test_library_media_type_override_and_detection(tmp_path, sample_epub):
     import shutil
 
     from aarkib.extensions import db
-    from aarkib.models import Book, Library
+    from aarkib.models import Library, MediaItem
     from tests.test_video import create_synthetic_mp4
 
     comics_dir = tmp_path / "comics_dir"
@@ -224,8 +224,8 @@ def test_library_media_type_override_and_detection(tmp_path, sample_epub):
 
         # Verify comics_dir epub is "comic"
         comic_book = db.session.scalar(
-            select(Book).where(
-                Book.original_file_path
+            select(MediaItem).where(
+                MediaItem.original_file_path
                 == str((comics_dir / "manga_as_epub.epub").resolve())
             )
         )
@@ -234,8 +234,8 @@ def test_library_media_type_override_and_detection(tmp_path, sample_epub):
 
         # Verify mixed_dir epub is "book" and mp4 is "video"
         mixed_epub = db.session.scalar(
-            select(Book).where(
-                Book.original_file_path
+            select(MediaItem).where(
+                MediaItem.original_file_path
                 == str((mixed_dir / "regular_book.epub").resolve())
             )
         )
@@ -243,8 +243,8 @@ def test_library_media_type_override_and_detection(tmp_path, sample_epub):
         assert mixed_epub.media_type == "book"
 
         mixed_video = db.session.scalar(
-            select(Book).where(
-                Book.original_file_path == str((mixed_dir / "movie.mp4").resolve())
+            select(MediaItem).where(
+                MediaItem.original_file_path == str((mixed_dir / "movie.mp4").resolve())
             )
         )
         assert mixed_video is not None
@@ -257,22 +257,24 @@ def test_library_change_handler_on_created(app, tmp_path, sample_epub):
     from watchdog.events import FileSystemEvent
 
     from aarkib.extensions import db
-    from aarkib.models import Book
-    from aarkib.services.scanner import LibraryChangeHandler
+    from aarkib.models import MediaItem
+    from aarkib.services.watcher import DebouncedLibraryChangeHandler
 
     lib_dir = Path(app.config["MEDIA_DIR"])
     lib_dir.mkdir(parents=True, exist_ok=True)
     target = lib_dir / "watched.epub"
     shutil.copy(sample_epub, target)
 
-    handler = LibraryChangeHandler(app)
+    handler = DebouncedLibraryChangeHandler(app)
     event = FileSystemEvent(str(target))
     event.is_directory = False
     handler.on_created(event)
 
     with app.app_context():
         book = db.session.scalar(
-            select(Book).where(Book.original_file_path == str(target.resolve()))
+            select(MediaItem).where(
+                MediaItem.original_file_path == str(target.resolve())
+            )
         )
         assert book is not None
         assert book.title == "Sample Test Book"
@@ -284,15 +286,15 @@ def test_library_change_handler_on_deleted(app, tmp_path, sample_epub):
     from watchdog.events import FileSystemEvent
 
     from aarkib.extensions import db
-    from aarkib.models import Book
-    from aarkib.services.scanner import LibraryChangeHandler
+    from aarkib.models import MediaItem
+    from aarkib.services.watcher import DebouncedLibraryChangeHandler
 
     lib_dir = Path(app.config["MEDIA_DIR"])
     lib_dir.mkdir(parents=True, exist_ok=True)
     target = lib_dir / "disappearing.epub"
     shutil.copy(sample_epub, target)
 
-    handler = LibraryChangeHandler(app)
+    handler = DebouncedLibraryChangeHandler(app)
     event = FileSystemEvent(str(target))
     event.is_directory = False
     handler.on_created(event)
@@ -302,6 +304,8 @@ def test_library_change_handler_on_deleted(app, tmp_path, sample_epub):
 
     with app.app_context():
         book = db.session.scalar(
-            select(Book).where(Book.original_file_path == str(target.resolve()))
+            select(MediaItem).where(
+                MediaItem.original_file_path == str(target.resolve())
+            )
         )
         assert book is None

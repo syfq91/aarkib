@@ -14,10 +14,8 @@ from aarkib.services.media_service import (
     path_match_filter,
     path_prefixes,
     resolve_library,
-    resolve_or_create_authors,
     resolve_or_create_collections,
     resolve_or_create_creators,
-    resolve_or_create_series,
     resolve_or_create_tags,
 )
 
@@ -26,30 +24,28 @@ if TYPE_CHECKING:
 
 
 def test_resolve_entities(app: Flask) -> None:
-    """Verify author, series, and tag entity resolvers handle creation and deduplication."""
+    """Verify creator, collection, and tag entity resolvers handle creation and deduplication."""
     with app.app_context():
-        # Authors / Creators
-        authors = resolve_or_create_authors(["Arthur Conan Doyle", "Agatha Christie"])
+        # Creators
+        creators1 = resolve_or_create_creators(
+            ["Arthur Conan Doyle", "Agatha Christie"]
+        )
         db.session.flush()
-        assert len(authors) == 2
-        names = {a.name for a in authors}
+        assert len(creators1) == 2
+        names = {c.name for c in creators1}
         assert names == {"Arthur Conan Doyle", "Agatha Christie"}
 
-        # Alias resolve_or_create_creators with existing and new author
-        creators = resolve_or_create_creators(["Arthur Conan Doyle", "J.K. Rowling"])
+        # Resolve existing and new creator
+        creators2 = resolve_or_create_creators(["Arthur Conan Doyle", "J.K. Rowling"])
         db.session.flush()
-        assert len(creators) == 2
-        assert creators[0].id == authors[0].id
+        assert len(creators2) == 2
+        assert creators2[0].id == creators1[0].id
 
-        # Series / Collections
-        series1 = resolve_or_create_series("Sherlock Holmes")
+        # Collections
+        col1 = resolve_or_create_collections("Sherlock Holmes")
         db.session.flush()
-        series2 = resolve_or_create_series("  Sherlock Holmes  ")
-        assert series1.id == series2.id
-
-        # Alias resolve_or_create_collections
-        col = resolve_or_create_collections("Sherlock Holmes")
-        assert col.id == series1.id
+        col2 = resolve_or_create_collections("  Sherlock Holmes  ")
+        assert col1.id == col2.id
 
         # Tags
         tags = resolve_or_create_tags(["mystery", "DETECTIVE", "fiction"])
@@ -75,8 +71,8 @@ def test_edit_media_metadata(app: Flask) -> None:
         # Update core and descriptive metadata
         data = {
             "title": "New Book Title",
-            "authors": "Author One, Author Two",
-            "series": "Great Adventures",
+            "creators": "Author One, Author Two",
+            "collection": "Great Adventures",
             "series_index": "2.5",
             "tags": "Adventure, Thriller",
             "description": "An exciting story.",
@@ -95,9 +91,9 @@ def test_edit_media_metadata(app: Flask) -> None:
         db.session.flush()
 
         assert updated.title == "New Book Title"
-        assert len(updated.authors) == 2
-        assert updated.series is not None
-        assert updated.series.name == "Great Adventures"
+        assert len(updated.creators) == 2
+        assert updated.collection is not None
+        assert updated.collection.name == "Great Adventures"
         assert updated.series_index == 2.5
         assert len(updated.tags) == 2
         assert updated.description == "An exciting story."
@@ -121,11 +117,11 @@ def test_edit_media_metadata(app: Flask) -> None:
         assert prov.get("album") == "user"
         assert updated.get_provenance_for_field("title") == "user"
 
-        # Test clearing series
-        clear_data = {"series": ""}
+        # Test clearing collection
+        clear_data = {"collection": ""}
         cleared = edit_media_metadata(item, clear_data)
         db.session.flush()
-        assert cleared.series is None
+        assert cleared.collection is None
         assert cleared.series_index is None
 
 

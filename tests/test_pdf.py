@@ -17,7 +17,7 @@ def test_parse_pdf(sample_pdf: Path):
     meta = parse_pdf(sample_pdf)
     assert meta is not None
     assert meta.title == "Sample PDF Document"
-    assert "Dr. Alice Smith" in meta.authors
+    assert "Dr. Alice Smith" in meta.creators
     assert meta.description == "A sample PDF document for automated testing"
     assert meta.page_count == 2
     assert meta.file_format == "pdf"

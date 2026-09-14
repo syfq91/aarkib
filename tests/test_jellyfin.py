@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aarkib.extensions import db
-from aarkib.models import Author, Collection, Library, MediaItem, User
+from aarkib.models import Collection, Creator, Library, MediaItem, User
 from aarkib.plugins.jellyfin import (
     from_jellyfin_id,
     generate_jellyfin_token,
@@ -85,7 +85,7 @@ def _setup_jellyfin_data(app, tmp_path: Path):
         db.session.add(music_lib)
         db.session.flush()
 
-        artist = Author(name="Daft Punk")
+        artist = Creator(name="Daft Punk")
         db.session.add(artist)
         db.session.flush()
 

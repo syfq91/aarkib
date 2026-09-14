@@ -12,8 +12,8 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from aarkib.extensions import db
-from aarkib.models import Book
-from aarkib.services.indexer import get_supported_extensions, index_single_book
+from aarkib.models import MediaItem
+from aarkib.services.indexer import get_supported_extensions, index_media_file
 from aarkib.services.library_service import (
     get_library_dirs,
     library_path_conditions,
@@ -85,7 +85,7 @@ class DebouncedLibraryChangeHandler(FileSystemEventHandler):
                         if res_p.startswith(p_res) or str(file_path).startswith(p_raw):
                             matched_lib = lib
                             break
-                    b = index_single_book(
+                    item = index_media_file(
                         file_path,
                         covers_dir,
                         library_media_type=matched_lib.media_type
@@ -95,30 +95,32 @@ class DebouncedLibraryChangeHandler(FileSystemEventHandler):
                         if matched_lib
                         else None,
                     )
-                    if b:
+                    if item:
                         from aarkib.services.search import sync_media_item_fts
 
-                        sync_media_item_fts(b.id)
+                        sync_media_item_fts(item.id)
                 else:
                     try:
                         resolved_path = str(file_path.resolve())
                     except Exception:
                         resolved_path = str(file_path)
-                    book = db.session.scalar(
-                        select(Book).where(Book.original_file_path == resolved_path)
+                    item = db.session.scalar(
+                        select(MediaItem).where(
+                            MediaItem.original_file_path == resolved_path
+                        )
                     )
-                    if book:
-                        b_id = book.id
-                        db.session.delete(book)
+                    if item:
+                        item_id = item.id
+                        db.session.delete(item)
                         db.session.commit()
                         from aarkib.services.search import remove_media_item_fts
 
-                        remove_media_item_fts(b_id)
+                        remove_media_item_fts(item_id)
         except Exception as exc:
             logger.error("Error processing watcher event for %s: %s", path_str, exc)
 
     def cancel_all(self) -> None:
-        """Cancels all pending debounce timers."""
+        """Cancel all pending debounce timers immediately."""
         with self._lock:
             for timer in self._timers.values():
                 timer.cancel()
@@ -141,10 +143,6 @@ class DebouncedLibraryChangeHandler(FileSystemEventHandler):
             self._schedule_event(event.src_path)
             if hasattr(event, "dest_path"):
                 self._schedule_event(event.dest_path)
-
-
-# Backward-compatible alias
-LibraryChangeHandler = DebouncedLibraryChangeHandler
 
 
 def start_library_watcher(app: Flask) -> Observer | None:

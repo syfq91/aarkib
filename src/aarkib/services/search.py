@@ -290,22 +290,22 @@ def _search_media_ids_fallback_ilike(
     session: Session | None = None,
 ) -> list[int]:
     """Fallback search using standard SQLAlchemy ILIKE queries if FTS is unavailable or fails."""
-    from aarkib.models import Author, Book, Series, Tag
+    from aarkib.models import Collection, Creator, MediaItem, Tag
 
     sess = session or db.session
-    query = select(Book.id)
+    query = select(MediaItem.id)
 
     if media_type:
-        query = query.where(Book.media_type == media_type)
+        query = query.where(MediaItem.media_type == media_type)
     if library_id:
-        query = query.where(Book.library_id == library_id)
+        query = query.where(MediaItem.library_id == library_id)
 
     search_filter = or_(
-        Book.title.ilike(f"%{q}%"),
-        Book.description.ilike(f"%{q}%"),
-        Book.authors.any(Author.name.ilike(f"%{q}%")),
-        Book.tags.any(Tag.name.ilike(f"%{q}%")),
-        Book.series.has(Series.name.ilike(f"%{q}%")),
+        MediaItem.title.ilike(f"%{q}%"),
+        MediaItem.description.ilike(f"%{q}%"),
+        MediaItem.creators.any(Creator.name.ilike(f"%{q}%")),
+        MediaItem.tags.any(Tag.name.ilike(f"%{q}%")),
+        MediaItem.collection.has(Collection.name.ilike(f"%{q}%")),
     )
     query = query.where(search_filter).limit(limit)
     return list(sess.scalars(query).all())
@@ -353,18 +353,18 @@ def search_media_ids(
 
 
 def serialize_media_item_summary(b: Any) -> dict[str, Any]:
-    """Serialize a MediaItem/Book model into a uniform dict for search results."""
+    """Serialize a MediaItem model into a uniform dict for search results."""
     return {
         "id": b.id,
         "title": b.title,
         "media_type": b.media_type,
-        "authors": [a.name for a in b.authors],
-        "authors_display": b.authors_display,
+        "creators": [c.name for c in b.creators],
+        "creators_display": b.creators_display,
         "file_format": b.file_format,
         "file_size": b.file_size,
         "cover_url": f"/api/media/{b.id}/cover",
         "player_url": b.player_url,
-        "series": b.series.name if b.series else None,
+        "collection": b.collection.name if b.collection else None,
         "series_index": b.series_index,
         "tags": [t.name for t in b.tags],
         "duration": getattr(b, "duration", None),
@@ -401,7 +401,7 @@ def search_grouped(
         }
 
     sess = session or db.session
-    from aarkib.models import Book
+    from aarkib.models import MediaItem
 
     matching_entries: list[tuple[int, str, str]] = []  # (id, media_type, file_format)
 
@@ -425,7 +425,9 @@ def search_grouped(
             q, library_id=library_id, session=sess
         )
         if fallback_ids:
-            items = sess.scalars(select(Book).where(Book.id.in_(fallback_ids))).all()
+            items = sess.scalars(
+                select(MediaItem).where(MediaItem.id.in_(fallback_ids))
+            ).all()
             matching_entries = [
                 (
                     b.id,
@@ -464,16 +466,16 @@ def search_grouped(
 
     items_map: dict[int, Any] = {}
     if needed_ids:
-        loaded_books = sess.scalars(
-            select(Book)
+        loaded_items = sess.scalars(
+            select(MediaItem)
             .options(
-                selectinload(Book.authors),
-                selectinload(Book.series),
-                selectinload(Book.tags),
+                selectinload(MediaItem.creators),
+                selectinload(MediaItem.collection),
+                selectinload(MediaItem.tags),
             )
-            .where(Book.id.in_(needed_ids))
+            .where(MediaItem.id.in_(needed_ids))
         ).all()
-        items_map = {b.id: b for b in loaded_books}
+        items_map = {b.id: b for b in loaded_items}
 
     result_groups: dict[str, dict[str, Any]] = {}
     total_matches = 0

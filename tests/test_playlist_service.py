@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from aarkib.extensions import db
-from aarkib.models import Book, User
+from aarkib.models import MediaItem, User
 from aarkib.services.playlist_service import (
     add_playlist_item,
     create_playlist,
@@ -21,13 +21,13 @@ def test_playlist_lifecycle_and_permissions(app):
     with app.app_context():
         user1 = User(username="p1", password_hash="dummy")
         user2 = User(username="p2", password_hash="dummy")
-        item1 = Book(
+        item1 = MediaItem(
             original_file_path="/media/track1.mp3",
             title="Track 1",
             file_hash="thash1",
             file_format="mp3",
         )
-        item2 = Book(
+        item2 = MediaItem(
             original_file_path="/media/track2.mp3",
             title="Track 2",
             file_hash="thash2",
@@ -86,7 +86,7 @@ def test_playlist_lifecycle_and_permissions(app):
 def test_favorites_service(app):
     with app.app_context():
         user = User(username="favuser", password_hash="dummy")
-        item = Book(
+        item = MediaItem(
             original_file_path="/media/fav.epub",
             title="Fav Book",
             file_hash="fhash",

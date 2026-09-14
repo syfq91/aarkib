@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{{ book.title }} - Aarkib Comic Reader</title>
+  <title>{{ item.title }} - Aarkib Comic Reader</title>
   
   <link rel="stylesheet" href="/static/css/app.css?v=2">
   <link rel="stylesheet" href="/static/css/reader-cbz.css?v=2">
   <script>
-    window.BOOK_ID = {{ book.id }};
+    window.BOOK_ID = {{ item.id }};
     window.INITIAL_PAGE = {{ initial_page }};
   </script>
 </head>
-<body class="cbz-reader-body" data-book-id="{{ book.id }}" data-initial-page="{{ initial_page }}">
+<body class="cbz-reader-body" data-book-id="{{ item.id }}" data-initial-page="{{ initial_page }}">
 
   <!-- Header -->
   <header id="cbz-header" class="cbz-header">
     <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <a href="/media/{{ book.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit">←</a>
+      <a href="/media/{{ item.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit">←</a>
       <span style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 35vw;">
-        {{ book.title }}
+        {{ item.title }}
       </span>
     </div>
 
@@ -72,7 +72,7 @@
   </footer>
 
   <script>
-    const BOOK_ID = {{ book.id }};
+    const BOOK_ID = {{ item.id }};
     const INITIAL_PAGE = {{ initial_page }};
   </script>
   <script src="/static/js/reader-cbz.js"></script>

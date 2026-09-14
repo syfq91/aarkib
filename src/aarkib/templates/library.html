@@ -46,7 +46,7 @@
   </div>
 
   <div class="toolbar-actions">
-    {% if total_books > 0 %}
+    {% if total_items > 0 %}
     <div class="view-toggle-group">
       <button id="view-shelves-btn" class="view-toggle-btn active" title="Shelf View" onclick="setViewMode('shelves')">
         📚 Shelves
@@ -64,7 +64,7 @@
   <button id="clear-filter-btn" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.25rem 0.6rem;" onclick="clearFilters()">✕ Clear Filter</button>
 </div>
 
-{% if total_books == 0 %}
+{% if total_items == 0 %}
 <div id="empty-library-state" style="text-align: center; padding: 5rem 1rem; color: var(--text-secondary);">
   <div style="font-size: 3rem; margin-bottom: 1rem;">🏛️</div>
   <h3 style="font-size: 1.4rem; color: var(--text-primary); margin-bottom: 0.5rem;">No media found in library</h3>
@@ -77,12 +77,12 @@
 {# --- DASHBOARD MULTI-ROW SHELVES VIEW --- #}
 <div id="dashboard-shelves" class="dashboard-shelves">
   {# Row 1: Continue Reading / Watching (In-Progress Media) #}
-  {% if in_progress_books %}
+  {% if in_progress_items %}
   <section class="shelf-section" id="shelf-in-progress">
     <div class="shelf-header">
       <div class="shelf-title-wrap">
         <h2 class="shelf-title">⏯️ Continue Watching & Reading</h2>
-        <span class="shelf-count-badge">{{ in_progress_books|length }}</span>
+        <span class="shelf-count-badge">{{ in_progress_items|length }}</span>
       </div>
       <div class="shelf-actions">
         <button class="shelf-scroll-btn" onclick="scrollShelf('row-in-progress', -1)" aria-label="Scroll left">‹</button>
@@ -91,20 +91,20 @@
     </div>
     <div class="shelf-row-wrapper">
       <div class="shelf-row" id="row-in-progress">
-        {% for item in in_progress_books %}
-          <a href="{{ item.book.reader_url }}" class="book-card" title="Continue {{ 'watching' if item.book.is_video else ('listening to' if item.book.is_audio else 'reading') }} {{ item.book.title }} ({{ item.percentage|round|int }}%)">
+        {% for item in in_progress_items %}
+          <a href="{{ item.item.player_url }}" class="book-card" title="Continue {{ 'watching' if item.item.is_video else ('listening to' if item.item.is_audio else 'reading') }} {{ item.item.title }} ({{ item.percentage|round|int }}%)">
             <div class="book-cover-wrap">
-              <img src="/api/media/{{ item.book.id }}/cover" alt="{{ item.book.title }}" class="book-cover-img" loading="lazy">
-              <span class="badge-format">{{ item.book.file_format }}</span>
+              <img src="/api/media/{{ item.item.id }}/cover" alt="{{ item.item.title }}" class="book-cover-img" loading="lazy">
+              <span class="badge-format">{{ item.item.file_format }}</span>
               <span class="badge-progress">{{ item.percentage|round|int }}%</span>
-              <span class="badge-resume">{% if item.book.is_video %}Watch →{% elif item.book.is_audio %}Listen →{% else %}Resume →{% endif %}</span>
+              <span class="badge-resume">{% if item.item.is_video %}Watch →{% elif item.item.is_audio %}Listen →{% else %}Resume →{% endif %}</span>
             </div>
             <div class="progress-bar-container" title="{{ item.percentage|round|int }}% completed">
               <div class="progress-bar-fill" style="width: {{ item.percentage }}%;"></div>
             </div>
             <div class="book-info">
-              <div class="book-title" title="{{ item.book.title }}">{{ item.book.title }}</div>
-              <div class="book-author">{{ item.book.authors_display }}</div>
+              <div class="book-title" title="{{ item.item.title }}">{{ item.item.title }}</div>
+              <div class="book-author">{{ item.item.creators_display }}</div>
             </div>
           </a>
         {% endfor %}
@@ -113,13 +113,13 @@
   </section>
   {% endif %}
 
-  {# Row 2: Recently Added Books #}
-  {% if recent_books %}
+  {# Row 2: Recently Added Items #}
+  {% if recent_items %}
   <section class="shelf-section" id="shelf-recent">
     <div class="shelf-header">
       <div class="shelf-title-wrap">
         <h2 class="shelf-title">✨ Recently Added</h2>
-        <span class="shelf-count-badge">{{ recent_books|length }}</span>
+        <span class="shelf-count-badge">{{ recent_items|length }}</span>
       </div>
       <div class="shelf-actions">
         <button class="shelf-view-all" onclick="switchToGrid({sort: 'added_at', order: 'desc'})">View All →</button>
@@ -129,21 +129,21 @@
     </div>
     <div class="shelf-row-wrapper">
       <div class="shelf-row" id="row-recent">
-        {% for book in recent_books %}
-          <a href="/media/{{ book.id }}" class="book-card">
+        {% for item in recent_items %}
+          <a href="/media/{{ item.id }}" class="book-card">
             <div class="book-cover-wrap">
-              <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
-              <span class="badge-format">{{ book.file_format }}</span>
+              <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="book-cover-img" loading="lazy">
+              <span class="badge-format">{{ item.file_format }}</span>
             </div>
-            {% set prog = progress_map.get(book.id, 0) %}
+            {% set prog = progress_map.get(item.id, 0) %}
             {% if prog > 0 %}
               <div class="progress-bar-container" title="{{ prog|round|int }}% completed">
                 <div class="progress-bar-fill" style="width: {{ prog }}%;"></div>
               </div>
             {% endif %}
             <div class="book-info">
-              <div class="book-title" title="{{ book.title }}">{{ book.title }}</div>
-              <div class="book-author">{{ book.authors_display }}</div>
+              <div class="book-title" title="{{ item.title }}">{{ item.title }}</div>
+              <div class="book-author">{{ item.creators_display }}</div>
             </div>
           </a>
         {% endfor %}
@@ -154,7 +154,7 @@
 
   {# Row 3+: Dynamic Library Shelves (based on configured libraries) #}
   {% for shelf in library_shelves %}
-    {% if shelf.books %}
+    {% if shelf['items'] %}
     <section class="shelf-section" id="shelf-lib-{{ shelf.id }}">
       <div class="shelf-header">
         <div class="shelf-title-wrap">
@@ -169,21 +169,21 @@
       </div>
       <div class="shelf-row-wrapper">
         <div class="shelf-row" id="row-lib-{{ shelf.id }}">
-          {% for book in shelf.books %}
-            <a href="/media/{{ book.id }}" class="book-card">
+          {% for item in shelf['items'] %}
+            <a href="/media/{{ item.id }}" class="book-card">
               <div class="book-cover-wrap">
-                <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
-                <span class="badge-format">{{ book.file_format }}</span>
+                <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="book-cover-img" loading="lazy">
+                <span class="badge-format">{{ item.file_format }}</span>
               </div>
-              {% set prog = progress_map.get(book.id, 0) %}
+              {% set prog = progress_map.get(item.id, 0) %}
               {% if prog > 0 %}
                 <div class="progress-bar-container" title="{{ prog|round|int }}% completed">
                   <div class="progress-bar-fill" style="width: {{ prog }}%;"></div>
                 </div>
               {% endif %}
               <div class="book-info">
-                <div class="book-title" title="{{ book.title }}">{{ book.title }}</div>
-                <div class="book-author">{{ book.authors_display }}</div>
+                <div class="book-title" title="{{ item.title }}">{{ item.title }}</div>
+                <div class="book-author">{{ item.creators_display }}</div>
               </div>
             </a>
           {% endfor %}
@@ -196,23 +196,23 @@
 
 {% endif %}
 
-{# --- FILTERED / ALL BOOKS GRID VIEW --- #}
+{# --- FILTERED / ALL ITEMS GRID VIEW --- #}
 <div id="book-grid" class="book-grid" style="display: none;">
-  {% for book in initial_books %}
-    <a href="/media/{{ book.id }}" class="book-card">
+  {% for item in initial_items %}
+    <a href="/media/{{ item.id }}" class="book-card">
       <div class="book-cover-wrap">
-        <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="book-cover-img" loading="lazy">
-        <span class="badge-format">{{ book.file_format }}</span>
+        <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="book-cover-img" loading="lazy">
+        <span class="badge-format">{{ item.file_format }}</span>
       </div>
-      {% set prog = progress_map.get(book.id, 0) %}
+      {% set prog = progress_map.get(item.id, 0) %}
       {% if prog > 0 %}
         <div class="progress-bar-container" title="{{ prog|round|int }}% completed">
           <div class="progress-bar-fill" style="width: {{ prog }}%;"></div>
         </div>
       {% endif %}
       <div class="book-info">
-        <div class="book-title" title="{{ book.title }}">{{ book.title }}</div>
-        <div class="book-author">{{ book.authors_display }}</div>
+        <div class="book-title" title="{{ item.title }}">{{ item.title }}</div>
+        <div class="book-author">{{ item.creators_display }}</div>
       </div>
     </a>
   {% endfor %}
@@ -418,7 +418,7 @@ async function fetchBooks() {
       return;
     }
     const data = await res.json();
-    const items = data.items || data.books;
+    const items = data.items;
     if (res.ok && items) {
       renderBooks(items);
       renderPagination(data);
@@ -432,7 +432,7 @@ function renderBookCard(book) {
   const progressPercent = book.progress ? Math.round(book.progress.percentage) : 0;
   const title = esc(book.title);
   const format = esc(book.file_format || "");
-  const authors = esc(book.authors_display || (book.authors && book.authors.join(", ")) || "");
+  const creators = esc(book.creators_display || (book.creators && book.creators.join(", ")) || "");
   let badge = format ? format.toUpperCase() : "";
   if (book.season && book.episode) {
     badge = `S${String(book.season).padStart(2, '0')}E${String(book.episode).padStart(2, '0')}`;
@@ -451,7 +451,7 @@ function renderBookCard(book) {
       ` : ""}
       <div class="book-info">
         <div class="book-title" title="${title}">${title}</div>
-        <div class="book-author">${authors}</div>
+        <div class="book-author">${creators}</div>
       </div>
     </a>
   `;

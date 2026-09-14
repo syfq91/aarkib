@@ -12,7 +12,7 @@
     <title>{{ series.name }}</title>
     <id>urn:aarkib:series:{{ series.id }}{% if preset %}:{{ preset }}{% endif %}</id>
     <updated>{{ now_iso }}</updated>
-    <content type="text">{{ series.books|length }} volume(s)</content>
+    <content type="text">{{ series.media_items|length }} volume(s)</content>
     <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}{{ opds_prefix }}/series/{{ series.id }}"/>
   </entry>
   {% endfor %}

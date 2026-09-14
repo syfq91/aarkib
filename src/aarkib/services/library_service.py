@@ -11,7 +11,7 @@ from sqlalchemy import func, inspect, or_, select
 
 from aarkib.config import Config, get_env_media_dirs
 from aarkib.extensions import db
-from aarkib.models import Book, Library, MediaItem
+from aarkib.models import Library, MediaItem
 
 if TYPE_CHECKING:
     from flask import Flask
@@ -86,9 +86,6 @@ def count_media_in_library(library: Library) -> int:
     return (
         db.session.scalar(select(func.count(MediaItem.id)).where(or_(*conditions))) or 0
     )
-
-
-count_books_in_library = count_media_in_library
 
 
 def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
@@ -337,23 +334,25 @@ def get_library_definitions(app: Flask | None = None) -> list[dict[str, Any]]:
                 with target_app.app_context():
                     libs = sync_and_get_libraries(target_app)
             if libs:
-                total_books = db.session.scalar(select(func.count(Book.id))) or 0
+                total_items = db.session.scalar(select(func.count(MediaItem.id))) or 0
                 definitions: list[dict[str, Any]] = []
                 for lib in libs:
                     p = Path(lib.path).expanduser()
                     p_res, p_raw = library_path_conditions(lib)
 
                     lib_cond = or_(
-                        Book.original_file_path.startswith(p_res),
-                        Book.original_file_path.startswith(p_raw),
-                        Book.original_file_path == str(p),
+                        MediaItem.original_file_path.startswith(p_res),
+                        MediaItem.original_file_path.startswith(p_raw),
+                        MediaItem.original_file_path == str(p),
                     )
                     count = (
-                        db.session.scalar(select(func.count(Book.id)).where(lib_cond))
+                        db.session.scalar(
+                            select(func.count(MediaItem.id)).where(lib_cond)
+                        )
                         or 0
                     )
-                    if count == 0 and len(libs) == 1 and total_books > 0:
-                        count = total_books
+                    if count == 0 and len(libs) == 1 and total_items > 0:
+                        count = total_items
 
                     definitions.append(
                         {

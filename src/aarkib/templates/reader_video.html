@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{{ book.title }}{% if book.episode_code %} ({{ book.episode_code }}){% endif %} - Aarkib Video Player</title>
+  <title>{{ item.title }}{% if item.episode_code %} ({{ item.episode_code }}){% endif %} - Aarkib Video Player</title>
   
   <link rel="stylesheet" href="/static/css/app.css?v=2">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
@@ -195,16 +195,16 @@
   <!-- Top Navigation Overlay -->
   <div class="player-header" id="player-header">
     <div class="player-title-wrap">
-      <a href="/media/{{ book.id }}" class="back-btn" title="Back to Details">←</a>
+      <a href="/media/{{ item.id }}" class="back-btn" title="Back to Details">←</a>
       <div>
         <span class="video-title">
-          {% if book.series %}
-            {{ book.series.name }}{% if book.episode_code %} • {{ book.episode_code }}{% endif %} -
+          {% if item.collection %}
+            {{ item.collection.name }}{% if item.episode_code %} • {{ item.episode_code }}{% endif %} -
           {% endif %}
-          {{ book.title }}
+          {{ item.title }}
         </span>
-        {% if book.resolution_label or book.file_format %}
-          <span class="video-subtitle">[{{ book.resolution_label or book.file_format|upper }}]</span>
+        {% if item.resolution_label or item.file_format %}
+          <span class="video-subtitle">[{{ item.resolution_label or item.file_format|upper }}]</span>
         {% endif %}
       </div>
     </div>
@@ -253,10 +253,10 @@
     controls
     playsinline
     preload="metadata"
-    poster="/api/media/{{ book.id }}/cover"
+    poster="/api/media/{{ item.id }}/cover"
     tabindex="0"
   >
-    <source src="/api/media/{{ book.id }}/file" type="video/{{ 'mp4' if book.file_format == 'mp4' else ('webm' if book.file_format == 'webm' else 'mp4') }}">
+    <source src="/api/media/{{ item.id }}/file" type="video/{{ 'mp4' if item.file_format == 'mp4' else ('webm' if item.file_format == 'webm' else 'mp4') }}">
     Your browser does not support the video tag.
   </video>
 
@@ -269,7 +269,7 @@
     <div style="font-size: 2.5rem;">⏭️</div>
     <h3>Next Episode Up</h3>
     <div style="color: #cbd5e1; font-size: 1.1rem;">
-      {% if next_video.series %}{{ next_video.series.name }} - {% endif %}
+      {% if next_video.collection %}{{ next_video.collection.name }} - {% endif %}
       {% if next_video.episode_code %}{{ next_video.episode_code }}: {% endif %}
       {{ next_video.title }}
     </div>
@@ -287,7 +287,7 @@
 </div>
 
 <script>
-  const BOOK_ID = {{ book.id }};
+  const BOOK_ID = {{ item.id }};
   const INITIAL_TIME = {{ initial_time }};
   const HAS_NEXT = {{ 'true' if next_video else 'false' }};
   const NEXT_URL = "{{ '/reader/video/' ~ next_video.id if next_video else '' }}";
@@ -612,7 +612,7 @@
 
   // Initialize subtitles and format auto-switch
   loadSubtitles();
-  const fileFmt = "{{ book.file_format|lower }}";
+  const fileFmt = "{{ item.file_format|lower }}";
   if (["mkv", "avi", "mov", "m4v"].includes(fileFmt)) {
     // Automatically evaluate playback strategy for non-standard browser containers
     switchStreamMode("auto", INITIAL_TIME);

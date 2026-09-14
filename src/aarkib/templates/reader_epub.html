@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>{{ book.title }} - Aarkib Reader</title>
+  <title>{{ item.title }} - Aarkib Reader</title>
   
   <link rel="stylesheet" href="/static/css/app.css?v=2">
   <link rel="stylesheet" href="/static/css/reader-epub.css?v=2">
@@ -11,19 +11,19 @@
   <script src="/static/js/vendor/jszip.min.js"></script>
   <script src="/static/js/vendor/epub.min.js"></script>
   <script>
-    window.BOOK_ID = {{ book.id }};
-    window.BOOK_URL = "/api/media/{{ book.id }}/file";
+    window.BOOK_ID = {{ item.id }};
+    window.BOOK_URL = "/api/media/{{ item.id }}/file";
     window.INITIAL_LOCATION = "{{ initial_location }}";
   </script>
 </head>
-<body class="reader-body" data-reader-theme="dark" data-book-id="{{ book.id }}" data-initial-location="{{ initial_location }}">
+<body class="reader-body" data-reader-theme="dark" data-book-id="{{ item.id }}" data-initial-location="{{ initial_location }}">
 
   <!-- Top Controls Bar -->
   <header id="reader-header" class="reader-header">
     <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <a href="/media/{{ book.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit Reader">←</a>
+      <a href="/media/{{ item.id }}" style="color: #f8fafc; text-decoration: none; font-size: 1.1rem;" title="Exit Reader">←</a>
       <span style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw;">
-        {{ book.title }}
+        {{ item.title }}
       </span>
     </div>
 
@@ -112,8 +112,8 @@
   </aside>
 
   <script>
-    const BOOK_ID = {{ book.id }};
-    const BOOK_URL = "/api/media/{{ book.id }}/file";
+    const BOOK_ID = {{ item.id }};
+    const BOOK_URL = "/api/media/{{ item.id }}/file";
     const INITIAL_LOCATION = "{{ initial_location }}";
   </script>
   <script src="/static/js/reader-epub.js"></script>

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 
@@ -34,7 +34,6 @@ class Library(db.Model):
     media_items: Mapped[list[MediaItem]] = relationship(
         "MediaItem", back_populates="library"
     )
-    books = synonym("media_items")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False

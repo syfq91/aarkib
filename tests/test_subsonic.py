@@ -5,7 +5,7 @@ import base64
 from sqlalchemy import select
 
 from aarkib.extensions import db
-from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
+from aarkib.models import Collection, Creator, Library, MediaItem, User, UserProgress
 
 
 def _setup_subsonic_data(app):
@@ -23,7 +23,7 @@ def _setup_subsonic_data(app):
         db.session.flush()
 
         # Artist & Album
-        artist = Author(name="Pink Floyd")
+        artist = Creator(name="Pink Floyd")
         db.session.add(artist)
         db.session.flush()
 

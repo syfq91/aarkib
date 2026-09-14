@@ -43,11 +43,12 @@ def _compute_sha256(file_path: Path) -> str:
 
 def get_backup_dir(app: Flask) -> Path:
     """Returns the configured backup directory, creating it if needed."""
-    backup_dir = Path(
-        app.config.get(
-            "BACKUP_DIR", Path(app.config.get("DATA_DIR", "data")) / "backups"
-        )
+    raw_dir = (
+        app.config.get("BACKUP_DIR")
+        or app.config.get("BACKUPS_DIR")
+        or Path(app.config.get("DATA_DIR", "data")) / "backups"
     )
+    backup_dir = Path(raw_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
     return backup_dir
 

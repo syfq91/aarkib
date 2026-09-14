@@ -45,7 +45,6 @@ def read_epub(item_id: int) -> ResponseReturnValue:
     return render_template(
         "reader_epub.html",
         item=item,
-        book=item,
         initial_location=progress.progress_location if progress else "0",
     )
 
@@ -78,7 +77,6 @@ def read_cbz(item_id: int) -> ResponseReturnValue:
     return render_template(
         "reader_cbz.html",
         item=item,
-        book=item,
         initial_page=initial_page,
     )
 
@@ -111,7 +109,6 @@ def read_pdf(item_id: int) -> ResponseReturnValue:
     return render_template(
         "reader_pdf.html",
         item=item,
-        book=item,
         initial_page=initial_page,
         total_pages=item.page_count or 1,
     )
@@ -162,7 +159,6 @@ def watch_video(item_id: int) -> ResponseReturnValue:
     return render_template(
         "reader_video.html",
         item=item,
-        book=item,
         initial_time=initial_time,
         progress=progress,
         next_video=next_video,

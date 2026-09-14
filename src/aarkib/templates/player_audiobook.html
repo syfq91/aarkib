@@ -394,7 +394,7 @@
 
       <div class="header-center">
         <div class="header-badge">🎧 Audiobook</div>
-        <div class="header-series">{{ item.series.name if item.series else (item.collection.name if item.collection else "Aarkib Audiobooks") }}</div>
+        <div class="header-series">{{ item.collection.name if item.collection else "Aarkib Audiobooks" }}</div>
       </div>
 
       <div style="display: flex; gap: 0.5rem;">

@@ -272,19 +272,6 @@ def fetch_external_metadata(
     return result
 
 
-def enrich_book(
-    book: MediaItem,
-    covers_dir: Path,
-    overwrite: bool = False,
-    provider: str = "all",
-) -> dict[str, Any]:
-    """Compatibility wrapper that enriches a book using enrich_media_item."""
-    res = enrich_media_item(book, covers_dir, overwrite=overwrite, provider=provider)
-    if "book_id" not in res and "media_id" in res:
-        res["book_id"] = res["media_id"]
-    return res
-
-
 def enrich_media_item(
     item: MediaItem,
     covers_dir: Path,
@@ -295,7 +282,7 @@ def enrich_media_item(
 ) -> dict[str, Any]:
     """Enriches metadata for any media item (book, video, music, audiobook)."""
     from aarkib.services.media_service import (
-        resolve_or_create_authors,
+        resolve_or_create_creators,
         resolve_or_create_tags,
     )
     from aarkib.services.metadata import metadata_registry
@@ -306,7 +293,7 @@ def enrich_media_item(
     is_book = getattr(item, "is_book", False)
     item_isbn = getattr(item, "isbn", None)
     item_title = item.title
-    first_author = item.authors[0].name if getattr(item, "authors", None) else None
+    first_author = item.creators[0].name if getattr(item, "creators", None) else None
     item_year = getattr(item, "publication_date", None) or getattr(
         item, "release_year", None
     )
@@ -418,18 +405,16 @@ def enrich_media_item(
         if hasattr(target_item, "set_field_provenance"):
             target_item.set_field_provenance("description", provider_src)
 
-    # Creators / Authors / Directors
+    # Creators
     if (
         not target_item.is_field_locked("creators")
-        and not target_item.is_field_locked("authors")
-        and (not target_item.authors or overwrite)
+        and (not target_item.creators or overwrite)
         and details.creators
     ):
-        target_item.authors = resolve_or_create_authors(details.creators)
+        target_item.creators = resolve_or_create_creators(details.creators)
         changes.append("creators")
         if hasattr(target_item, "set_field_provenance"):
             target_item.set_field_provenance("creators", provider_src)
-            target_item.set_field_provenance("authors", provider_src)
 
     # Publisher
     if (

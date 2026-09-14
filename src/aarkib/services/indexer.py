@@ -12,11 +12,10 @@ from sqlalchemy import select
 
 from aarkib.extensions import db
 from aarkib.models import (
-    Author,
-    Book,
+    Collection,
+    Creator,
     Library,
     MediaItem,
-    Series,
     Tag,
 )
 from aarkib.plugins import plugin_registry
@@ -216,55 +215,58 @@ def _resolve_media_type(
     return "book"
 
 
-def _assign_authors_tags_series(book: Book, metadata: Any) -> None:
-    """Resolves and assigns the authors, series, and tags on a Book record."""
-    is_locked = getattr(book, "is_field_locked", lambda _field: False)
+def _assign_creators_tags_collections(item: MediaItem, metadata: Any) -> None:
+    """Resolves and assigns the creators, collection, and tags on a MediaItem record."""
+    is_locked = getattr(item, "is_field_locked", lambda _field: False)
 
-    if not is_locked("authors") and not is_locked("creators"):
-        author_objs = []
-        authors_list = getattr(metadata, "authors", None) or getattr(
-            metadata, "creators", []
+    if not is_locked("creators"):
+        creator_objs = []
+        creators_list = getattr(metadata, "creators", None) or getattr(
+            metadata, "authors", []
         )
-        for author_name in authors_list:
-            cleaned_name = author_name.strip()
+        for creator_name in creators_list:
+            cleaned_name = creator_name.strip()
             if not cleaned_name:
                 continue
-            author = db.session.scalar(
-                select(Author).where(Author.name == cleaned_name)
+            creator = db.session.scalar(
+                select(Creator).where(Creator.name == cleaned_name)
             )
 
-            if not author:
-                author = Author(name=cleaned_name)
-                db.session.add(author)
-            author_objs.append(author)
-        book.authors = author_objs
+            if not creator:
+                creator = Creator(name=cleaned_name)
+                db.session.add(creator)
+            creator_objs.append(creator)
+        item.creators = creator_objs
         if (
-            hasattr(book, "set_field_provenance")
-            and book.authors
-            and not book.get_provenance_for_field("authors")
+            hasattr(item, "set_field_provenance")
+            and item.creators
+            and not item.get_provenance_for_field("creators")
         ):
-            book.set_field_provenance("authors", "file_metadata")
-            book.set_field_provenance("creators", "file_metadata")
+            item.set_field_provenance("creators", "file_metadata")
 
-    if not is_locked("series") and not is_locked("collection"):
-        if metadata.series:
-            cleaned_series = metadata.series.strip()
+    if not is_locked("collection"):
+        series_name = getattr(metadata, "collection", None) or getattr(
+            metadata, "series", None
+        )
+        if series_name:
+            cleaned_series = series_name.strip()
             series_obj = db.session.scalar(
-                select(Series).where(Series.name == cleaned_series)
+                select(Collection).where(Collection.name == cleaned_series)
             )
             if not series_obj:
-                series_obj = Series(name=cleaned_series)
+                series_obj = Collection(name=cleaned_series)
                 db.session.add(series_obj)
-            book.series = series_obj
-            book.series_index = metadata.series_index
+            item.collection = series_obj
+            item.series_index = getattr(metadata, "series_index", None) or getattr(
+                metadata, "collection_index", None
+            )
             if hasattr(
-                book, "set_field_provenance"
-            ) and not book.get_provenance_for_field("series"):
-                book.set_field_provenance("series", "file_metadata")
-                book.set_field_provenance("collection", "file_metadata")
+                item, "set_field_provenance"
+            ) and not item.get_provenance_for_field("collection"):
+                item.set_field_provenance("collection", "file_metadata")
         else:
-            book.series = None
-            book.series_index = None
+            item.collection = None
+            item.series_index = None
 
     if not is_locked("tags") and not is_locked("genres"):
         tag_objs = []
@@ -277,13 +279,13 @@ def _assign_authors_tags_series(book: Book, metadata: Any) -> None:
                 tag_obj = Tag(name=cleaned_tag)
                 db.session.add(tag_obj)
             tag_objs.append(tag_obj)
-        book.tags = tag_objs
+        item.tags = tag_objs
         if (
-            hasattr(book, "set_field_provenance")
-            and book.tags
-            and not book.get_provenance_for_field("tags")
+            hasattr(item, "set_field_provenance")
+            and item.tags
+            and not item.get_provenance_for_field("tags")
         ):
-            book.set_field_provenance("tags", "file_metadata")
+            item.set_field_provenance("tags", "file_metadata")
 
 
 def index_media_file(
@@ -306,33 +308,33 @@ def index_media_file(
         file_size = stat_info.st_size
         file_mtime = stat_info.st_mtime
 
-        existing_book = db.session.scalar(
-            select(Book).where(Book.original_file_path == resolved_path)
+        existing_item = db.session.scalar(
+            select(MediaItem).where(MediaItem.original_file_path == resolved_path)
         )
         if (
-            existing_book
-            and existing_book.file_size == file_size
-            and existing_book.file_mtime is not None
-            and abs(existing_book.file_mtime - file_mtime) < 0.01
+            existing_item
+            and existing_item.file_size == file_size
+            and existing_item.file_mtime is not None
+            and abs(existing_item.file_mtime - file_mtime) < 0.01
         ):
             updated = False
             if (
                 library_media_type
                 and library_media_type != "all"
-                and existing_book.media_type != library_media_type
+                and existing_item.media_type != library_media_type
             ):
-                existing_book.media_type = library_media_type
+                existing_item.media_type = library_media_type
                 updated = True
             if (
                 library_id is not None
-                and getattr(existing_book, "library_id", None) != library_id
+                and getattr(existing_item, "library_id", None) != library_id
             ):
-                existing_book.library_id = library_id
+                existing_item.library_id = library_id
                 updated = True
             if updated:
                 if commit:
                     db.session.commit()
-            return existing_book
+            return existing_item
 
         file_hash = compute_fast_fingerprint(file_path)
 
@@ -355,130 +357,130 @@ def index_media_file(
             metadata, plugin, file_path, file_hash, covers_dir
         )
 
-        book = existing_book or Book(original_file_path=resolved_path)
-        db.session.add(book)
+        item = existing_item or MediaItem(original_file_path=resolved_path)
+        db.session.add(item)
         if library_id is not None:
-            book.library_id = library_id
+            item.library_id = library_id
 
-        is_locked = getattr(book, "is_field_locked", lambda _field: False)
+        is_locked = getattr(item, "is_field_locked", lambda _field: False)
 
         if not is_locked("title"):
-            book.title = metadata.title or file_path.stem
-            book.sort_title = compute_sort_title(book.title)
+            item.title = metadata.title or file_path.stem
+            item.sort_title = compute_sort_title(item.title)
             if hasattr(
-                book, "set_field_provenance"
-            ) and not book.get_provenance_for_field("title"):
-                book.set_field_provenance("title", "file_metadata")
-        book.file_format = metadata.file_format
-        book.file_size = file_size
-        book.file_hash = file_hash
-        book.file_mtime = file_mtime
+                item, "set_field_provenance"
+            ) and not item.get_provenance_for_field("title"):
+                item.set_field_provenance("title", "file_metadata")
+        item.file_format = metadata.file_format
+        item.file_size = file_size
+        item.file_hash = file_hash
+        item.file_mtime = file_mtime
 
         if not is_locked("description"):
-            book.description = metadata.description
+            item.description = metadata.description
             if (
                 metadata.description
-                and hasattr(book, "set_field_provenance")
-                and not book.get_provenance_for_field("description")
+                and hasattr(item, "set_field_provenance")
+                and not item.get_provenance_for_field("description")
             ):
-                book.set_field_provenance("description", "file_metadata")
+                item.set_field_provenance("description", "file_metadata")
         if not is_locked("publisher"):
-            book.publisher = metadata.publisher
+            item.publisher = metadata.publisher
             if (
                 metadata.publisher
-                and hasattr(book, "set_field_provenance")
-                and not book.get_provenance_for_field("publisher")
+                and hasattr(item, "set_field_provenance")
+                and not item.get_provenance_for_field("publisher")
             ):
-                book.set_field_provenance("publisher", "file_metadata")
+                item.set_field_provenance("publisher", "file_metadata")
         if not is_locked("language"):
-            book.language = metadata.language or "en"
+            item.language = metadata.language or "en"
             if (
                 metadata.language
-                and hasattr(book, "set_field_provenance")
-                and not book.get_provenance_for_field("language")
+                and hasattr(item, "set_field_provenance")
+                and not item.get_provenance_for_field("language")
             ):
-                book.set_field_provenance("language", "file_metadata")
+                item.set_field_provenance("language", "file_metadata")
         if not is_locked("isbn"):
-            book.isbn = getattr(metadata, "isbn", None)
+            item.isbn = getattr(metadata, "isbn", None)
             if (
-                book.isbn
-                and hasattr(book, "set_field_provenance")
-                and not book.get_provenance_for_field("isbn")
+                item.isbn
+                and hasattr(item, "set_field_provenance")
+                and not item.get_provenance_for_field("isbn")
             ):
-                book.set_field_provenance("isbn", "file_metadata")
+                item.set_field_provenance("isbn", "file_metadata")
         if not is_locked("publication_date"):
-            book.publication_date = metadata.publication_date
+            item.publication_date = metadata.publication_date
             if (
                 metadata.publication_date
-                and hasattr(book, "set_field_provenance")
-                and not book.get_provenance_for_field("publication_date")
+                and hasattr(item, "set_field_provenance")
+                and not item.get_provenance_for_field("publication_date")
             ):
-                book.set_field_provenance("publication_date", "file_metadata")
+                item.set_field_provenance("publication_date", "file_metadata")
         if not is_locked("page_count"):
-            book.page_count = getattr(metadata, "page_count", None)
+            item.page_count = getattr(metadata, "page_count", None)
 
         # Determine media type:
-        book.media_type = _resolve_media_type(
+        item.media_type = _resolve_media_type(
             metadata, resolved_path, library_media_type
         )
         if cover_rel_path and not is_locked("cover_image"):
-            book.cover_image_path = cover_rel_path
+            item.cover_image_path = cover_rel_path
             if hasattr(
-                book, "set_field_provenance"
-            ) and not book.get_provenance_for_field("cover_image"):
-                book.set_field_provenance("cover_image", "file_metadata")
+                item, "set_field_provenance"
+            ) and not item.get_provenance_for_field("cover_image"):
+                item.set_field_provenance("cover_image", "file_metadata")
 
         # Technical playback, video & audio metadata attributes
-        if hasattr(book, "duration") and not is_locked("duration"):
-            book.duration = getattr(metadata, "duration", None)
-        if hasattr(book, "bitrate") and not is_locked("bitrate"):
-            book.bitrate = getattr(metadata, "bitrate", None)
-        if hasattr(book, "resolution_width"):
-            book.resolution_width = getattr(metadata, "resolution_width", None)
-        if hasattr(book, "resolution_height"):
-            book.resolution_height = getattr(metadata, "resolution_height", None)
-        if hasattr(book, "codec"):
-            book.codec = getattr(metadata, "codec", None)
-        if hasattr(book, "season") and not is_locked("season"):
-            book.season = getattr(metadata, "season", None)
-        if hasattr(book, "episode") and not is_locked("episode"):
-            book.episode = getattr(metadata, "episode", None)
-        if hasattr(book, "album") and not is_locked("album"):
-            book.album = getattr(metadata, "album", None)
-        if hasattr(book, "album_artist") and not is_locked("album_artist"):
-            book.album_artist = getattr(metadata, "album_artist", None)
-        if hasattr(book, "track_number") and not is_locked("track_number"):
-            book.track_number = getattr(metadata, "track_number", None)
-        if hasattr(book, "disc_number") and not is_locked("disc_number"):
-            book.disc_number = getattr(metadata, "disc_number", None)
-        if hasattr(book, "release_year") and not is_locked("release_year"):
-            book.release_year = getattr(metadata, "release_year", None)
-        if hasattr(book, "genre") and not is_locked("genre"):
-            book.genre = getattr(metadata, "genre", None)
-        if hasattr(book, "is_compilation"):
-            book.is_compilation = getattr(metadata, "is_compilation", False)
-        if hasattr(book, "author") and not is_locked("author"):
-            book.author = getattr(metadata, "author", None)
-        if hasattr(book, "narrator") and not is_locked("narrator"):
-            book.narrator = getattr(metadata, "narrator", None)
-        if hasattr(book, "chapters_json") and not is_locked("chapters"):
+        if hasattr(item, "duration") and not is_locked("duration"):
+            item.duration = getattr(metadata, "duration", None)
+        if hasattr(item, "bitrate") and not is_locked("bitrate"):
+            item.bitrate = getattr(metadata, "bitrate", None)
+        if hasattr(item, "resolution_width"):
+            item.resolution_width = getattr(metadata, "resolution_width", None)
+        if hasattr(item, "resolution_height"):
+            item.resolution_height = getattr(metadata, "resolution_height", None)
+        if hasattr(item, "codec"):
+            item.codec = getattr(metadata, "codec", None)
+        if hasattr(item, "season") and not is_locked("season"):
+            item.season = getattr(metadata, "season", None)
+        if hasattr(item, "episode") and not is_locked("episode"):
+            item.episode = getattr(metadata, "episode", None)
+        if hasattr(item, "album") and not is_locked("album"):
+            item.album = getattr(metadata, "album", None)
+        if hasattr(item, "album_artist") and not is_locked("album_artist"):
+            item.album_artist = getattr(metadata, "album_artist", None)
+        if hasattr(item, "track_number") and not is_locked("track_number"):
+            item.track_number = getattr(metadata, "track_number", None)
+        if hasattr(item, "disc_number") and not is_locked("disc_number"):
+            item.disc_number = getattr(metadata, "disc_number", None)
+        if hasattr(item, "release_year") and not is_locked("release_year"):
+            item.release_year = getattr(metadata, "release_year", None)
+        if hasattr(item, "genre") and not is_locked("genre"):
+            item.genre = getattr(metadata, "genre", None)
+        if hasattr(item, "is_compilation"):
+            item.is_compilation = getattr(metadata, "is_compilation", False)
+        if hasattr(item, "author") and not is_locked("author"):
+            item.author = getattr(metadata, "author", None)
+        if hasattr(item, "narrator") and not is_locked("narrator"):
+            item.narrator = getattr(metadata, "narrator", None)
+        if hasattr(item, "chapters_json") and not is_locked("chapters"):
             chapters = getattr(metadata, "chapters", None)
-            book.chapters_json = json.dumps(chapters) if chapters else None
-        if hasattr(book, "abridged"):
-            book.abridged = getattr(metadata, "abridged", False)
-        if hasattr(book, "episode_type") and not is_locked("episode_type"):
-            book.episode_type = getattr(metadata, "episode_type", None)
-        if hasattr(book, "podcast_feed_url") and not is_locked("podcast_feed_url"):
-            book.podcast_feed_url = getattr(metadata, "feed_url", None)
-        if hasattr(book, "podcast_guid") and not is_locked("podcast_guid"):
-            book.podcast_guid = getattr(metadata, "guid", None)
+            item.chapters_json = json.dumps(chapters) if chapters else None
+        if hasattr(item, "abridged"):
+            item.abridged = getattr(metadata, "abridged", False)
+        if hasattr(item, "episode_type") and not is_locked("episode_type"):
+            item.episode_type = getattr(metadata, "episode_type", None)
+        if hasattr(item, "podcast_feed_url") and not is_locked("podcast_feed_url"):
+            item.podcast_feed_url = getattr(metadata, "feed_url", None)
+        if hasattr(item, "podcast_guid") and not is_locked("podcast_guid"):
+            item.podcast_guid = getattr(metadata, "guid", None)
 
-        _assign_authors_tags_series(book, metadata)
+        _assign_creators_tags_collections(item, metadata)
 
         if commit:
             db.session.commit()
         logger.info(
-            "Indexed %s: %s (%s)", book.media_type, book.title, book.file_format
+            "Indexed %s: %s (%s)", item.media_type, item.title, item.file_format
         )
 
         # Optional auto enrichment if enabled
@@ -487,20 +489,17 @@ def index_media_file(
                 from aarkib.services.enricher import enrich_media_item
 
                 enrich_media_item(
-                    book,
+                    item,
                     covers_dir,
                     overwrite=False,
                     provider=metadata_provider or "all",
                 )
             except Exception as e:
-                logger.debug("Auto enrich error for %s: %s", book.title, e)
+                logger.debug("Auto enrich error for %s: %s", item.title, e)
 
-        return book
+        return item
 
     except Exception as exc:
         db.session.rollback()
         logger.error("Failed to index %s: %s", file_path, exc)
         return None
-
-
-index_single_book = index_media_file

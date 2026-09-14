@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 
@@ -70,26 +70,6 @@ class UserProgress(db.Model):
         "MediaItem", back_populates="progress_records"
     )
 
-    # Synonyms for multi-media and compatibility
-    book = synonym("media_item")
-    item = synonym("media_item")
-    book_id = synonym("media_item_id")
-    item_id = synonym("media_item_id")
-    last_read_at = synonym("last_accessed_at")
-
-    def __init__(self, **kwargs) -> None:
-        if "book_id" in kwargs and "media_item_id" not in kwargs:
-            kwargs["media_item_id"] = kwargs.pop("book_id")
-        if "item_id" in kwargs and "media_item_id" not in kwargs:
-            kwargs["media_item_id"] = kwargs.pop("item_id")
-        if "book" in kwargs and "media_item" not in kwargs:
-            kwargs["media_item"] = kwargs.pop("book")
-        if "item" in kwargs and "media_item" not in kwargs:
-            kwargs["media_item"] = kwargs.pop("item")
-        if "last_read_at" in kwargs and "last_accessed_at" not in kwargs:
-            kwargs["last_accessed_at"] = kwargs.pop("last_read_at")
-        super().__init__(**kwargs)
-
     @property
     def media_id(self) -> int:
         return self.media_item_id
@@ -135,23 +115,6 @@ class Bookmark(db.Model):
     media_item: Mapped[MediaItem] = relationship(
         "MediaItem", back_populates="bookmarks"
     )
-
-    # Synonyms
-    book = synonym("media_item")
-    item = synonym("media_item")
-    book_id = synonym("media_item_id")
-    item_id = synonym("media_item_id")
-
-    def __init__(self, **kwargs) -> None:
-        if "book_id" in kwargs and "media_item_id" not in kwargs:
-            kwargs["media_item_id"] = kwargs.pop("book_id")
-        if "item_id" in kwargs and "media_item_id" not in kwargs:
-            kwargs["media_item_id"] = kwargs.pop("item_id")
-        if "book" in kwargs and "media_item" not in kwargs:
-            kwargs["media_item"] = kwargs.pop("book")
-        if "item" in kwargs and "media_item" not in kwargs:
-            kwargs["media_item"] = kwargs.pop("item")
-        super().__init__(**kwargs)
 
     @property
     def media_id(self) -> int:

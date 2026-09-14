@@ -241,11 +241,8 @@ def sync_plugins_state(app: Flask) -> None:
 
     for plugin in plugin_registry.get_all_plugins():
         cfg_key = f"ENABLE_{plugin.name.upper()}"
-        legacy_key = f"AARKIB_ENABLE_{plugin.name.upper()}"
         if cfg_key in app.config:
             plugin.enabled = bool(app.config[cfg_key])
-        elif legacy_key in app.config:
-            plugin.enabled = bool(app.config[legacy_key])
 
 
 def get_effective_settings(app: Flask) -> dict[str, Any]:

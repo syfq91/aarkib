@@ -2,14 +2,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from aarkib.extensions import db
-from aarkib.models import Book
+from aarkib.models import MediaItem
 from aarkib.services.enricher import (
     EnrichedMetadata,
-    enrich_book,
+    enrich_media_item,
     fetch_from_google_books,
     fetch_from_open_library,
 )
-from aarkib.services.scanner import index_single_book
+from aarkib.services.indexer import index_media_file
 
 
 def test_fetch_from_google_books_mock():
@@ -81,7 +81,7 @@ def test_fetch_from_open_library_mock():
 def test_enrich_book_in_db(app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
 
         mock_meta = EnrichedMetadata(
@@ -99,12 +99,12 @@ def test_enrich_book_in_db(app, sample_epub):
         with patch(
             "aarkib.services.enricher.fetch_external_metadata", return_value=mock_meta
         ):
-            result = enrich_book(book, covers_dir, overwrite=True)
+            result = enrich_media_item(book, covers_dir, overwrite=True)
             assert result["status"] == "success"
             assert "description" in result["changes"]
             assert "publisher" in result["changes"]
 
-            updated_book = db.session.get(Book, book.id)
+            updated_book = db.session.get(MediaItem, book.id)
             assert (
                 updated_book.description
                 == "An enriched description from online source."
@@ -116,7 +116,7 @@ def test_enrich_book_in_db(app, sample_epub):
 def test_api_enrich_endpoints(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 
@@ -181,7 +181,7 @@ def test_enrich_database_session_detached_during_external_io(app, sample_epub):
     """C3 test: verifies that db.session has no open transaction during external network requests."""
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
 
         mock_meta = EnrichedMetadata(
@@ -202,7 +202,7 @@ def test_enrich_database_session_detached_during_external_io(app, sample_epub):
         with patch(
             "aarkib.services.enricher.fetch_external_metadata", side_effect=mock_fetch
         ):
-            result = enrich_book(book, covers_dir, overwrite=True)
+            result = enrich_media_item(book, covers_dir, overwrite=True)
             assert result["status"] == "success"
             assert in_transaction_during_call is False
 
@@ -211,7 +211,7 @@ def test_api_metadata_search_session_detached(client, app, sample_epub):
     """C3 test: verifies that db.session is detached before external metadata search."""
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 

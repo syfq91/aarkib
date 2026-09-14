@@ -28,11 +28,11 @@ def test_service_worker(client):
 def test_book_detail_page(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 
@@ -46,11 +46,11 @@ def test_book_detail_page(client, app, sample_epub):
 def test_reader_epub_page(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 
@@ -70,11 +70,11 @@ def test_reader_epub_page(client, app, sample_epub):
 def test_reader_epub_resume_progress(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
     # Save progress via API
@@ -98,11 +98,11 @@ def test_reader_epub_resume_progress(client, app, sample_epub):
 def test_reader_cbz_resume_progress(client, app, sample_cbz):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_cbz, covers_dir)
+        book = index_media_file(sample_cbz, covers_dir)
         book_id = book.id
 
     # Initial CBZ reader
@@ -131,11 +131,11 @@ def test_reader_cbz_resume_progress(client, app, sample_cbz):
 def test_reader_cbz_webtoon_support(client, app, sample_cbz):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_cbz, covers_dir)
+        book = index_media_file(sample_cbz, covers_dir)
         book_id = book.id
 
     res = client.get(f"/reader/cbz/{book_id}")
@@ -149,11 +149,11 @@ def test_reader_cbz_webtoon_support(client, app, sample_cbz):
 def test_epub_download_split_button_and_dropdown(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
     res = client.get(f"/media/{book_id}")
@@ -220,7 +220,7 @@ def test_settings_page_displays_multiple_directories(tmp_path):
 def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     # Empty state initially
     res_empty = client.get("/")
@@ -230,7 +230,7 @@ def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_e
     # Index a book
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(sample_epub, covers_dir)
+        index_media_file(sample_epub, covers_dir)
 
     res = client.get("/")
     assert res.status_code == 200
@@ -243,11 +243,11 @@ def test_homepage_multi_row_recently_added_and_empty_state(client, app, sample_e
 def test_homepage_in_progress_row(client, app, sample_epub):
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
     # Initially before reading, no Continue shelf
@@ -286,7 +286,7 @@ def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample
     from aarkib import create_app
     from aarkib.config import TestConfig
     from aarkib.extensions import db
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     manga_dir = tmp_path / "manga"
     novels_dir = tmp_path / "novels"
@@ -320,8 +320,8 @@ def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample
         db.session.commit()
         user_id = user.id
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(manga_file, covers_dir)
-        index_single_book(novel_file, covers_dir)
+        index_media_file(manga_file, covers_dir)
+        index_media_file(novel_file, covers_dir)
 
     with client.session_transaction() as sess:
         sess["_user_id"] = str(user_id)
@@ -341,11 +341,11 @@ def test_authors_view_direct(client, app, sample_epub):
     """Directly verifies GET /authors renders author list."""
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(sample_epub, covers_dir)
+        index_media_file(sample_epub, covers_dir)
 
     res = client.get("/authors")
     assert res.status_code == 200
@@ -357,11 +357,11 @@ def test_series_view_direct(client, app, sample_epub):
     """Directly verifies GET /series renders series list."""
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(sample_epub, covers_dir)
+        index_media_file(sample_epub, covers_dir)
 
     res = client.get("/series")
     assert res.status_code == 200
@@ -372,11 +372,11 @@ def test_tags_view_direct(client, app, sample_epub):
     """Directly verifies GET /tags renders tag list."""
     from pathlib import Path
 
-    from aarkib.services.scanner import index_single_book
+    from aarkib.services.indexer import index_media_file
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(sample_epub, covers_dir)
+        index_media_file(sample_epub, covers_dir)
 
     res = client.get("/tags")
     assert res.status_code == 200

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ book.title }} - Aarkib{% endblock %}
+{% block title %}{{ item.title }} - Aarkib{% endblock %}
 
 {% block content %}
 <div style="margin-bottom: 1.5rem;">
@@ -8,11 +8,11 @@
 
 <div class="detail-layout">
   <div>
-    <img src="/api/media/{{ book.id }}/cover" alt="{{ book.title }}" class="detail-cover">
+    <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="detail-cover">
     
     <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
-      {% if book.is_video %}
-        <a href="/reader/video/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+      {% if item.is_video %}
+        <a href="/reader/video/{{ item.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
           {% if progress and progress.is_completed %}
             🎬 Watch Again
           {% elif progress and progress.percentage > 0 %}
@@ -21,8 +21,8 @@
             🎬 Watch Video
           {% endif %}
         </a>
-      {% elif book.file_format == 'epub' %}
-        <a href="/reader/epub/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+      {% elif item.file_format == 'epub' %}
+        <a href="/reader/epub/{{ item.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
           {% if progress and progress.is_completed %}
             📖 Read Again (EPUB)
           {% elif progress and progress.percentage > 0 %}
@@ -32,7 +32,7 @@
           {% endif %}
         </a>
       {% else %}
-        <a href="/reader/cbz/{{ book.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+        <a href="/reader/cbz/{{ item.id }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
           {% if progress and progress.is_completed %}
             🖼️ Read Again (CBZ)
           {% elif progress and progress.percentage > 0 %}
@@ -43,10 +43,10 @@
         </a>
       {% endif %}
 
-      {% if book.file_format == 'epub' %}
+      {% if item.file_format == 'epub' %}
       <div style="position: relative; display: flex; width: 100%;">
-        <a href="/api/media/{{ book.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
-          <span>⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)</span>
+        <a href="/api/media/{{ item.id }}/download" class="btn btn-secondary" style="flex: 1; border-top-right-radius: 0; border-bottom-right-radius: 0; display: flex; align-items: center; justify-content: center; gap: 0.4rem; text-decoration: none;">
+          <span>⬇️ Download ({{ (item.file_size / 1024 / 1024)|round(2) }} MB)</span>
         </a>
         <button id="eink-dropdown-btn" class="btn btn-secondary" style="border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); padding: 0 0.85rem; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="toggleEinkDropdown(event)" title="Choose E-Ink Optimized Preset">
           <span style="font-size: 0.75rem;">⚡▼</span>
@@ -55,26 +55,26 @@
           <div style="padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); letter-spacing: 0.5px;">
             ⚡ E-Ink Optimized Downloads
           </div>
-          <a href="/api/media/{{ book.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ item.id }}/download/optimized/x4" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X4</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">480×800 • Grayscale Dithered</span>
           </a>
-          <a href="/api/media/{{ book.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ item.id }}/download/optimized/x3" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Xteink X3</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">528×792 • Grayscale Dithered</span>
           </a>
-          <a href="/api/media/{{ book.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ item.id }}/download/optimized/kindle" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kindle</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1072×1448 • Grayscale</span>
           </a>
-          <a href="/api/media/{{ book.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+          <a href="/api/media/{{ item.id }}/download/optimized/kobo" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
             <strong>⚡ Kobo</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1264×1680 • Grayscale</span>
           </a>
-          <a href="/api/media/{{ book.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
+          <a href="/api/media/{{ item.id }}/download/optimized/eink" class="dropdown-item" style="display: block; padding: 0.6rem 0.9rem; color: var(--text-primary); text-decoration: none; font-size: 0.85rem;">
             <strong>⚡ Generic E-Ink</strong> <span style="color: var(--text-secondary); font-size: 0.75rem; display: block;">1200×1600 • Grayscale & No Fonts</span>
           </a>
         </div>
       </div>
       {% else %}
-      <a href="/api/media/{{ book.id }}/download" class="btn btn-secondary">
-        ⬇️ Download ({{ (book.file_size / 1024 / 1024)|round(2) }} MB)
+      <a href="/api/media/{{ item.id }}/download" class="btn btn-secondary">
+        ⬇️ Download ({{ (item.file_size / 1024 / 1024)|round(2) }} MB)
       </a>
       {% endif %}
 
@@ -94,26 +94,26 @@
 
   <div>
     <h1 style="font-size: 1.85rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem;">
-      {{ book.title }}
-      {% if book.is_field_locked('title') %}
+      {{ item.title }}
+      {% if item.is_field_locked('title') %}
       <span title="Title locked from scanner overwrites" style="font-size: 0.9rem; cursor: help;">🔒</span>
       {% endif %}
     </h1>
     <h3 style="color: var(--text-secondary); font-weight: 500; font-size: 1.1rem; margin-bottom: 1.5rem;">
       by
-      {% for author in book.authors %}
-        <a href="/?author_id={{ author.id }}" style="color: var(--accent); text-decoration: none;">{{ author.name }}</a>{% if not loop.last %}, {% endif %}
+      {% for creator in item.creators %}
+        <a href="/?author_id={{ creator.id }}" style="color: var(--accent); text-decoration: none;">{{ creator.name }}</a>{% if not loop.last %}, {% endif %}
       {% else %}
         <span>Unknown Creator</span>
       {% endfor %}
-      {% if book.is_field_locked('creators') or book.is_field_locked('authors') %}
+      {% if item.is_field_locked('creators') or item.is_field_locked('creators') %}
       <span title="Creators locked from scanner overwrites" style="font-size: 0.8rem; cursor: help;">🔒</span>
       {% endif %}
     </h3>
 
     <div style="background-color: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
       <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
-        <span>{{ 'Watching Progress' if book.is_video else 'Reading Progress' }}</span>
+        <span>{{ 'Watching Progress' if item.is_video else 'Reading Progress' }}</span>
         <span style="font-weight: 600; color: var(--accent);">{{ progress.percentage|round(1) if progress else 0 }}%</span>
       </div>
       <div class="progress-bar-container">
@@ -131,9 +131,9 @@
       </div>
     </div>
 
-    {% if book.tags %}
+    {% if item.tags %}
       <div style="margin-bottom: 1.5rem;">
-        {% for tag in book.tags %}
+        {% for tag in item.tags %}
           <a href="/?tag_id={{ tag.id }}" class="tag-badge">{{ tag.name }}</a>
         {% endfor %}
       </div>
@@ -142,81 +142,81 @@
     <div class="detail-meta-list">
       <div class="meta-item">
         <span class="meta-label">Format</span>
-        <span class="meta-value" style="text-transform: uppercase;">{{ book.file_format }}</span>
+        <span class="meta-value" style="text-transform: uppercase;">{{ item.file_format }}</span>
       </div>
-      {% if book.series %}
+      {% if item.collection %}
       <div class="meta-item">
-        <span class="meta-label">{{ 'TV Show / Series' if book.is_video else 'Series' }}</span>
+        <span class="meta-label">{{ 'TV Show / Series' if item.is_video else 'Series' }}</span>
         <span class="meta-value">
-          <a href="/?series_id={{ book.series.id }}" style="color: var(--accent); text-decoration: none; font-weight: 600;">
-            {{ '📺' if book.is_video else '📚' }} {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}
+          <a href="/?series_id={{ item.collection.id }}" style="color: var(--accent); text-decoration: none; font-weight: 600;">
+            {{ '📺' if item.is_video else '📚' }} {{ item.collection.name }}{% if item.series_index %} #{{ item.series_index }}{% endif %}
           </a>
         </span>
       </div>
       {% endif %}
-      {% if book.is_video %}
-        {% if book.formatted_duration %}
+      {% if item.is_video %}
+        {% if item.formatted_duration %}
         <div class="meta-item">
           <span class="meta-label">Duration</span>
-          <span class="meta-value">⏱️ {{ book.formatted_duration }}</span>
+          <span class="meta-value">⏱️ {{ item.formatted_duration }}</span>
         </div>
         {% endif %}
-        {% if book.resolution_label or (book.resolution_width and book.resolution_height) %}
+        {% if item.resolution_label or (item.resolution_width and item.resolution_height) %}
         <div class="meta-item">
           <span class="meta-label">Resolution</span>
-          <span class="meta-value">{{ book.resolution_label or (book.resolution_width ~ '×' ~ book.resolution_height) }}</span>
+          <span class="meta-value">{{ item.resolution_label or (item.resolution_width ~ '×' ~ item.resolution_height) }}</span>
         </div>
         {% endif %}
-        {% if book.codec %}
+        {% if item.codec %}
         <div class="meta-item">
           <span class="meta-label">Codec</span>
-          <span class="meta-value">{{ book.codec }}</span>
+          <span class="meta-value">{{ item.codec }}</span>
         </div>
         {% endif %}
-        {% if book.season is not none and book.episode is not none %}
+        {% if item.season is not none and item.episode is not none %}
         <div class="meta-item">
           <span class="meta-label">Episode</span>
-          <span class="meta-value">{{ book.episode_code }} (Season {{ book.season }}, Episode {{ book.episode }})</span>
+          <span class="meta-value">{{ item.episode_code }} (Season {{ item.season }}, Episode {{ item.episode }})</span>
         </div>
         {% endif %}
       {% endif %}
-      {% if book.page_count %}
+      {% if item.page_count %}
       <div class="meta-item">
         <span class="meta-label">Pages</span>
-        <span class="meta-value">{{ book.page_count }}</span>
+        <span class="meta-value">{{ item.page_count }}</span>
       </div>
       {% endif %}
-      {% if book.publisher %}
+      {% if item.publisher %}
       <div class="meta-item">
         <span class="meta-label">Publisher</span>
-        <span class="meta-value">{{ book.publisher }}</span>
+        <span class="meta-value">{{ item.publisher }}</span>
       </div>
       {% endif %}
-      {% if book.publication_date %}
+      {% if item.publication_date %}
       <div class="meta-item">
         <span class="meta-label">Published</span>
-        <span class="meta-value">{{ book.publication_date }}</span>
+        <span class="meta-value">{{ item.publication_date }}</span>
       </div>
       {% endif %}
-      {% if book.isbn %}
+      {% if item.isbn %}
       <div class="meta-item">
         <span class="meta-label">ISBN</span>
-        <span class="meta-value">{{ book.isbn }}</span>
+        <span class="meta-value">{{ item.isbn }}</span>
       </div>
       {% endif %}
-      {% if book.language %}
+      {% if item.language %}
       <div class="meta-item">
         <span class="meta-label">Language</span>
-        <span class="meta-value" style="text-transform: uppercase;">{{ book.language }}</span>
+        <span class="meta-value" style="text-transform: uppercase;">{{ item.language }}</span>
       </div>
       {% endif %}
     </div>
 
-    {% if book.description %}
+    {% if item.description %}
       <div style="margin-top: 1.5rem;">
         <h4 style="margin-bottom: 0.5rem;">Synopsis</h4>
         <div style="color: var(--text-secondary); line-height: 1.7; font-size: 0.95rem; white-space: pre-line;">
-          {{ book.description|striptags }}
+          {{ item.description|striptags }}
         </div>
       </div>
     {% endif %}
@@ -234,71 +234,71 @@
     <form id="edit-metadata-form" onsubmit="saveMetadata(event)" style="display: flex; flex-direction: column; gap: 1rem;">
       <div>
         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Title</label>
-        <input type="text" id="edit-title" class="input-text" value="{{ book.title }}" required>
+        <input type="text" id="edit-title" class="input-text" value="{{ item.title }}" required>
       </div>
 
       <div>
         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Author(s) (comma separated)</label>
-        <input type="text" id="edit-authors" class="input-text" value="{{ book.authors|map(attribute='name')|join(', ') }}">
+        <input type="text" id="edit-authors" class="input-text" value="{{ item.creators|map(attribute='name')|join(', ') }}">
       </div>
 
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem;">
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Series Name</label>
-          <input type="text" id="edit-series" class="input-text" placeholder="e.g. Harry Potter, One Piece" value="{{ book.series.name if book.series else '' }}">
+          <input type="text" id="edit-series" class="input-text" placeholder="e.g. Harry Potter, One Piece" value="{{ item.collection.name if item.collection else '' }}">
         </div>
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Volume / #</label>
-          <input type="number" step="any" id="edit-series-index" class="input-text" placeholder="e.g. 1" value="{{ book.series_index if book.series_index is not none else '' }}">
+          <input type="number" step="any" id="edit-series-index" class="input-text" placeholder="e.g. 1" value="{{ item.series_index if item.series_index is not none else '' }}">
         </div>
       </div>
 
       <div>
         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Tags / Genres (comma separated)</label>
-        <input type="text" id="edit-tags" class="input-text" placeholder="Fantasy, Adventure, Sci-Fi" value="{{ book.tags|map(attribute='name')|join(', ') }}">
+        <input type="text" id="edit-tags" class="input-text" placeholder="Fantasy, Adventure, Sci-Fi" value="{{ item.tags|map(attribute='name')|join(', ') }}">
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Publisher</label>
-          <input type="text" id="edit-publisher" class="input-text" value="{{ book.publisher or '' }}">
+          <input type="text" id="edit-publisher" class="input-text" value="{{ item.publisher or '' }}">
         </div>
         <div>
           <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Published Date</label>
-          <input type="text" id="edit-publication-date" class="input-text" placeholder="YYYY-MM-DD" value="{{ book.publication_date or '' }}">
+          <input type="text" id="edit-publication-date" class="input-text" placeholder="YYYY-MM-DD" value="{{ item.publication_date or '' }}">
         </div>
       </div>
 
       <div>
         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">ISBN</label>
-        <input type="text" id="edit-isbn" class="input-text" value="{{ book.isbn or '' }}">
+        <input type="text" id="edit-isbn" class="input-text" value="{{ item.isbn or '' }}">
       </div>
 
       <div>
         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Synopsis / Description</label>
-        <textarea id="edit-description" class="input-text" rows="4" style="resize: vertical;">{{ book.description or '' }}</textarea>
+        <textarea id="edit-description" class="input-text" rows="4" style="resize: vertical;">{{ item.description or '' }}</textarea>
       </div>
 
       <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
         <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.4rem;">🔒 Lock Fields from Automated Scanner Overwrites</label>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem;">
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-title" {% if book.is_field_locked('title') %}checked{% endif %}> Title
+            <input type="checkbox" id="lock-title" {% if item.is_field_locked('title') %}checked{% endif %}> Title
           </label>
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-creators" {% if book.is_field_locked('creators') or book.is_field_locked('authors') %}checked{% endif %}> Creators / Authors
+            <input type="checkbox" id="lock-creators" {% if item.is_field_locked('creators') or item.is_field_locked('creators') %}checked{% endif %}> Creators / Authors
           </label>
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-description" {% if book.is_field_locked('description') %}checked{% endif %}> Synopsis / Description
+            <input type="checkbox" id="lock-description" {% if item.is_field_locked('description') %}checked{% endif %}> Synopsis / Description
           </label>
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-cover_image" {% if book.is_field_locked('cover_image') %}checked{% endif %}> Cover / Poster Art
+            <input type="checkbox" id="lock-cover_image" {% if item.is_field_locked('cover_image') %}checked{% endif %}> Cover / Poster Art
           </label>
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-tags" {% if book.is_field_locked('tags') %}checked{% endif %}> Tags / Genres
+            <input type="checkbox" id="lock-tags" {% if item.is_field_locked('tags') %}checked{% endif %}> Tags / Genres
           </label>
           <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-            <input type="checkbox" id="lock-series" {% if book.is_field_locked('series') %}checked{% endif %}> Series / Collection
+            <input type="checkbox" id="lock-series" {% if item.is_field_locked('collection') %}checked{% endif %}> Series / Collection
           </label>
         </div>
       </div>
@@ -321,8 +321,8 @@
 
     <!-- Search Form -->
     <div style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 0.5rem; margin-bottom: 1.25rem;">
-      <input type="text" id="fix-match-query" class="input-text" placeholder="Title or Keywords..." value="{{ book.title }}">
-      <input type="text" id="fix-match-year" class="input-text" placeholder="Year" value="{{ (book.publication_date or '')[:4] }}">
+      <input type="text" id="fix-match-query" class="input-text" placeholder="Title or Keywords..." value="{{ item.title }}">
+      <input type="text" id="fix-match-year" class="input-text" placeholder="Year" value="{{ (item.publication_date or '')[:4] }}">
       <button type="button" id="fix-match-search-btn" class="btn btn-primary" onclick="searchFixMatchCandidates()">Search</button>
     </div>
 
@@ -399,7 +399,7 @@ async function searchFixMatchCandidates() {
     if (query) params.append("q", query);
     if (year) params.append("year", year);
 
-    const res = await fetch(`/api/media/{{ book.id }}/metadata/search?${params.toString()}`);
+    const res = await fetch(`/api/media/{{ item.id }}/metadata/search?${params.toString()}`);
     const data = await res.json();
 
     if (data.status === "success" && data.candidates && data.candidates.length > 0) {
@@ -470,7 +470,7 @@ async function confirmApplySelectedCandidate() {
   if (document.getElementById("apply-lock-cover").checked) lockedFields.push("cover_image");
 
   try {
-    const res = await fetch(`/api/media/{{ book.id }}/metadata/apply`, {
+    const res = await fetch(`/api/media/{{ item.id }}/metadata/apply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -526,7 +526,7 @@ async function saveMetadata(e) {
   };
 
   try {
-    const res = await fetch("/api/media/{{ book.id }}/edit", {
+    const res = await fetch("/api/media/{{ item.id }}/edit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -551,7 +551,7 @@ async function enrichCurrentBook() {
   btn.disabled = true;
   btn.innerText = "⏳ Fetching metadata...";
   try {
-    const res = await fetch("/api/media/{{ book.id }}/enrich", {
+    const res = await fetch("/api/media/{{ item.id }}/enrich", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ overwrite: true })
@@ -588,7 +588,7 @@ document.addEventListener("click", () => {
 
 async function setBookProgress(percentage) {
   try {
-    const res = await fetch("/api/media/{{ book.id }}/progress", {
+    const res = await fetch("/api/media/{{ item.id }}/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

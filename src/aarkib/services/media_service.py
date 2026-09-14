@@ -12,7 +12,7 @@ from pathlib import Path
 from sqlalchemy import func, or_, select
 
 from aarkib.extensions import db
-from aarkib.models import Author, Library, MediaItem, Series, Tag
+from aarkib.models import Collection, Creator, Library, MediaItem, Tag
 
 AUDIOBOOK_EXTENSIONS = frozenset({"m4b"})
 MUSIC_EXTENSIONS = frozenset({"mp3", "m4a", "flac", "ogg", "opus", "wav", "aac"})
@@ -41,39 +41,35 @@ MAX_LANGUAGE_LENGTH = 30
 MAX_ISBN_LENGTH = 50
 
 
-def resolve_or_create_authors(names: list[str]) -> list[Author]:
-    """Look up (or create) Author/Creator records for the given names and return them.
+def resolve_or_create_creators(names: list[str]) -> list[Creator]:
+    """Look up (or create) Creator records for the given names and return them.
 
     Expected to be called inside an active DB session; callers are responsible
     for flushing/committing.
     """
-    author_objs: list[Author] = []
+    creator_objs: list[Creator] = []
     for name in names:
         cleaned_name = str(name).strip()
         if not cleaned_name:
             continue
-        author = db.session.scalar(select(Author).where(Author.name == cleaned_name))
-        if not author:
-            author = Author(name=cleaned_name)
-            db.session.add(author)
-        author_objs.append(author)
-    return author_objs
+        creator = db.session.scalar(select(Creator).where(Creator.name == cleaned_name))
+        if not creator:
+            creator = Creator(name=cleaned_name)
+            db.session.add(creator)
+        creator_objs.append(creator)
+    return creator_objs
 
 
-resolve_or_create_creators = resolve_or_create_authors
-
-
-def resolve_or_create_series(name: str) -> Series:
-    """Look up (or create) a Series/Collection record by name and return it."""
+def resolve_or_create_collections(name: str) -> Collection:
+    """Look up (or create) a Collection record by name and return it."""
     cleaned = name.strip()
-    series_obj = db.session.scalar(select(Series).where(Series.name == cleaned))
-    if not series_obj:
-        series_obj = Series(name=cleaned)
-        db.session.add(series_obj)
-    return series_obj
-
-
-resolve_or_create_collections = resolve_or_create_series
+    collection_obj = db.session.scalar(
+        select(Collection).where(Collection.name == cleaned)
+    )
+    if not collection_obj:
+        collection_obj = Collection(name=cleaned)
+        db.session.add(collection_obj)
+    return collection_obj
 
 
 def resolve_or_create_tags(names: list[str]) -> list[Tag]:
@@ -104,26 +100,25 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         if hasattr(item, "set_field_provenance"):
             item.set_field_provenance("title", "user")
 
-    # Authors / Creators
-    authors_input = data.get("authors") or data.get("creators")
-    if authors_input is not None:
-        if isinstance(authors_input, str):
-            author_names = [a.strip() for a in authors_input.split(",") if a.strip()]
+    # Creators
+    creators_input = data.get("creators") or data.get("authors")
+    if creators_input is not None:
+        if isinstance(creators_input, str):
+            creator_names = [c.strip() for c in creators_input.split(",") if c.strip()]
         else:
-            author_names = [a for a in authors_input if a and str(a).strip()]
-        resolved_authors = resolve_or_create_authors(author_names)
-        if resolved_authors:
-            item.authors = resolved_authors
+            creator_names = [c for c in creators_input if c and str(c).strip()]
+        resolved_creators = resolve_or_create_creators(creator_names)
+        if resolved_creators:
+            item.creators = resolved_creators
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("authors", "user")
                 item.set_field_provenance("creators", "user")
 
-    # Series / Collection
-    series_name = data.get("series") or data.get("collection")
+    # Collection
+    collection_name = data.get("collection") or data.get("series")
     series_index_raw = data.get("series_index")
-    if series_name is not None and str(series_name).strip():
-        series_obj = resolve_or_create_series(str(series_name))
-        item.series = series_obj
+    if collection_name is not None and str(collection_name).strip():
+        collection_obj = resolve_or_create_collections(str(collection_name))
+        item.collection = collection_obj
         if series_index_raw not in (None, ""):
             try:
                 item.series_index = float(series_index_raw)
@@ -132,13 +127,11 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         else:
             item.series_index = None
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("series", "user")
             item.set_field_provenance("collection", "user")
     elif "series" in data or "collection" in data:
-        item.series = None
+        item.collection = None
         item.series_index = None
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("series", "user")
             item.set_field_provenance("collection", "user")
 
     # Tags / Categories
@@ -244,10 +237,6 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
     return item
 
 
-# Backward compatibility alias
-edit_book_metadata = edit_media_metadata
-
-
 def generate_slug(name: str) -> str:
     """Generate a URL-safe, unique slug from a library folder name."""
     base = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-") or "media"
@@ -315,6 +304,3 @@ def count_media_in_library(library: Library) -> int:
     return (
         db.session.scalar(select(func.count(MediaItem.id)).where(or_(*conditions))) or 0
     )
-
-
-count_books_in_library = count_media_in_library

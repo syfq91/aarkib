@@ -3,10 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from aarkib.extensions import db
-from aarkib.models import Book, JobRecord, Library, User
+from aarkib.models import JobRecord, Library, MediaItem, User
 from aarkib.services.enricher import EnrichedMetadata
+from aarkib.services.indexer import index_media_file
 from aarkib.services.job_manager import JobManager, JobStatus
-from aarkib.services.scanner import index_single_book, scan_library
+from aarkib.services.scanner import scan_library
 
 
 def _login_admin(client, app):
@@ -200,7 +201,7 @@ def test_api_async_enrich_library(client, app, sample_epub):
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        index_single_book(sample_epub, covers_dir)
+        index_media_file(sample_epub, covers_dir)
 
     mock_meta = EnrichedMetadata(
         title="Async Enriched Book",
@@ -252,7 +253,7 @@ def test_media_item_library_foreign_key_and_relationships(app, tmp_path, sample_
 
         # Query book and verify library_id and relationship
         book = db.session.scalar(
-            db.select(Book).where(Book.title == "Sample Test Book")
+            db.select(MediaItem).where(MediaItem.title == "Sample Test Book")
         )
         assert book is not None
         assert book.library_id == lib_id
@@ -265,8 +266,6 @@ def test_media_item_library_foreign_key_and_relationships(app, tmp_path, sample_
         assert reloaded_lib is not None
         assert len(reloaded_lib.media_items) == 1
         assert reloaded_lib.media_items[0].id == book.id
-        assert len(reloaded_lib.books) == 1
-        assert reloaded_lib.books[0].id == book.id
 
 
 def test_job_persistence_lifecycle(app):

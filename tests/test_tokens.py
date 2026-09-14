@@ -9,7 +9,7 @@ import pytest
 from flask import Flask
 
 from aarkib.extensions import db
-from aarkib.models import Book, DeviceToken, User
+from aarkib.models import DeviceToken, MediaItem, User
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def app_with_tokens(tmp_path: Path) -> Flask:
         admin.set_password("adminpass")
         user = User(username="reader", is_admin=False)
         user.set_password("readerpass")
-        book = Book(
+        book = MediaItem(
             title="Dune",
             original_file_path=str(tmp_path / "dune.epub"),
             file_format="epub",
@@ -181,7 +181,7 @@ def test_token_scope_enforcement(app_with_tokens: Flask, tmp_path: Path) -> None
     with app_with_tokens.app_context():
         user = db.session.scalar(db.select(User).where(User.username == "reader"))
         admin = db.session.scalar(db.select(User).where(User.username == "admin"))
-        book = db.session.scalar(db.select(Book).where(Book.title == "Dune"))
+        book = db.session.scalar(db.select(MediaItem).where(MediaItem.title == "Dune"))
         assert user is not None and admin is not None and book is not None
 
         # Create dummy file so file access doesn't 404 before scope check

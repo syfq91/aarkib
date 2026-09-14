@@ -22,12 +22,12 @@
     <title>{{ book.title }}</title>
     <id>urn:aarkib:book:{{ book.id }}{% if preset %}:{{ preset }}{% endif %}</id>
     <updated>{{ book.updated_at.isoformat() if book.updated_at else now_iso }}</updated>
-    {% for author in book.authors %}
+    {% for author in book.creators %}
     <author>
       <name>{{ author.name }}</name>
     </author>
     {% endfor %}
-    {% if not book.authors %}
+    {% if not book.creators %}
     <author><name>Unknown Author</name></author>
     {% endif %}
 

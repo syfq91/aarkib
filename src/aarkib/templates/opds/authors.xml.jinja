@@ -12,7 +12,7 @@
     <title>{{ author.name }}</title>
     <id>urn:aarkib:author:{{ author.id }}{% if preset %}:{{ preset }}{% endif %}</id>
     <updated>{{ now_iso }}</updated>
-    <content type="text">{{ author.books|length }} book(s)</content>
+    <content type="text">{{ author.media_items|length }} book(s)</content>
     <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}{{ opds_prefix }}/authors/{{ author.id }}"/>
   </entry>
   {% endfor %}

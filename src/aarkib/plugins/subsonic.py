@@ -23,7 +23,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
-from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
+from aarkib.models import Collection, Creator, Library, MediaItem, User, UserProgress
 from aarkib.plugins.base import ProtocolPlugin
 from aarkib.services.media_service import AUDIO_EXTENSIONS
 
@@ -329,11 +329,11 @@ def get_music_folders(user: User | None = None):
 def get_artists(user: User | None = None):
     """Returns indexed artists/creators grouped alphabetically."""
     authors = db.session.scalars(
-        select(Author)
+        select(Creator)
         .options(
-            selectinload(Author.media_items).selectinload(MediaItem.collection),
+            selectinload(Creator.media_items).selectinload(MediaItem.collection),
         )
-        .order_by(Author.name.asc())
+        .order_by(Creator.name.asc())
     ).all()
     index_map: dict[str, list[dict[str, Any]]] = {}
 
@@ -379,11 +379,11 @@ def get_artist(user: User | None = None):
         return subsonic_response(error_code=70, error_msg="Artist not found")
 
     auth = db.session.scalar(
-        select(Author)
+        select(Creator)
         .options(
-            selectinload(Author.media_items).selectinload(MediaItem.collection),
+            selectinload(Creator.media_items).selectinload(MediaItem.collection),
         )
-        .where(Author.id == clean_artist_id)
+        .where(Creator.id == clean_artist_id)
     )
     if not auth:
         return subsonic_response(error_code=70, error_msg="Artist not found")
@@ -575,7 +575,7 @@ def search3(user: User | None = None):
 
     # Artists matching name
     matching_artists = db.session.scalars(
-        select(Author).where(Author.name.ilike(f"%{query}%")).limit(10)
+        select(Creator).where(Creator.name.ilike(f"%{query}%")).limit(10)
     ).all()
 
     return subsonic_response(

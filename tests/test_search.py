@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from aarkib.extensions import db
-from aarkib.models import Book, Collection, Creator, Tag
+from aarkib.models import Collection, Creator, MediaItem, Tag
 from aarkib.services.search import (
     init_search_fts,
     parse_fts_query,
@@ -105,7 +105,7 @@ def test_rebuild_and_search_by_dimensions(app):
         db.session.add_all([c1, c2, t1, t2, col])
         db.session.flush()
 
-        b1 = Book(
+        b1 = MediaItem(
             title="Dune",
             original_file_path="/tmp/dune.epub",
             file_format="epub",
@@ -118,7 +118,7 @@ def test_rebuild_and_search_by_dimensions(app):
         b1.creators.append(c1)
         b1.tags.append(t1)
 
-        b2 = Book(
+        b2 = MediaItem(
             title="Foundation and Empire",
             original_file_path="/tmp/foundation.epub",
             file_format="epub",
@@ -130,7 +130,7 @@ def test_rebuild_and_search_by_dimensions(app):
         b2.creators.append(c2)
         b2.tags.append(t1)
 
-        b3 = Book(
+        b3 = MediaItem(
             title="Neuromancer",
             original_file_path="/tmp/neuromancer.epub",
             file_format="epub",
@@ -180,7 +180,7 @@ def test_bm25_relevance_ranking(app):
         db.session.commit()
 
         # Item A: "Matrix" is in description only
-        b_desc = Book(
+        b_desc = MediaItem(
             title="A History of Virtual Worlds",
             original_file_path="/tmp/history.mp4",
             file_format="mp4",
@@ -190,7 +190,7 @@ def test_bm25_relevance_ranking(app):
             description="Explores simulation hypotheses and the Matrix film.",
         )
         # Item B: "Matrix" is in title
-        b_title = Book(
+        b_title = MediaItem(
             title="The Matrix",
             original_file_path="/tmp/matrix.mp4",
             file_format="mp4",
@@ -214,7 +214,7 @@ def test_bm25_relevance_ranking(app):
 def test_reactive_sync_and_removal(app):
     """Verify single-item reactive sync and removal keep FTS index consistent."""
     with app.app_context():
-        b = Book(
+        b = MediaItem(
             title="Old Forgotten Title",
             original_file_path="/tmp/reactive.epub",
             file_format="epub",
@@ -253,7 +253,7 @@ def test_search_grouped_api(client, app):
         db.session.execute(text("DELETE FROM media_items;"))
         db.session.commit()
 
-        movie = Book(
+        movie = MediaItem(
             title="Star Wars Episode IV",
             original_file_path="/tmp/sw.mp4",
             file_format="mp4",
@@ -261,7 +261,7 @@ def test_search_grouped_api(client, app):
             file_hash="hash_sw_mov",
             media_type="video",
         )
-        book = Book(
+        book = MediaItem(
             title="Star Wars: Heir to the Empire",
             original_file_path="/tmp/sw.epub",
             file_format="epub",
@@ -269,7 +269,7 @@ def test_search_grouped_api(client, app):
             file_hash="hash_sw_bk",
             media_type="book",
         )
-        audiobook = Book(
+        audiobook = MediaItem(
             title="Star Wars Audiobook",
             original_file_path="/tmp/sw.m4b",
             file_format="m4b",
@@ -277,7 +277,7 @@ def test_search_grouped_api(client, app):
             file_hash="hash_sw_ab",
             media_type="audiobook",
         )
-        comic = Book(
+        comic = MediaItem(
             title="Star Wars Darth Vader Comic",
             original_file_path="/tmp/sw.cbz",
             file_format="cbz",
@@ -285,7 +285,7 @@ def test_search_grouped_api(client, app):
             file_hash="hash_sw_cm",
             media_type="comic",
         )
-        music = Book(
+        music = MediaItem(
             title="Star Wars Imperial March",
             original_file_path="/tmp/sw.mp3",
             file_format="mp3",
@@ -322,7 +322,7 @@ def test_api_media_search_endpoint(client, app):
         db.session.execute(text("DELETE FROM media_items;"))
         db.session.commit()
 
-        b1 = Book(
+        b1 = MediaItem(
             title="Solaris",
             original_file_path="/tmp/solaris.epub",
             file_format="epub",
@@ -331,7 +331,7 @@ def test_api_media_search_endpoint(client, app):
             media_type="book",
             description="Ocean planet sci-fi classic.",
         )
-        b2 = Book(
+        b2 = MediaItem(
             title="Fiasco",
             original_file_path="/tmp/fiasco.epub",
             file_format="epub",
@@ -356,7 +356,7 @@ def test_api_media_search_endpoint(client, app):
 def test_opds_search_integration(client, app):
     """Verify /opds/search?q= returns OPDS Atom XML matching items."""
     with app.app_context():
-        b = Book(
+        b = MediaItem(
             title="OPDS Unique Galaxy Guide",
             original_file_path="/tmp/galaxy.epub",
             file_format="epub",
@@ -419,7 +419,7 @@ def test_reindex_search_api_admin_required(client, app):
 def test_search_fallback_on_invalid_fts_syntax(app, monkeypatch):
     """Verify that when FTS5 query encounters an error, fallback to ILIKE works seamlessly."""
     with app.app_context():
-        b = Book(
+        b = MediaItem(
             title="Fallback Quantum Physics",
             original_file_path="/tmp/fallback.epub",
             file_format="epub",

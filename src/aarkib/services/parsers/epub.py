@@ -256,7 +256,7 @@ def parse_epub(file_path: Path) -> ParsedBookMetadata | None:
 
             return ParsedBookMetadata(
                 title=parsed["title"],
-                authors=parsed["authors"] if parsed["authors"] else ["Unknown Author"],
+                creators=parsed["authors"] if parsed["authors"] else ["Unknown Author"],
                 description=parsed["description"],
                 publisher=parsed["publisher"],
                 language=parsed["language"],
@@ -272,7 +272,7 @@ def parse_epub(file_path: Path) -> ParsedBookMetadata | None:
         s_name, s_idx, clean_t = extract_series_from_title(file_path.stem)
         return ParsedBookMetadata(
             title=clean_t,
-            authors=["Unknown Author"],
+            creators=["Unknown Author"],
             series=s_name,
             series_index=s_idx,
             file_format="epub",

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from aarkib.extensions import db
 from aarkib.models import User
 from aarkib.routes.auth import is_safe_url
-from aarkib.services.scanner import index_single_book
+from aarkib.services.indexer import index_media_file
 
 
 def test_first_time_setup_workflow(unauth_client):
@@ -285,7 +285,7 @@ def test_admin_user_management(client):
 def test_per_user_progress_isolation(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 
@@ -343,7 +343,7 @@ def test_per_user_progress_isolation(client, app, sample_epub):
 def test_mandatory_auth_enforcement(unauth_client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 

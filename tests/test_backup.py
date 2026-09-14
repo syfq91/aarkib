@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 from flask import Flask
 
+from aarkib import create_app
 from aarkib.extensions import db
-from aarkib.models import Book, MediaItem, User
+from aarkib.models import MediaItem, User
 from aarkib.services.backup import (
     DATABASE_FILENAME,
     MANIFEST_FILENAME,
@@ -22,31 +23,27 @@ from aarkib.services.backup import (
 
 @pytest.fixture
 def file_app(tmp_path: Path) -> Flask:
-    """Create a test Flask app configured with a physical SQLite file instead of :memory:."""
-    from aarkib import create_app
-    from aarkib.config import TestConfig
+    """Create an app with a file-backed SQLite database (required for hot SQLite snapshots)."""
+    db_file = tmp_path / "test_aarkib.db"
+    covers_dir = tmp_path / "covers"
+    covers_dir.mkdir(parents=True, exist_ok=True)
 
-    db_path = tmp_path / "aarkib_test.db"
-    covers_path = tmp_path / "covers"
-    backups_path = tmp_path / "backups"
-    covers_path.mkdir(parents=True, exist_ok=True)
-    backups_path.mkdir(parents=True, exist_ok=True)
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_file}",
+            "SECRET_KEY": "backup-test-secret",
+            "WTF_CSRF_ENABLED": False,
+            "COVERS_DIR": str(covers_dir),
+            "BACKUPS_DIR": str(tmp_path / "backups"),
+        }
+    )
 
-    class FileTestConfig(TestConfig):
-        SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_path}"
-        DATA_DIR = tmp_path
-        COVERS_DIR = covers_path
-        BACKUP_DIR = backups_path
-        TESTING = True
-
-    app = create_app(FileTestConfig)
     with app.app_context():
-        db.create_all()
+        # Create an admin user for authenticated API tests
         admin = User(username="admin", is_admin=True)
         admin.set_password("adminpass")
-        reader = User(username="reader", is_admin=False)
-        reader.set_password("readerpass")
-        db.session.add_all([admin, reader])
+        db.session.add(admin)
         db.session.commit()
 
     return app
@@ -56,7 +53,7 @@ def test_create_backup_archive_structure(file_app: Flask, tmp_path: Path) -> Non
     """Verify create_backup generates a valid ZIP containing manifest, database, and covers."""
     with file_app.app_context():
         # Add sample media item
-        book = Book(
+        book = MediaItem(
             title="Dune",
             original_file_path=str(tmp_path / "dune.epub"),
             file_format="epub",
@@ -117,7 +114,7 @@ def test_restore_backup_restores_state(file_app: Flask, tmp_path: Path) -> None:
     """Test that restore_backup atomically replaces database and cover state."""
     with file_app.app_context():
         # Baseline: 1 book
-        book1 = Book(
+        book1 = MediaItem(
             title="Book One",
             original_file_path=str(tmp_path / "b1.epub"),
             file_format="epub",
@@ -130,13 +127,13 @@ def test_restore_backup_restores_state(file_app: Flask, tmp_path: Path) -> None:
         backup_path = create_backup(file_app)
 
         # Mutate database: add 2 more books
-        book2 = Book(
+        book2 = MediaItem(
             title="Book Two",
             original_file_path=str(tmp_path / "b2.epub"),
             file_format="epub",
             file_hash="hash_b2_222",
         )
-        book3 = Book(
+        book3 = MediaItem(
             title="Book Three",
             original_file_path=str(tmp_path / "b3.epub"),
             file_format="epub",
@@ -154,7 +151,7 @@ def test_restore_backup_restores_state(file_app: Flask, tmp_path: Path) -> None:
     with file_app.app_context():
         assert db.session.scalar(db.select(db.func.count(MediaItem.id))) == 1
         restored_book = db.session.scalar(
-            db.select(Book).where(Book.title == "Book One")
+            db.select(MediaItem).where(MediaItem.title == "Book One")
         )
         assert restored_book is not None
 

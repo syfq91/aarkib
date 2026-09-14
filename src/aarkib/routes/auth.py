@@ -73,10 +73,6 @@ def require_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     return decorated_function
 
 
-# Backward compatibility alias
-optional_or_required_auth = require_auth
-
-
 def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
     """Requires an authenticated user with administrator privileges."""
 

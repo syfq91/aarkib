@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from aarkib.extensions import db
-from aarkib.models import Book, User
+from aarkib.models import MediaItem, User
 from aarkib.services.progress_service import (
     add_bookmark,
     delete_bookmark,
@@ -18,7 +18,7 @@ def test_progress_crud_and_metrics(app):
     with app.app_context():
         user = User(username="testuser", password_hash="dummy")
         db.session.add(user)
-        item = Book(
+        item = MediaItem(
             original_file_path="/media/book1.epub",
             title="Book 1",
             file_hash="hash1",
@@ -54,7 +54,7 @@ def test_progress_crud_and_metrics(app):
         assert prog_updated["is_completed"] is False
 
         # Multi-item progress mapping
-        item2 = Book(
+        item2 = MediaItem(
             original_file_path="/media/book2.epub",
             title="Book 2",
             file_hash="hash2",
@@ -73,7 +73,7 @@ def test_bookmark_lifecycle_and_permissions(app):
     with app.app_context():
         user1 = User(username="u1", password_hash="dummy")
         user2 = User(username="u2", password_hash="dummy")
-        item = Book(
+        item = MediaItem(
             original_file_path="/media/book3.epub",
             title="Book 3",
             file_hash="hash3",

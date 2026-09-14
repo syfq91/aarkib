@@ -8,7 +8,6 @@ from aarkib.services.scanner import (
     compute_fast_fingerprint,
     compute_sha256,
     index_media_file,
-    index_single_book,
     scan_library,
     start_library_watcher,
 )
@@ -22,7 +21,6 @@ __all__ = [
     "compute_fast_fingerprint",
     "compute_sha256",
     "index_media_file",
-    "index_single_book",
     "scan_library",
     "start_library_watcher",
     "generate_cover_webp",

@@ -4,14 +4,14 @@ from pathlib import Path
 
 from PIL import Image
 
-from aarkib.services.optimizer import (
+from aarkib.plugins.optimizer import (
     DEVICE_PRESETS,
     clean_css_content,
     get_preset,
     optimize_epub,
     optimize_image,
 )
-from aarkib.services.scanner import index_single_book
+from aarkib.services.indexer import index_media_file
 
 
 def test_presets_configuration():
@@ -158,7 +158,7 @@ def test_api_download_optimized(client, app, sample_epub, tmp_path):
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
         # Optimize API requires an authenticated admin user
@@ -207,7 +207,7 @@ def test_api_download_optimized(client, app, sample_epub, tmp_path):
 def test_opds_preset_feeds(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
     # 1. OPDS 1.2 X4 Root Catalog
@@ -244,11 +244,11 @@ def test_optimizer_path_traversal_rejection(client, app, sample_epub, tmp_path):
     import pytest
 
     from aarkib.models import User
-    from aarkib.services.optimizer import get_or_create_optimized_epub
+    from aarkib.plugins.optimizer import get_or_create_optimized_epub
 
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         book_id = book.id
 
         admin = User(username="opt_sec_admin", is_admin=True)

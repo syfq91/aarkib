@@ -26,10 +26,10 @@ from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db, safe_commit
 from aarkib.models import (
-    Author,
+    Collection,
+    Creator,
     Library,
     MediaItem,
-    Series,
     Tag,
     User,
 )
@@ -38,7 +38,7 @@ from aarkib.services.media_service import (
     AUDIO_EXTENSIONS,
     MEDIA_TYPE_CHOICES,
     VIDEO_EXTENSIONS,
-    count_books_in_library,
+    count_media_in_library,
     generate_slug,
     library_path_conditions,
     path_match_filter,
@@ -138,6 +138,7 @@ def is_safe_media_path(file_path: Path | str) -> bool:
         "OPTIMIZED_DIR",
         "TRANSCODE_DIR",
         "BACKUP_DIR",
+        "BACKUPS_DIR",
     ):
         val = current_app.config.get(key)
         if isinstance(val, (list, tuple, set)):
@@ -403,8 +404,8 @@ def list_media() -> ResponseReturnValue:
     per_page = max(1, min(raw_per_page or 24, MAX_PER_PAGE))
 
     query = select(MediaItem).options(
-        selectinload(MediaItem.authors),
-        selectinload(MediaItem.series),
+        selectinload(MediaItem.creators),
+        selectinload(MediaItem.collection),
         selectinload(MediaItem.tags),
     )
 
@@ -433,16 +434,16 @@ def list_media() -> ResponseReturnValue:
             search_filter = or_(
                 MediaItem.title.ilike(f"%{q}%"),
                 MediaItem.description.ilike(f"%{q}%"),
-                MediaItem.authors.any(Author.name.ilike(f"%{q}%")),
+                MediaItem.creators.any(Creator.name.ilike(f"%{q}%")),
                 MediaItem.tags.any(Tag.name.ilike(f"%{q}%")),
-                MediaItem.series.has(Series.name.ilike(f"%{q}%")),
+                MediaItem.collection.has(Collection.name.ilike(f"%{q}%")),
             )
             query = query.filter(search_filter)
 
     if author_id:
-        query = query.filter(MediaItem.authors.any(Author.id == author_id))
+        query = query.filter(MediaItem.creators.any(Creator.id == author_id))
     if series_id:
-        query = query.filter(MediaItem.series_id == series_id)
+        query = query.filter(MediaItem.collection_id == series_id)
     if tag_id:
         query = query.filter(MediaItem.tags.any(Tag.id == tag_id))
     if file_format:
@@ -537,15 +538,12 @@ def list_media() -> ResponseReturnValue:
                 "media_type": b.media_type,
                 "creators": [a.name for a in b.creators],
                 "creators_display": b.creators_display,
-                "authors": [a.name for a in b.authors],
-                "authors_display": b.authors_display,
                 "file_format": b.file_format,
                 "file_size": b.file_size,
                 "cover_url": f"/api/media/{b.id}/cover",
                 "player_url": b.player_url,
                 "collection": b.collection.name if b.collection else None,
                 "collection_id": b.collection_id,
-                "series": b.series.name if b.series else None,
                 "series_index": b.series_index,
                 "tags": [t.name for t in b.tags],
                 "duration": b.duration,
@@ -822,7 +820,7 @@ def get_library_info(identifier: str) -> ResponseReturnValue:
     except KeyError:
         return jsonify({"error": "Library not found"}), 404
 
-    return jsonify({"library": lib.to_dict(count=count_books_in_library(lib))})
+    return jsonify({"library": lib.to_dict(count=count_media_in_library(lib))})
 
 
 @api_bp.route("/libraries/<identifier>", methods=["PUT"])
@@ -887,7 +885,7 @@ def update_library(identifier: str) -> ResponseReturnValue:
     return jsonify(
         {
             "status": "success",
-            "library": lib.to_dict(count=count_books_in_library(lib)),
+            "library": lib.to_dict(count=count_media_in_library(lib)),
         }
     )
 
@@ -985,9 +983,9 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
             "percentage": prog_data["percentage"],
             "location": prog_data["location"],
             "is_completed": prog_data["is_completed"],
-            "last_read_at": prog_data["last_read_at"],
+            "last_accessed_at": prog_data.get("last_accessed_at"),
         }
-        if prog_data.get("last_read_at")
+        if prog_data.get("last_accessed_at")
         else None
     )
 
@@ -998,8 +996,6 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
             "media_type": item.media_type,
             "creators": [a.name for a in item.creators],
             "creators_display": item.creators_display,
-            "authors": [a.name for a in item.authors],
-            "authors_display": item.authors_display,
             "description": item.description,
             "publisher": item.publisher,
             "language": item.language,
@@ -1009,7 +1005,6 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
             "file_size": item.file_size,
             "collection": item.collection.name if item.collection else None,
             "collection_id": item.collection_id,
-            "series": item.series.name if item.series else None,
             "series_index": item.series_index,
             "tags": [t.name for t in item.tags],
             "page_count": item.page_count,
@@ -1094,7 +1089,7 @@ def get_media_cover(item_id: int) -> ResponseReturnValue:
         )
 
     title = item.title[:30] + ("..." if len(item.title) > 30 else "")
-    author = item.authors_display[:25]
+    author = item.creators_display[:25]
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
         <rect width="300" height="450" fill="#181f2e" rx="16"/>
         <rect x="12" y="12" width="276" height="426" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" rx="12"/>
@@ -1535,7 +1530,7 @@ def download_media_file(item_id: int, preset: str | None = None) -> ResponseRetu
                 Path(current_app.config.get("DATA_DIR", "data")) / "optimized",
             )
         )
-        from aarkib.services.optimizer import get_or_create_optimized_epub
+        from aarkib.plugins.optimizer import get_or_create_optimized_epub
 
         db.session.close()
         try:
@@ -1570,7 +1565,7 @@ def download_media_file(item_id: int, preset: str | None = None) -> ResponseRetu
 @api_bp.route("/optimizer/presets", methods=["GET"])
 def get_optimizer_presets() -> ResponseReturnValue:
     """List supported e-ink optimization presets."""
-    from aarkib.services.optimizer import DEVICE_PRESETS
+    from aarkib.plugins.optimizer import DEVICE_PRESETS
 
     return jsonify(DEVICE_PRESETS)
 
@@ -1616,7 +1611,7 @@ def precompute_media_optimization(item_id: int) -> ResponseReturnValue:
             Path(current_app.config.get("DATA_DIR", "data")) / "optimized",
         )
     )
-    from aarkib.services.optimizer import get_or_create_optimized_epub
+    from aarkib.plugins.optimizer import get_or_create_optimized_epub
 
     try:
         opt_path = get_or_create_optimized_epub(
@@ -2005,7 +2000,6 @@ def apply_metadata_candidate(item_id: int) -> ResponseReturnValue:
                 "id": item.id,
                 "title": item.title,
                 "creators": [a.name for a in item.creators],
-                "authors": [a.name for a in item.authors],
                 "description": item.description,
                 "cover_image_path": item.cover_image_path,
                 "external_id": item.external_id,
@@ -2128,11 +2122,9 @@ def edit_media_metadata(item_id: int) -> ResponseReturnValue:
         "title": item.title,
         "collection": item.collection.name if item.collection else None,
         "collection_id": item.collection_id,
-        "series": item.series.name if item.series else None,
         "series_index": item.series_index,
         "creators": [a.name for a in item.creators],
         "creators_display": item.creators_display,
-        "authors": [a.name for a in item.authors],
         "tags": [t.name for t in item.tags],
         "locked_fields": item.get_locked_fields(),
         "provenance": item.get_field_provenance(),
@@ -2143,7 +2135,6 @@ def edit_media_metadata(item_id: int) -> ResponseReturnValue:
             "status": "success",
             "message": "Metadata updated successfully",
             "item": item_dict,
-            "book": item_dict,
         }
     )
 

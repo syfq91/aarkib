@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from aarkib.extensions import db
-from aarkib.models import Author, Book, Series, Tag, User
+from aarkib.models import Collection, Creator, MediaItem, Tag, User
 
 
 def test_user_password_hashing(app):
@@ -10,46 +12,46 @@ def test_user_password_hashing(app):
     assert user.check_password("wrongpass") is False
 
 
-def test_book_relations(app):
-    author = Author(name="Arthur Conan Doyle")
-    series = Series(name="Sherlock Holmes")
+def test_media_item_relations(app):
+    creator = Creator(name="Arthur Conan Doyle")
+    collection = Collection(name="Sherlock Holmes")
     tag = Tag(name="Mystery")
 
-    book = Book(
+    item = MediaItem(
         title="A Study in Scarlet",
         original_file_path="/tmp/study.epub",
         file_format="epub",
         file_hash="dummyhash123",
-        series=series,
+        collection=collection,
         series_index=1.0,
     )
-    book.authors.append(author)
-    book.tags.append(tag)
+    item.creators.append(creator)
+    item.tags.append(tag)
 
-    db.session.add_all([author, series, tag, book])
+    db.session.add_all([creator, collection, tag, item])
     db.session.commit()
 
-    saved_book = db.session.get(Book, book.id)
-    assert saved_book is not None
-    assert saved_book.authors_display == "Arthur Conan Doyle"
-    assert saved_book.series.name == "Sherlock Holmes"
-    assert "Mystery" in saved_book.tags_display
+    saved_item = db.session.get(MediaItem, item.id)
+    assert saved_item is not None
+    assert saved_item.creators_display == "Arthur Conan Doyle"
+    assert saved_item.collection.name == "Sherlock Holmes"
+    assert "Mystery" in saved_item.tags_display
 
 
 def test_user_progress_fields(app):
     from aarkib.models import UserProgress
 
-    book = Book(
+    item = MediaItem(
         title="Test Book",
         original_file_path="/tmp/test.epub",
         file_format="epub",
         file_hash="test1234",
     )
-    db.session.add(book)
+    db.session.add(item)
     db.session.commit()
 
     progress = UserProgress(
-        book_id=book.id,
+        media_item_id=item.id,
         percentage=45.5,
         device_id="urn:uuid:test-device-123",
         device_name="Kobo Clara 2E",
@@ -104,79 +106,74 @@ def test_migrate_database_adds_missing_columns(app):
 
 
 def test_generalized_media_model(app):
-    from aarkib.models import Collection, Creator, MediaType
+    from aarkib.models import Creator, MediaType
 
-    # Check aliases
-    assert Creator is Author
-    assert Collection is Series
-
-    # Check Book with default media_type for epub
-    epub_book = Book(
+    # Check MediaItem with default media_type for epub
+    epub_item = MediaItem(
         title="EPUB Title",
         original_file_path="/tmp/epub_title.epub",
         file_format="epub",
         file_hash="hash_epub_1",
         file_size=1048576,  # 1 MB
     )
-    assert epub_book.media_type == MediaType.BOOK.value
-    assert epub_book.is_book is True
-    assert epub_book.is_comic is False
-    assert epub_book.is_audio is False
-    assert epub_book.is_video is False
-    assert "1.0 MB" in epub_book.formatted_file_size
+    assert epub_item.media_type == MediaType.BOOK.value
+    assert epub_item.is_book is True
+    assert epub_item.is_comic is False
+    assert epub_item.is_audio is False
+    assert epub_item.is_video is False
+    assert "1.0 MB" in epub_item.formatted_file_size
 
-    # Check Book with cbz comic format
-    cbz_book = Book(
+    # Check MediaItem with cbz comic format
+    cbz_item = MediaItem(
         title="Comic Title",
         original_file_path="/tmp/comic_title.cbz",
         file_format="cbz",
         file_hash="hash_cbz_1",
     )
-    assert cbz_book.media_type == MediaType.COMIC.value
-    assert cbz_book.is_comic is True
-    assert cbz_book.is_book is False
+    assert cbz_item.media_type == MediaType.COMIC.value
+    assert cbz_item.is_comic is True
+    assert cbz_item.is_book is False
 
-    # Check creator alias
-    author = Creator(name="Test Creator")
-    epub_book.authors.append(author)
-    db.session.add_all([author, epub_book, cbz_book])
+    # Check creators
+    creator = Creator(name="Test Creator")
+    epub_item.creators.append(creator)
+    db.session.add_all([creator, epub_item, cbz_item])
     db.session.commit()
 
-    saved = db.session.get(Book, epub_book.id)
+    saved = db.session.get(MediaItem, epub_item.id)
     assert saved.creators_display == "Test Creator"
-    assert saved.authors_display == "Test Creator"
 
 
 def test_generalized_progress_and_bookmarks(app):
     from aarkib.models import Bookmark, UserProgress
 
-    book = Book(
+    item = MediaItem(
         title="Progress Test Book",
         original_file_path="/tmp/prog.epub",
         file_format="epub",
         file_hash="prog1234",
     )
-    db.session.add(book)
+    db.session.add(item)
     db.session.commit()
 
     prog = UserProgress(
-        book_id=book.id,
+        media_item_id=item.id,
         progress_location="100.5",
         percentage=50.0,
     )
-    assert prog.media_id == book.id
-    prog.media_id = 999
-    assert prog.book_id == 999
-    prog.book_id = book.id
+    assert prog.media_item_id == item.id
+    prog.media_item_id = 999
+    assert prog.media_item_id == 999
+    prog.media_item_id = item.id
 
     bm = Bookmark(
-        book_id=book.id,
+        media_item_id=item.id,
         location="ch1.xhtml",
         title="Chapter 1 Bookmark",
     )
-    assert bm.media_id == book.id
-    bm.media_id = 888
-    assert bm.book_id == 888
+    assert bm.media_item_id == item.id
+    bm.media_item_id = 888
+    assert bm.media_item_id == 888
 
 
 def test_parser_registry_and_base_metadata(tmp_path):
@@ -200,12 +197,12 @@ def test_parser_registry_and_base_metadata(tmp_path):
     assert base_meta.media_type == "audio"
     assert "Artist One" in base_meta.creators
 
-    # Test ParsedBookMetadata creator/author sync
+    # Test ParsedBookMetadata creator sync
     book_meta = ParsedBookMetadata(
         title="Sync Test",
         creators=["Synced Author"],
     )
-    assert book_meta.authors == ["Synced Author"]
+    assert book_meta.creators == ["Synced Author"]
 
     # Test registering a mock custom parser (e.g. for audio)
     fake_audio = tmp_path / "song.custom_audio"
@@ -232,29 +229,36 @@ def test_parser_registry_and_base_metadata(tmp_path):
         PARSER_REGISTRY.pop(".custom_audio", None)
 
 
+def test_legacy_aliases_removed():
+    """Verify that legacy models and table aliases are permanently removed."""
+    import aarkib.models
+
+    for legacy_name in (
+        "Book",
+        "Author",
+        "Series",
+        "Item",
+        "book_authors",
+        "book_tags",
+    ):
+        assert not hasattr(aarkib.models, legacy_name), (
+            f"{legacy_name} should not exist in aarkib.models"
+        )
+
+
 def test_media_item_first_class_model(app):
     from aarkib.models import (
-        Author,
-        Book,
         Bookmark,
         Collection,
         Creator,
-        Item,
         MediaItem,
         MediaType,
-        Series,
         Tag,
         UserProgress,
     )
     from aarkib.services.media_service import edit_media_metadata
 
-    # 1. Verify identity and alias equivalence
-    assert MediaItem is Book
-    assert MediaItem is Item
-    assert Creator is Author
-    assert Collection is Series
-
-    # 2. Audio track item instantiation and audio mixin attributes
+    # 1. Audio track item instantiation and audio mixin attributes
     audio = MediaItem(
         title="Midnight Symphony",
         original_file_path="/tmp/audio/symphony.flac",
@@ -274,7 +278,7 @@ def test_media_item_first_class_model(app):
     assert audio.formatted_duration == "6m 05s"
     assert repr(audio) == "<MediaItem None: Midnight Symphony>"
 
-    # 3. Creator, Series, Tag synonyms
+    # 2. Creator, Collection, Tag relationships
     creator = Creator(name="Beethoven")
     collection = Collection(name="The Masterpieces")
     genre = Tag(name="Classical")
@@ -286,15 +290,12 @@ def test_media_item_first_class_model(app):
     db.session.add_all([creator, collection, genre, audio])
     db.session.commit()
 
-    # Verify bidirectional relationship synonyms
+    # Verify bidirectional relationships
     assert audio in creator.media_items
-    assert audio in creator.books
     assert audio in collection.media_items
-    assert audio in collection.books
     assert audio in genre.media_items
-    assert audio in genre.books
 
-    # Verify progress and bookmark synonyms
+    # Verify progress and bookmark relationships
     progress = UserProgress(
         media_item=audio,
         progress_location="180",
@@ -308,14 +309,12 @@ def test_media_item_first_class_model(app):
     db.session.add_all([progress, bookmark])
     db.session.commit()
 
-    assert progress.item is audio
-    assert progress.book is audio
-    assert bookmark.item is audio
-    assert bookmark.book is audio
+    assert progress.media_item is audio
+    assert bookmark.media_item is audio
     assert progress in audio.progress_records
     assert bookmark in audio.bookmarks
 
-    # 4. Test edit_media_metadata with audio & video fields
+    # 3. Test edit_media_metadata with audio & video fields
     edit_media_metadata(
         audio,
         {

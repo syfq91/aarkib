@@ -1,5 +1,5 @@
-from aarkib.models.collection import Collection, Series
-from aarkib.models.creator import Author, Creator, book_authors, media_creators
+from aarkib.models.collection import Collection
+from aarkib.models.creator import Creator, media_creators
 from aarkib.models.job import JobRecord
 from aarkib.models.library import Library
 from aarkib.models.media import (
@@ -10,12 +10,12 @@ from aarkib.models.media import (
     PlayableItemMixin,
     VideoItemMixin,
 )
-from aarkib.models.media_item import Book, Item, MediaItem
+from aarkib.models.media_item import MediaItem
 from aarkib.models.metadata_cache import MetadataCacheEntry
 from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.setting import SystemSetting
-from aarkib.models.tag import Tag, book_tags, media_tags
+from aarkib.models.tag import Tag, media_tags
 from aarkib.models.token import DeviceToken
 from aarkib.models.user import User
 
@@ -23,14 +23,10 @@ __all__ = [
     "User",
     "DeviceToken",
     "MediaItem",
-    "Item",
-    "Book",
     "Library",
     "SystemSetting",
     "Creator",
-    "Author",
     "Collection",
-    "Series",
     "Tag",
     "UserProgress",
     "Bookmark",
@@ -46,7 +42,5 @@ __all__ = [
     "PlaylistItem",
     "MetadataCacheEntry",
     "media_creators",
-    "book_authors",
     "media_tags",
-    "book_tags",
 ]

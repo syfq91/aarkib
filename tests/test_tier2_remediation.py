@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from aarkib.extensions import db, safe_commit
-from aarkib.models import Author, Collection, Library, MediaItem, Tag, User
+from aarkib.models import Collection, Creator, Library, MediaItem, Tag, User
 from aarkib.services.job_manager import JobManager, JobStatus, job_manager
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ def test_h4_eager_loading_subsonic_jellyfin_opds(
         db.session.flush()
 
         # Artist, Album, Tag
-        artist = Author(name="Ludwig van Beethoven")
+        artist = Creator(name="Ludwig van Beethoven")
         db.session.add(artist)
         db.session.flush()
 

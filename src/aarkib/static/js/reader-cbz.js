@@ -12,23 +12,6 @@ let isProgrammaticScroll = false;
 let scrollTimeout = null;
 const preloadedImages = new Map();
 
-// Migrate legacy mode if new keys are not yet set
-if (!localStorage.getItem("aarkib-cbz-spread") && !localStorage.getItem("aarkib-cbz-direction")) {
-  const legacyMode = localStorage.getItem("aarkib-cbz-mode");
-  if (legacyMode === "manga") {
-    currentSpread = "double";
-    currentDirection = "rtl";
-  } else if (legacyMode === "double") {
-    currentSpread = "double";
-    currentDirection = "ltr";
-  } else if (legacyMode === "webtoon") {
-    currentSpread = "webtoon";
-    currentDirection = "ltr";
-  } else {
-    currentSpread = "single";
-    currentDirection = "ltr";
-  }
-}
 
 function getBookId() {
   if (typeof BOOK_ID !== "undefined" && BOOK_ID) return BOOK_ID;

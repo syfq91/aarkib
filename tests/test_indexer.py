@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from aarkib.models import Book
+from aarkib.models import MediaItem
 from aarkib.services.indexer import (
-    _assign_authors_tags_series,
+    _assign_creators_tags_collections,
     _resolve_media_type,
     compute_sha256,
     compute_sort_title,
@@ -63,11 +63,11 @@ def test_resolve_media_type(app):
         assert _resolve_media_type(meta_music, "/path/song.flac", None) == "music"
 
 
-def test_assign_authors_tags_series(app):
+def test_assign_creators_tags_collections(app):
     from aarkib.extensions import db
 
     with app.app_context():
-        book = Book(
+        book = MediaItem(
             original_file_path="/path/test.epub",
             title="Test",
             file_hash="12345",
@@ -75,17 +75,17 @@ def test_assign_authors_tags_series(app):
         )
         db.session.add(book)
         meta = SimpleNamespace(
-            authors=["Arthur Conan Doyle", " "],
+            creators=["Arthur Conan Doyle", " "],
             series="Sherlock Holmes",
             series_index=1.0,
             tags=["Mystery", "Classic"],
         )
-        _assign_authors_tags_series(book, meta)
+        _assign_creators_tags_collections(book, meta)
 
-        assert len(book.authors) == 1
-        assert book.authors[0].name == "Arthur Conan Doyle"
-        assert book.series is not None
-        assert book.series.name == "Sherlock Holmes"
+        assert len(book.creators) == 1
+        assert book.creators[0].name == "Arthur Conan Doyle"
+        assert book.collection is not None
+        assert book.collection.name == "Sherlock Holmes"
         assert book.series_index == 1.0
         assert len(book.tags) == 2
         assert {t.name for t in book.tags} == {"Mystery", "Classic"}

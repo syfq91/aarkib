@@ -19,7 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
-from aarkib.models import Author, MediaItem, Series, Tag, User, UserProgress
+from aarkib.models import Collection, Creator, MediaItem, Tag, User, UserProgress
 from aarkib.plugins.base import ProtocolPlugin, plugin_registry
 
 if TYPE_CHECKING:
@@ -139,7 +139,7 @@ def format_progression_document(
     progress: UserProgress, user: User | None = None
 ) -> dict[str, Any]:
     """Formats a UserProgress record into an OPDS Progression 1.0 Document."""
-    last_read = progress.last_read_at
+    last_read = progress.last_accessed_at
     if last_read.tzinfo is None:
         last_read = last_read.replace(tzinfo=UTC)
 
@@ -189,7 +189,7 @@ def opds_authentication_doc():
 @opds_bp.route("/presets", methods=["GET"])
 def list_presets():
     """Returns list of supported e-ink optimization presets."""
-    from aarkib.services.optimizer import DEVICE_PRESETS
+    from aarkib.plugins.optimizer import DEVICE_PRESETS
 
     return jsonify(DEVICE_PRESETS)
 
@@ -291,8 +291,8 @@ def _build_progression_response(progress, user) -> Response:
 
 def _resolve_progression_conflict(progress, modified_dt, user) -> Response | None:
     """Returns a 409 problem response if an incoming update is older than the stored one."""
-    if progress and progress.last_read_at:
-        curr_dt = progress.last_read_at
+    if progress and progress.last_accessed_at:
+        curr_dt = progress.last_accessed_at
         if curr_dt.tzinfo is None:
             curr_dt = curr_dt.replace(tzinfo=UTC)
         if modified_dt < curr_dt:
@@ -388,7 +388,7 @@ def opds_media_progression(item_id: int):
             progress_location=vals["primary_location"],
             percentage=vals["percentage"],
             is_completed=(vals["percentage"] >= 100.0),
-            last_read_at=vals["modified_dt"],
+            last_accessed_at=vals["modified_dt"],
             device_id=vals["device_id"],
             device_name=vals["device_name"],
             chapter_title=vals["chapter_title"],
@@ -399,7 +399,7 @@ def opds_media_progression(item_id: int):
         progress.progress_location = vals["primary_location"]
         progress.percentage = vals["percentage"]
         progress.is_completed = vals["percentage"] >= 100.0
-        progress.last_read_at = vals["modified_dt"]
+        progress.last_accessed_at = vals["modified_dt"]
         progress.device_id = vals["device_id"]
         progress.device_name = vals["device_name"]
         progress.chapter_title = vals["chapter_title"]
@@ -469,7 +469,7 @@ def opds2_recent(preset: str | None = None):
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     items = db.session.scalars(
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.series))
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.collection))
         .where(opds_readable_filter())
         .order_by(MediaItem.created_at.desc())
         .limit(50)
@@ -488,8 +488,8 @@ def opds2_recent(preset: str | None = None):
                 "title": b.title,
                 "identifier": f"urn:aarkib:media:{b.id}",
                 "modified": (b.updated_at or datetime.now(UTC)).isoformat(),
-                "author": [{"name": a.name} for a in b.authors]
-                if b.authors
+                "author": [{"name": a.name} for a in b.creators]
+                if b.creators
                 else [{"name": "Unknown Author"}],
             },
             "links": [
@@ -518,10 +518,10 @@ def opds2_recent(preset: str | None = None):
         }
         if b.description:
             pub["metadata"]["description"] = b.description
-        if b.series:
+        if b.collection:
             pub["metadata"]["belongsTo"] = {
                 "series": {
-                    "name": b.series.name,
+                    "name": b.collection.name,
                     "position": b.series_index or 1,
                 }
             }
@@ -585,7 +585,7 @@ def recent_feed(preset: str | None = None):
     per_page = 30
     query = (
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.tags))
         .where(opds_readable_filter())
         .order_by(MediaItem.created_at.desc())
     )
@@ -618,9 +618,9 @@ def recent_feed(preset: str | None = None):
 def authors_index(preset: str | None = None):
     """Serve an OPDS 1.2 navigation feed of all authors."""
     authors = db.session.scalars(
-        select(Author)
-        .options(selectinload(Author.media_items))
-        .order_by(Author.name.asc())
+        select(Creator)
+        .options(selectinload(Creator.media_items))
+        .order_by(Creator.name.asc())
     ).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
@@ -643,15 +643,15 @@ def authors_index(preset: str | None = None):
 @opds_auth_required
 def author_books(author_id: int, preset: str | None = None):
     """Serve an OPDS 1.2 acquisition feed of a single author's items."""
-    author = db.session.get(Author, author_id)
+    author = db.session.get(Creator, author_id)
     if not author:
         return Response("Author not found", 404)
 
     page = request.args.get("page", 1, type=int)
     query = (
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
-        .filter(MediaItem.authors.any(Author.id == author_id), opds_readable_filter())
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.tags))
+        .filter(MediaItem.creators.any(Creator.id == author_id), opds_readable_filter())
         .order_by(MediaItem.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
@@ -682,9 +682,9 @@ def author_books(author_id: int, preset: str | None = None):
 def series_index(preset: str | None = None):
     """Serve an OPDS 1.2 navigation feed of all series/collections."""
     series_list = db.session.scalars(
-        select(Series)
-        .options(selectinload(Series.media_items))
-        .order_by(Series.name.asc())
+        select(Collection)
+        .options(selectinload(Collection.media_items))
+        .order_by(Collection.name.asc())
     ).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
@@ -707,15 +707,15 @@ def series_index(preset: str | None = None):
 @opds_auth_required
 def series_books(series_id: int, preset: str | None = None):
     """Serve an OPDS 1.2 acquisition feed of a single series' items."""
-    series_obj = db.session.get(Series, series_id)
+    series_obj = db.session.get(Collection, series_id)
     if not series_obj:
         return Response("Series not found", 404)
 
     page = request.args.get("page", 1, type=int)
     query = (
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
-        .filter(MediaItem.series_id == series_id, opds_readable_filter())
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.tags))
+        .filter(MediaItem.collection_id == series_id, opds_readable_filter())
         .order_by(MediaItem.series_index.asc(), MediaItem.title.asc())
     )
     pagination = db.paginate(query, page=page, per_page=30, error_out=False)
@@ -776,7 +776,7 @@ def tag_books(tag_id: int, preset: str | None = None):
     page = request.args.get("page", 1, type=int)
     query = (
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.tags))
         .filter(MediaItem.tags.any(Tag.id == tag_id), opds_readable_filter())
         .order_by(MediaItem.title.asc())
     )
@@ -830,7 +830,7 @@ def search_feed(preset: str | None = None):
 
     query = (
         select(MediaItem)
-        .options(selectinload(MediaItem.authors), selectinload(MediaItem.tags))
+        .options(selectinload(MediaItem.creators), selectinload(MediaItem.tags))
         .where(opds_readable_filter())
     )
     relevance_order = False
@@ -854,9 +854,9 @@ def search_feed(preset: str | None = None):
             search_filter = or_(
                 MediaItem.title.ilike(f"%{q}%"),
                 MediaItem.description.ilike(f"%{q}%"),
-                MediaItem.authors.any(Author.name.ilike(f"%{q}%")),
+                MediaItem.creators.any(Creator.name.ilike(f"%{q}%")),
                 MediaItem.tags.any(Tag.name.ilike(f"%{q}%")),
-                MediaItem.series.has(Series.name.ilike(f"%{q}%")),
+                MediaItem.collection.has(Collection.name.ilike(f"%{q}%")),
             )
             query = query.filter(search_filter)
 

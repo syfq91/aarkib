@@ -105,7 +105,7 @@ def parse_podcast(file_path: Path) -> ParsedPodcastMetadata:
         if parsed_audio:
             raw_tags = {
                 "title": parsed_audio.title,
-                "artist": parsed_audio.authors[0] if parsed_audio.authors else None,
+                "artist": parsed_audio.creators[0] if parsed_audio.creators else None,
                 "album": parsed_audio.album,
                 "track_number": parsed_audio.track_number,
                 "disc_number": parsed_audio.disc_number,

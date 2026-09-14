@@ -80,7 +80,7 @@ def parse_pdf(file_path: Path) -> ParsedBookMetadata | None:
 
         return ParsedBookMetadata(
             title=title,
-            authors=authors if authors else ["Unknown Author"],
+            creators=authors if authors else ["Unknown Author"],
             description=description,
             series=series_name,
             series_index=series_index,
@@ -96,7 +96,7 @@ def parse_pdf(file_path: Path) -> ParsedBookMetadata | None:
         series_name, series_index, clean_t = extract_series_from_title(file_path.stem)
         return ParsedBookMetadata(
             title=clean_t,
-            authors=["Unknown Author"],
+            creators=["Unknown Author"],
             series=series_name,
             series_index=series_index,
             file_format="pdf",

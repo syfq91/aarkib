@@ -184,7 +184,7 @@ def migrate_database() -> None:
         init_search_fts(conn)
 
 
-def create_app(config_class: type[Config] | None = None) -> Flask:
+def create_app(config_class: type[Config] | dict[str, Any] | None = None) -> Flask:
     if config_class is None:
         env = os.getenv("APP_ENV", "development").lower()
         config_class = {
@@ -197,7 +197,10 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         template_folder="templates",
         static_folder="static",
     )
-    app.config.from_object(config_class)
+    if isinstance(config_class, dict):
+        app.config.from_mapping(config_class)
+    else:
+        app.config.from_object(config_class)
 
     # Configure logging format
     log_format = (

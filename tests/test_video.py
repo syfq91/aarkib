@@ -5,12 +5,12 @@ from pathlib import Path
 
 from aarkib.plugins import plugin_registry
 from aarkib.plugins.video import VideoMediaPlugin
+from aarkib.services.indexer import index_media_file
 from aarkib.services.parsers.video import (
     extract_video_cover,
     parse_video_filename,
     read_mp4_metadata,
 )
-from aarkib.services.scanner import index_single_book
 
 
 def create_synthetic_mp4(
@@ -156,7 +156,7 @@ def test_index_and_api_video_lifecycle(client, app, tmp_path):
     create_synthetic_mp4(video_path, duration_sec=8880, width=1920, height=1080)
 
     with app.app_context():
-        book = index_single_book(video_path, covers_dir)
+        book = index_media_file(video_path, covers_dir)
         assert book is not None
         assert book.is_video is True
         assert book.media_type == "video"
@@ -240,11 +240,11 @@ def test_tv_show_episode_navigation(client, app, tmp_path):
     create_synthetic_mp4(ep2_path, duration_sec=3200)
 
     with app.app_context():
-        b1 = index_single_book(ep1_path, covers_dir)
-        b2 = index_single_book(ep2_path, covers_dir)
+        b1 = index_media_file(ep1_path, covers_dir)
+        b2 = index_media_file(ep2_path, covers_dir)
         assert b1 is not None and b2 is not None
-        assert b1.series.name == "Stranger Things"
-        assert b2.series.name == "Stranger Things"
+        assert b1.collection.name == "Stranger Things"
+        assert b2.collection.name == "Stranger Things"
         assert b1.episode_code == "S01E01"
         assert b2.episode_code == "S01E02"
         b1_id, b2_id = b1.id, b2.id

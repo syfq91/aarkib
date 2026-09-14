@@ -1,5 +1,5 @@
 from aarkib.extensions import db
-from aarkib.models import Author, Book, User
+from aarkib.models import Creator, MediaItem, User
 
 
 def test_opds_root_catalog(client):
@@ -11,17 +11,17 @@ def test_opds_root_catalog(client):
 
 def test_opds_recent_feed(client, app):
     with app.app_context():
-        book = Book(
+        book = MediaItem(
             title="OPDS Test Book",
             original_file_path="/path/test.epub",
             file_format="epub",
             file_hash="hash987",
             description="Testing OPDS Feed Generation",
         )
-        author = Author(name="OPDS Author")
-        book.authors.append(author)
+        author = Creator(name="OPDS Author")
+        book.creators.append(author)
         db.session.add_all([book, author])
-        video = Book(
+        video = MediaItem(
             title="OPDS Movie Item",
             original_file_path="/path/movie.mp4",
             file_format="mp4",
@@ -62,7 +62,7 @@ def test_opds_progression_crud_and_conflicts(client, app):
         # Create user & book
         user = User(username="progression_user")
         user.set_password("pass123")
-        book = Book(
+        book = MediaItem(
             title="Progression Book",
             original_file_path="/path/prog.epub",
             file_format="epub",
@@ -131,7 +131,7 @@ def test_opds_progression_crud_and_conflicts(client, app):
 
 def test_opds2_catalog_and_recent(client, app):
     with app.app_context():
-        book = Book(
+        book = MediaItem(
             title="OPDS 2.0 Test Book",
             original_file_path="/path/test2.epub",
             file_format="epub",

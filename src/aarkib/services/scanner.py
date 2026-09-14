@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import or_, select
 
 from aarkib.extensions import db
-from aarkib.models import Book, Library
+from aarkib.models import Library, MediaItem
 from aarkib.services.indexer import (
     DEFAULT_EXTENSIONS,
     SUPPORTED_EXTENSIONS,
-    _assign_authors_tags_series,
+    _assign_creators_tags_collections,
     _extract_and_generate_cover,
     _resolve_media_type,
     compute_fast_fingerprint,
@@ -25,10 +25,8 @@ from aarkib.services.indexer import (
     compute_sort_title,
     get_supported_extensions,
     index_media_file,
-    index_single_book,
 )
 from aarkib.services.library_service import (
-    count_books_in_library,
     count_media_in_library,
     generate_slug,
     get_library_definitions,
@@ -43,7 +41,6 @@ from aarkib.services.library_service import (
 )
 from aarkib.services.watcher import (
     DebouncedLibraryChangeHandler,
-    LibraryChangeHandler,
     start_library_watcher,
     stop_library_watcher,
 )
@@ -57,14 +54,12 @@ __all__ = [
     "DEFAULT_EXTENSIONS",
     "SUPPORTED_EXTENSIONS",
     "DebouncedLibraryChangeHandler",
-    "LibraryChangeHandler",
-    "_assign_authors_tags_series",
+    "_assign_creators_tags_collections",
     "_extract_and_generate_cover",
     "_resolve_media_type",
     "compute_fast_fingerprint",
     "compute_sha256",
     "compute_sort_title",
-    "count_books_in_library",
     "count_media_in_library",
     "generate_slug",
     "get_library_definitions",
@@ -73,7 +68,6 @@ __all__ = [
     "get_media_dirs_from_config",
     "get_supported_extensions",
     "index_media_file",
-    "index_single_book",
     "library_path_conditions",
     "path_match_filter",
     "path_prefixes",
@@ -174,7 +168,7 @@ def scan_library(
             )
             lib_provider = getattr(lib, "metadata_provider", None)
 
-            book = index_single_book(
+            item = index_media_file(
                 file_path,
                 covers_dir,
                 auto_enrich=lib_auto_enrich,
@@ -183,10 +177,10 @@ def scan_library(
                 metadata_provider=lib_provider,
                 commit=False,
             )
-            if book:
-                if book.id is None:
+            if item:
+                if item.id is None:
                     db.session.flush()
-                new_item_ids.append(book.id)
+                new_item_ids.append(item.id)
                 added += 1
 
             if progress_callback and (idx % 5 == 0 or idx == total_candidates - 1):
@@ -218,26 +212,28 @@ def scan_library(
             for lib in libraries:
                 p_res, p_raw = library_path_conditions(lib)
                 lib_cond = or_(
-                    Book.library_id == lib.id if getattr(lib, "id", None) else False,
-                    Book.original_file_path.startswith(p_res),
-                    Book.original_file_path.startswith(p_raw),
+                    MediaItem.library_id == lib.id
+                    if getattr(lib, "id", None)
+                    else False,
+                    MediaItem.original_file_path.startswith(p_res),
+                    MediaItem.original_file_path.startswith(p_raw),
                 )
-                lib_books = db.session.scalars(select(Book).where(lib_cond)).all()
-                for book in lib_books:
+                lib_items = db.session.scalars(select(MediaItem).where(lib_cond)).all()
+                for item in lib_items:
                     if (
-                        book.original_file_path not in existing_files
-                        and not Path(book.original_file_path).exists()
+                        item.original_file_path not in existing_files
+                        and not Path(item.original_file_path).exists()
                     ):
-                        db.session.delete(book)
+                        db.session.delete(item)
                         deleted += 1
         else:
-            all_books = db.session.scalars(select(Book)).all()
-            for book in all_books:
+            all_items = db.session.scalars(select(MediaItem)).all()
+            for item in all_items:
                 if (
-                    book.original_file_path not in existing_files
-                    and not Path(book.original_file_path).exists()
+                    item.original_file_path not in existing_files
+                    and not Path(item.original_file_path).exists()
                 ):
-                    db.session.delete(book)
+                    db.session.delete(item)
                     deleted += 1
 
         if deleted > 0:

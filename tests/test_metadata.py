@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from aarkib.extensions import db
 from aarkib.models import MediaItem, MetadataCacheEntry, User
+from aarkib.services.indexer import index_media_file
 from aarkib.services.metadata import (
     MediaMetadataDetails,
     MetadataCacheManager,
@@ -18,7 +19,6 @@ from aarkib.services.metadata import (
     compute_confidence_score,
     is_safe_http_url,
 )
-from aarkib.services.scanner import index_single_book
 
 # --------------------------------------------------------------------------
 # 1. Rate Limiter Tests
@@ -289,7 +289,7 @@ def test_field_level_locking_on_media_item(app):
 def test_scanner_preserves_locked_fields(app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
 
         # Lock title and author
@@ -299,7 +299,7 @@ def test_scanner_preserves_locked_fields(app, sample_epub):
         db.session.commit()
 
         # Re-index the same file
-        re_indexed = index_single_book(sample_epub, covers_dir)
+        re_indexed = index_media_file(sample_epub, covers_dir)
         assert re_indexed is not None
         # Title must NOT have reverted to sample epub title
         assert re_indexed.title == "User Curated Custom Title"
@@ -313,7 +313,7 @@ def test_scanner_preserves_locked_fields(app, sample_epub):
 def test_api_metadata_search_and_apply(client, app, sample_epub):
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
-        book = index_single_book(sample_epub, covers_dir)
+        book = index_media_file(sample_epub, covers_dir)
         assert book is not None
         book_id = book.id
 

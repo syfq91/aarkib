@@ -27,7 +27,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
-from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
+from aarkib.models import Collection, Creator, Library, MediaItem, User, UserProgress
 from aarkib.plugins.base import ProtocolPlugin
 from aarkib.services.media_service import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 
@@ -1006,9 +1006,9 @@ def get_artists(user: User | None = None):
     """Returns music artists."""
     server_id = get_server_id()
     authors = db.session.scalars(
-        select(Author)
-        .options(selectinload(Author.media_items))
-        .order_by(Author.name.asc())
+        select(Creator)
+        .options(selectinload(Creator.media_items))
+        .order_by(Creator.name.asc())
     ).all()
     artists = []
     for auth in authors:

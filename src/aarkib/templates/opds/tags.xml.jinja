@@ -12,7 +12,7 @@
     <title>{{ tag.name }}</title>
     <id>urn:aarkib:tag:{{ tag.id }}{% if preset %}:{{ preset }}{% endif %}</id>
     <updated>{{ now_iso }}</updated>
-    <content type="text">{{ tag.books|length }} book(s)</content>
+    <content type="text">{{ tag.media_items|length }} book(s)</content>
     <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="{{ base_url }}{{ opds_prefix }}/tags/{{ tag.id }}"/>
   </entry>
   {% endfor %}

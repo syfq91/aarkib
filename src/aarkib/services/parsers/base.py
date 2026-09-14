@@ -26,17 +26,10 @@ class BaseParsedMetadata:
 class ParsedBookMetadata(BaseParsedMetadata):
     """Book- and comic-specific parsed metadata."""
 
-    authors: list[str] = field(default_factory=list)
     isbn: str | None = None
     series: str | None = None
     series_index: float | None = None
     page_count: int | None = None
-
-    def __post_init__(self) -> None:
-        if not self.authors and self.creators:
-            self.authors = list(self.creators)
-        elif self.authors and not self.creators:
-            self.creators = list(self.authors)
 
 
 @dataclass
@@ -51,14 +44,9 @@ class ParsedVideoMetadata(BaseParsedMetadata):
     episode: int | None = None
     series: str | None = None
     series_index: float | None = None
-    authors: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.media_type = "video"
-        if not self.authors and self.creators:
-            self.authors = list(self.creators)
-        elif self.authors and not self.creators:
-            self.creators = list(self.authors)
 
 
 @dataclass
@@ -72,7 +60,6 @@ class ParsedAudioMetadata(BaseParsedMetadata):
     bitrate: int | None = None
     series: str | None = None
     series_index: float | None = None
-    authors: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.media_type = "audio"
@@ -80,10 +67,6 @@ class ParsedAudioMetadata(BaseParsedMetadata):
             self.series = self.album
         if self.series_index is None and self.track_number is not None:
             self.series_index = float(self.track_number)
-        if not self.authors and self.creators:
-            self.authors = list(self.creators)
-        elif self.authors and not self.creators:
-            self.creators = list(self.authors)
 
 
 @dataclass
@@ -98,11 +81,10 @@ class ParsedAudiobookMetadata(ParsedAudioMetadata):
     def __post_init__(self) -> None:
         super().__post_init__()
         self.media_type = "audiobook"
-        if self.author and not self.authors:
-            self.authors = [self.author]
+        if self.author and not self.creators:
             self.creators = [self.author]
-        elif not self.author and self.authors:
-            self.author = self.authors[0]
+        elif not self.author and self.creators:
+            self.author = self.creators[0]
 
 
 @dataclass

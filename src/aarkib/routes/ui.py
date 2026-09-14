@@ -19,9 +19,9 @@ from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import (
-    Author,
+    Collection,
+    Creator,
     MediaItem,
-    Series,
     Tag,
     User,
     UserProgress,
@@ -61,7 +61,7 @@ def index() -> ResponseReturnValue:
             UserProgress.percentage < 100,
             UserProgress.is_completed.is_(False),
         )
-        .order_by(UserProgress.last_read_at.desc())
+        .order_by(UserProgress.last_accessed_at.desc())
         .limit(16)
     )
     in_progress_rows = db.session.execute(prog_stmt).all()
@@ -69,7 +69,6 @@ def index() -> ResponseReturnValue:
         in_progress_items.append(
             {
                 "item": b,
-                "book": b,
                 "progress": p,
                 "percentage": round(p.percentage, 1),
             }
@@ -121,7 +120,6 @@ def index() -> ResponseReturnValue:
                 "media_type": lib.get("media_type", "all"),
                 "count": lib_count,
                 "items": lib_items,
-                "books": lib_items,
             }
         )
 
@@ -149,13 +147,9 @@ def index() -> ResponseReturnValue:
     return render_template(
         "library.html",
         total_items=total_items,
-        total_books=total_items,
         initial_items=initial_items,
-        initial_books=initial_items,
         in_progress_items=in_progress_items,
-        in_progress_books=in_progress_items,
         recent_items=recent_items,
-        recent_books=recent_items,
         library_shelves=library_shelves,
         progress_map=progress_map,
     )
@@ -164,16 +158,16 @@ def index() -> ResponseReturnValue:
 @ui_bp.route("/media/<int:item_id>")
 @require_auth
 def media_detail(item_id: int) -> ResponseReturnValue:
-    """Render the detailed view for a single media item with metadata and playback options."""
+    """Render media item detail view with metadata and reading progress."""
     item = db.session.get(MediaItem, item_id)
     if not item:
-        abort(404, description="Media item not found")
+        abort(404)
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    progress = None
     user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
+        UserProgress.user_id == current_user.id
+        if current_user.is_authenticated
+        else UserProgress.user_id.is_(None)
     )
     progress = db.session.scalar(
         select(UserProgress).where(
@@ -182,7 +176,7 @@ def media_detail(item_id: int) -> ResponseReturnValue:
         )
     )
 
-    return render_template("media_detail.html", item=item, book=item, progress=progress)
+    return render_template("media_detail.html", item=item, progress=progress)
 
 
 @ui_bp.route("/authors")
@@ -194,10 +188,10 @@ def authors() -> ResponseReturnValue:
     from aarkib.models.creator import media_creators
 
     rows = db.session.execute(
-        select(Author, func.count(media_creators.c.media_item_id).label("book_count"))
-        .outerjoin(media_creators, media_creators.c.creator_id == Author.id)
-        .group_by(Author.id)
-        .order_by(Author.name.asc())
+        select(Creator, func.count(media_creators.c.media_item_id).label("book_count"))
+        .outerjoin(media_creators, media_creators.c.creator_id == Creator.id)
+        .group_by(Creator.id)
+        .order_by(Creator.name.asc())
     ).all()
     author_list = [(row[0], row[1]) for row in rows]
     return render_template("authors.html", authors=author_list)
@@ -210,10 +204,10 @@ def series() -> ResponseReturnValue:
     from sqlalchemy import func
 
     rows = db.session.execute(
-        select(Series, func.count(MediaItem.id).label("book_count"))
-        .outerjoin(MediaItem, MediaItem.collection_id == Series.id)
-        .group_by(Series.id)
-        .order_by(Series.name.asc())
+        select(Collection, func.count(MediaItem.id).label("book_count"))
+        .outerjoin(MediaItem, MediaItem.collection_id == Collection.id)
+        .group_by(Collection.id)
+        .order_by(Collection.name.asc())
     ).all()
     series_list = [(row[0], row[1]) for row in rows]
     return render_template("series.html", series_list=series_list)
@@ -277,8 +271,8 @@ def settings(category: str | None = None) -> ResponseReturnValue:
     library_dirs = [str(lib["path"]) for lib in libraries]
     covers_path = str(current_app.config.get("COVERS_DIR", "data/covers"))
     media_count = db.session.scalar(select(func.count(MediaItem.id))) or 0
-    author_count = db.session.scalar(select(func.count(Author.id))) or 0
-    series_count = db.session.scalar(select(func.count(Series.id))) or 0
+    author_count = db.session.scalar(select(func.count(Creator.id))) or 0
+    series_count = db.session.scalar(select(func.count(Collection.id))) or 0
 
     from aarkib.services.settings_service import get_effective_settings
 
@@ -415,7 +409,6 @@ def settings(category: str | None = None) -> ResponseReturnValue:
         library_path=library_dirs[0] if library_dirs else "data/media",
         covers_path=covers_path,
         media_count=media_count,
-        book_count=media_count,
         author_count=author_count,
         series_count=series_count,
         system_settings=system_settings,

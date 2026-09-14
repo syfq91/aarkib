@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aarkib.extensions import db
 
@@ -27,12 +27,5 @@ class Collection(db.Model):
         "MediaItem", back_populates="collection", order_by="MediaItem.series_index"
     )
 
-    # Synonyms for multi-media & legacy references
-    items = synonym("media_items")
-    books = synonym("media_items")
-
     def __repr__(self) -> str:
         return f"<Collection {self.name}>"
-
-
-Series = Collection

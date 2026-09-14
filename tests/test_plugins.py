@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aarkib.models import Book
+from aarkib.models import MediaItem
 from aarkib.plugins import (
     BookMediaPlugin,
     MediaPlugin,
@@ -101,14 +101,14 @@ def test_custom_media_plugin(tmp_path: Path):
     assert audio_plugin.get_player_url(99, "mp3") == "/player/audio/99"
 
 
-def test_book_model_player_url(app):
-    book_epub = Book(
+def test_media_item_model_player_url(app):
+    book_epub = MediaItem(
         title="Test Reader URL EPUB",
         original_file_path="/tmp/reader_test.epub",
         file_format="epub",
         file_hash="reader1",
     )
-    book_cbz = Book(
+    book_cbz = MediaItem(
         title="Test Reader URL CBZ",
         original_file_path="/tmp/reader_test.cbz",
         file_format="cbz",
