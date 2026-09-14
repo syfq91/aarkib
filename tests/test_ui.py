@@ -335,3 +335,49 @@ def test_homepage_dynamic_library_shelves_multiple(tmp_path, sample_epub, sample
     assert b"Recently Added" in res.data
     assert b"shelf-lib-novels" in res.data
     assert b"shelf-lib-manga" in res.data
+
+
+def test_authors_view_direct(client, app, sample_epub):
+    """Directly verifies GET /authors renders author list."""
+    from pathlib import Path
+
+    from aarkib.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        index_single_book(sample_epub, covers_dir)
+
+    res = client.get("/authors")
+    assert res.status_code == 200
+    assert b"Authors" in res.data or b"Creators" in res.data
+    assert b"Jane Doe" in res.data
+
+
+def test_series_view_direct(client, app, sample_epub):
+    """Directly verifies GET /series renders series list."""
+    from pathlib import Path
+
+    from aarkib.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        index_single_book(sample_epub, covers_dir)
+
+    res = client.get("/series")
+    assert res.status_code == 200
+    assert b"Series" in res.data or b"Collections" in res.data
+
+
+def test_tags_view_direct(client, app, sample_epub):
+    """Directly verifies GET /tags renders tag list."""
+    from pathlib import Path
+
+    from aarkib.services.scanner import index_single_book
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        index_single_book(sample_epub, covers_dir)
+
+    res = client.get("/tags")
+    assert res.status_code == 200
+    assert b"Tags" in res.data

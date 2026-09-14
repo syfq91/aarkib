@@ -56,7 +56,7 @@ class Library(db.Model):
 
             val = json.loads(self.settings_json)
             return val if isinstance(val, dict) else {}
-        except Exception:
+        except json.JSONDecodeError, TypeError:
             return {}
 
     def get_setting(self, key: str, default: Any = None) -> Any:

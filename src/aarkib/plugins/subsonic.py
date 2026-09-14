@@ -250,6 +250,7 @@ def _format_album(col: Collection) -> dict[str, Any]:
 @subsonic_bp.route("/ping.view", methods=["GET", "POST"])
 @subsonic_auth
 def ping(user: User | None = None):
+    """Ping endpoint confirming server connectivity and credentials."""
     return subsonic_response({})
 
 
@@ -257,6 +258,7 @@ def ping(user: User | None = None):
 @subsonic_bp.route("/getLicense.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_license(user: User | None = None):
+    """Returns Subsonic server license status."""
     return subsonic_response(
         {
             "license": {
@@ -272,6 +274,7 @@ def get_license(user: User | None = None):
 @subsonic_bp.route("/getMusicFolders.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_music_folders(user: User | None = None):
+    """Returns configured music and audio library folders."""
     libs = db.session.scalars(
         select(Library).where(
             or_(
@@ -292,6 +295,7 @@ def get_music_folders(user: User | None = None):
 @subsonic_bp.route("/getIndexes.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_artists(user: User | None = None):
+    """Returns indexed artists/creators grouped alphabetically."""
     authors = db.session.scalars(
         select(Author)
         .options(
@@ -332,16 +336,22 @@ def get_artists(user: User | None = None):
 @subsonic_bp.route("/getArtist.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_artist(user: User | None = None):
+    """Returns artist details and associated album collections."""
     artist_id = request.values.get("id")
     if not artist_id:
         return subsonic_response(error_code=10, error_msg="Missing artist id")
+
+    try:
+        clean_artist_id = int(artist_id)
+    except ValueError, TypeError:
+        return subsonic_response(error_code=70, error_msg="Artist not found")
 
     auth = db.session.scalar(
         select(Author)
         .options(
             selectinload(Author.media_items).selectinload(MediaItem.collection),
         )
-        .where(Author.id == int(artist_id))
+        .where(Author.id == clean_artist_id)
     )
     if not auth:
         return subsonic_response(error_code=70, error_msg="Artist not found")
@@ -377,9 +387,15 @@ def get_artist(user: User | None = None):
 @subsonic_bp.route("/getAlbum.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_album(user: User | None = None):
+    """Returns album collection details and track list."""
     album_id = request.values.get("id")
     if not album_id:
         return subsonic_response(error_code=10, error_msg="Missing album id")
+
+    try:
+        clean_album_id = int(album_id)
+    except ValueError, TypeError:
+        return subsonic_response(error_code=70, error_msg="Album not found")
 
     col = db.session.scalar(
         select(Collection)
@@ -387,7 +403,7 @@ def get_album(user: User | None = None):
             selectinload(Collection.media_items).selectinload(MediaItem.creators),
             selectinload(Collection.media_items).selectinload(MediaItem.tags),
         )
-        .where(Collection.id == int(album_id))
+        .where(Collection.id == clean_album_id)
     )
     if not col:
         return subsonic_response(error_code=70, error_msg="Album not found")
@@ -407,11 +423,17 @@ def get_album(user: User | None = None):
 @subsonic_bp.route("/getSong.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_song(user: User | None = None):
+    """Returns song metadata by media item ID."""
     song_id = request.values.get("id")
     if not song_id:
         return subsonic_response(error_code=10, error_msg="Missing song id")
 
-    item = db.session.get(MediaItem, int(song_id))
+    try:
+        clean_song_id = int(song_id)
+    except ValueError, TypeError:
+        return subsonic_response(error_code=70, error_msg="Song not found")
+
+    item = db.session.get(MediaItem, clean_song_id)
     if not item:
         return subsonic_response(error_code=70, error_msg="Song not found")
 
@@ -549,7 +571,12 @@ def scrobble(user: User | None = None):
     if not item_id:
         return subsonic_response(error_code=10, error_msg="Missing track id")
 
-    item = db.session.get(MediaItem, int(item_id))
+    try:
+        clean_item_id = int(item_id)
+    except ValueError, TypeError:
+        return subsonic_response(error_code=70, error_msg="Media item not found")
+
+    item = db.session.get(MediaItem, clean_item_id)
     if not item:
         return subsonic_response(error_code=70, error_msg="Media item not found")
 

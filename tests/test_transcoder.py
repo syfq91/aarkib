@@ -148,7 +148,7 @@ def test_transcode_supervisor_lifecycle(tmp_path):
 
 
 def test_transcode_supervisor_reaper_cleans_expired(tmp_path):
-    supervisor = TranscodeSupervisor(idle_timeout=0.2)
+    supervisor = TranscodeSupervisor(idle_timeout=10.0, reaper_interval=0.05)
     base_dir = tmp_path / "transcode_reap"
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -169,24 +169,18 @@ def test_transcode_supervisor_reaper_cleans_expired(tmp_path):
         session_dir = session.output_dir
         assert session_dir.exists()
 
-        # Age the session to trigger reaper
-        session.last_activity = time.time() - 2.0
+        # Age the session beyond idle_timeout to trigger background reaper
+        session.last_activity = time.time() - 20.0
 
-        # Wait for reaper loop to run
-        time.sleep(0.4)
+        # Wait for the background reaper thread to automatically clean it up
+        reaped = False
+        for _ in range(30):
+            if supervisor.get_session(sid) is None:
+                reaped = True
+                break
+            time.sleep(0.05)
 
-        # Force a stop if reaper loop interval hasn't ticked yet
-        supervisor._reaper_loop_tick = lambda: None
-        now = time.time()
-        with supervisor._lock:
-            expired = [
-                s
-                for s, obj in supervisor._sessions.items()
-                if now - obj.last_activity > 0.2
-            ]
-        for s in expired:
-            supervisor.stop_session(s)
-
+        assert reaped is True
         assert supervisor.get_session(sid) is None
         assert not session_dir.exists()
 

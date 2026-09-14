@@ -119,19 +119,18 @@ def get_ffprobe_binary(app_config: dict[str, Any] | None = None) -> str | None:
     return None
 
 
-class Config:
-    """Base application configuration."""
+def resolve_secret_key(data_dir: Path) -> str:
+    """Resolve or generate a secret key with atomic 0600 permissions.
 
-    # SECRET_KEY handling:
-    # - If the env var is set to a non-default value, it is used as-is.
-    # - If it is set to the old known-insecure default, we refuse to start.
-    # - Otherwise a random key is generated and persisted to DATA_DIR so that
-    #   sessions survive restarts. Operators should always set SECRET_KEY in
-    #   production.
-    _env_secret = os.getenv("SECRET_KEY")
-    if _env_secret and _env_secret != "aarkib-secret-key-change-in-production":
-        SECRET_KEY: str = _env_secret
-    elif _env_secret:
+    - If the SECRET_KEY env var is set to a non-default value, it is used as-is.
+    - If it is set to the old known-insecure default, we refuse to start.
+    - Otherwise a random key is generated and persisted to data_dir with 0600
+      permissions so that sessions survive restarts.
+    """
+    env_secret = os.getenv("SECRET_KEY")
+    if env_secret and env_secret != "aarkib-secret-key-change-in-production":
+        return env_secret
+    if env_secret:
         raise RuntimeError(
             "SECRET_KEY is set to the known-insecure default "
             "'aarkib-secret-key-change-in-production'. Please set a unique "
@@ -139,22 +138,36 @@ class Config:
             '`python -c "import secrets; print(secrets.token_hex(32))"`.'
         )
 
-    DATA_DIR: Path = Path(os.getenv("AARKIB_DATA_DIR", BASE_DIR / "data"))
-    if "SECRET_KEY" not in locals():
-        # Persist a generated key so sessions survive restarts (dev convenience).
-        _key_path = DATA_DIR / "secret_key"
-        if _key_path.exists():
-            SECRET_KEY = _key_path.read_text().strip()
-        else:
-            import secrets as _secrets
+    key_path = data_dir / "secret_key"
+    try:
+        if key_path.is_file():
+            return key_path.read_text().strip()
+    except OSError:
+        pass
 
-            SECRET_KEY = _secrets.token_hex(32)
-            try:
-                DATA_DIR.mkdir(parents=True, exist_ok=True)
-                _key_path.write_text(SECRET_KEY)
-                os.chmod(_key_path, 0o600)
-            except OSError:
-                pass
+    import secrets
+
+    generated = secrets.token_hex(32)
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(key_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(generated)
+        return generated
+    except FileExistsError:
+        try:
+            return key_path.read_text().strip()
+        except OSError:
+            return generated
+    except OSError:
+        return generated
+
+
+class Config:
+    """Base configuration with safe defaults."""
+
+    DATA_DIR: Path = Path(os.getenv("AARKIB_DATA_DIR", BASE_DIR / "data"))
+    SECRET_KEY: str = resolve_secret_key(DATA_DIR)
     MEDIA_DIRS: list[Path] = discover_media_dirs(DATA_DIR)
     MEDIA_DIR: Path = MEDIA_DIRS[0] if MEDIA_DIRS else (DATA_DIR / "media")
     LIBRARY_DIRS: list[Path] = MEDIA_DIRS

@@ -20,6 +20,12 @@ from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
 
 logger = logging.getLogger(__name__)
 
+VAAPI_PROBE_TIMEOUT: int = 5
+FFPROBE_STREAM_TIMEOUT: int = 12
+SUBTITLE_CONVERT_TIMEOUT: int = 10
+REMUX_PROCESS_STOP_TIMEOUT: float = 1.5
+TRANSCODE_PROCESS_STOP_TIMEOUT: float = 2.0
+
 # Cache detected VAAPI device to avoid probing repeatedly
 _CACHED_VAAPI_DEVICE: str | None = None
 _VAAPI_CHECKED: bool = False
@@ -136,7 +142,9 @@ def detect_vaapi_device(device_override: str | None = None) -> str | None:
                     "null",
                     "-",
                 ]
-                res = subprocess.run(probe_cmd, capture_output=True, timeout=5)
+                res = subprocess.run(
+                    probe_cmd, capture_output=True, timeout=VAAPI_PROBE_TIMEOUT
+                )
                 if res.returncode == 0:
                     logger.info(
                         "Successfully validated VAAPI hardware encoder on device: %s",
@@ -210,7 +218,9 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
             "-show_streams",
             str(file_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=FFPROBE_STREAM_TIMEOUT
+        )
         if res.returncode != 0:
             return result
 
@@ -342,25 +352,26 @@ def evaluate_playback_strategy(
     if not audio_native and a_codec:
         reasons.append(f"Audio codec '{a_codec}' is not natively supported by browser")
 
-    # Evaluate overall strategy
-    if container_native and video_native and audio_native:
-        strategy = PlaybackStrategy.DIRECT_PLAY
-    elif ext in REMUXABLE_CONTAINERS and video_native and audio_native:
-        strategy = PlaybackStrategy.DIRECT_REMUX
-        reasons.append(
-            f"Container '{ext}' can be remuxed to MP4 on-the-fly with zero re-encoding"
-        )
-    elif video_native and not audio_native:
-        strategy = PlaybackStrategy.AUDIO_TRANSCODE
-        reasons.append(
-            "Video stream can be copied directly while audio is transcoded to AAC"
-        )
-    else:
-        strategy = PlaybackStrategy.FULL_TRANSCODE
-        if not reasons:
+    # Evaluate overall strategy using structural pattern matching
+    match (container_native, video_native, audio_native):
+        case (True, True, True):
+            strategy = PlaybackStrategy.DIRECT_PLAY
+        case (False, True, True) if ext in REMUXABLE_CONTAINERS:
+            strategy = PlaybackStrategy.DIRECT_REMUX
             reasons.append(
-                "Transcoding required for optimal browser playback compatibility"
+                f"Container '{ext}' can be remuxed to MP4 on-the-fly with zero re-encoding"
             )
+        case (_, True, False):
+            strategy = PlaybackStrategy.AUDIO_TRANSCODE
+            reasons.append(
+                "Video stream can be copied directly while audio is transcoded to AAC"
+            )
+        case _:
+            strategy = PlaybackStrategy.FULL_TRANSCODE
+            if not reasons:
+                reasons.append(
+                    "Transcoding required for optimal browser playback compatibility"
+                )
 
     return {
         "strategy": strategy.value,
@@ -403,7 +414,7 @@ def generate_vtt_subtitles(file_path: Path, subtitle_index: int = 0) -> bytes:
             "webvtt",
             "-",
         ]
-        res = subprocess.run(cmd, capture_output=True, timeout=10)
+        res = subprocess.run(cmd, capture_output=True, timeout=SUBTITLE_CONVERT_TIMEOUT)
         if res.returncode == 0 and res.stdout.startswith(b"WEBVTT"):
             return res.stdout
     except Exception as e:
@@ -482,7 +493,7 @@ def stream_remux_pipe(
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                 else:
                     proc.terminate()
-                proc.wait(timeout=1.5)
+                proc.wait(timeout=REMUX_PROCESS_STOP_TIMEOUT)
             except Exception:
                 try:
                     if hasattr(os, "killpg") and hasattr(os, "getpgid"):
@@ -515,8 +526,13 @@ class TranscodeSession:
 class TranscodeSupervisor:
     """Manages active FFmpeg HLS transcode sessions, heartbeats, and scratch directory lifecycle."""
 
-    def __init__(self, idle_timeout: float = 60.0):
+    def __init__(
+        self,
+        idle_timeout: float = 60.0,
+        reaper_interval: float = 10.0,
+    ):
         self.idle_timeout = idle_timeout
+        self.reaper_interval = reaper_interval
         self._sessions: dict[str, TranscodeSession] = {}
         self._lock = threading.Lock()
         self._reaper_thread: threading.Thread | None = None
@@ -536,10 +552,17 @@ class TranscodeSupervisor:
         )
         self._reaper_thread.start()
 
+    def stop_reaper(self) -> None:
+        """Stops background idle reaper thread."""
+        self._stop_reaper.set()
+        if self._reaper_thread and self._reaper_thread.is_alive():
+            self._reaper_thread.join(timeout=2.0)
+
     def _reaper_loop(self) -> None:
         """Periodically checks and reaps inactive sessions."""
         while not self._stop_reaper.is_set():
-            time.sleep(10)
+            if self._stop_reaper.wait(timeout=self.reaper_interval):
+                break
             now = time.time()
             expired_ids: list[str] = []
             with self._lock:
@@ -749,7 +772,7 @@ class TranscodeSupervisor:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
                 else:
                     proc.terminate()
-                proc.wait(timeout=2.0)
+                proc.wait(timeout=TRANSCODE_PROCESS_STOP_TIMEOUT)
             except Exception:
                 try:
                     if hasattr(os, "killpg") and hasattr(os, "getpgid"):
@@ -770,7 +793,7 @@ class TranscodeSupervisor:
 
     def cleanup_all(self) -> None:
         """Stops all active sessions and cleans all directories (called on shutdown)."""
-        self._stop_reaper.set()
+        self.stop_reaper()
         session_ids = list(self._sessions.keys())
         for sid in session_ids:
             self.stop_session(sid)

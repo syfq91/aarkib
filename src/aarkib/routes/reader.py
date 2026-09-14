@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, abort, redirect, render_template
+from flask.typing import ResponseReturnValue
 from flask_login import current_user
 from sqlalchemy import select
 
@@ -15,7 +16,7 @@ reader_bp = Blueprint("reader", __name__, url_prefix="/reader")
 @reader_bp.route("/item/<int:item_id>")
 @reader_bp.route("/media/<int:item_id>")
 @require_auth
-def open_media_item(item_id: int):
+def open_media_item(item_id: int) -> ResponseReturnValue:
     """Auto-dispatches to the appropriate reader or player view for the given media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -25,7 +26,8 @@ def open_media_item(item_id: int):
 
 @reader_bp.route("/epub/<int:item_id>")
 @require_auth
-def read_epub(item_id: int):
+def read_epub(item_id: int) -> ResponseReturnValue:
+    """Render in-browser EPUB book reader view."""
     item = db.session.get(MediaItem, item_id)
     if not item:
         abort(404, description="Item not found")
@@ -50,7 +52,8 @@ def read_epub(item_id: int):
 
 @reader_bp.route("/cbz/<int:item_id>")
 @require_auth
-def read_cbz(item_id: int):
+def read_cbz(item_id: int) -> ResponseReturnValue:
+    """Render in-browser CBZ comic canvas reader view."""
     item = db.session.get(MediaItem, item_id)
     if not item:
         abort(404, description="Item not found")
@@ -82,7 +85,8 @@ def read_cbz(item_id: int):
 
 @reader_bp.route("/pdf/<int:item_id>")
 @require_auth
-def read_pdf(item_id: int):
+def read_pdf(item_id: int) -> ResponseReturnValue:
+    """Render in-browser PDF document reader view."""
     item = db.session.get(MediaItem, item_id)
     if not item:
         abort(404, description="Item not found")
@@ -115,7 +119,8 @@ def read_pdf(item_id: int):
 
 @reader_bp.route("/video/<int:item_id>")
 @require_auth
-def watch_video(item_id: int):
+def watch_video(item_id: int) -> ResponseReturnValue:
+    """Render in-browser video player view with seek and resume support."""
     item = db.session.get(MediaItem, item_id)
     if not item:
         abort(404, description="Video not found")
@@ -167,7 +172,7 @@ def watch_video(item_id: int):
 
 @reader_bp.route("/audiobook/<int:item_id>")
 @require_auth
-def play_audiobook(item_id: int):
+def play_audiobook(item_id: int) -> ResponseReturnValue:
     """Dedicated audiobook web player with chapter selection, sleep timer, and speed controls."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -219,7 +224,7 @@ def play_audiobook(item_id: int):
 
 @reader_bp.route("/music/<int:item_id>")
 @require_auth
-def play_music(item_id: int):
+def play_music(item_id: int) -> ResponseReturnValue:
     """Dedicated music track player."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -270,7 +275,7 @@ def play_music(item_id: int):
 
 @reader_bp.route("/podcast/<int:item_id>")
 @require_auth
-def play_podcast(item_id: int):
+def play_podcast(item_id: int) -> ResponseReturnValue:
     """Dedicated podcast episode player with episode notes and jump navigation."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -331,7 +336,7 @@ def play_podcast(item_id: int):
 
 @reader_bp.route("/audio/<int:item_id>")
 @require_auth
-def play_audio(item_id: int):
+def play_audio(item_id: int) -> ResponseReturnValue:
     """Unified audio playback dispatching to dedicated audiobook player or music player."""
     item = db.session.get(MediaItem, item_id)
     if not item:

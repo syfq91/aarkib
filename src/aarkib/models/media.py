@@ -177,7 +177,7 @@ class MediaItemMixin:
         try:
             val = json.loads(self.locked_fields)
             return [str(item) for item in val] if isinstance(val, list) else []
-        except Exception:
+        except json.JSONDecodeError, TypeError:
             return [f.strip() for f in self.locked_fields.split(",") if f.strip()]
 
     def set_locked_fields(self, fields: list[str]) -> None:
@@ -225,7 +225,7 @@ class AudiobookItemMixin(PlayableItemMixin):
         try:
             data = json.loads(self.chapters_json)
             return data if isinstance(data, list) else []
-        except Exception:
+        except json.JSONDecodeError, TypeError:
             return []
 
 

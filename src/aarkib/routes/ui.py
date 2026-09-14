@@ -12,6 +12,7 @@ from flask import (
     send_from_directory,
     url_for,
 )
+from flask.typing import ResponseReturnValue
 from flask_login import current_user
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -34,10 +35,8 @@ ui_bp = Blueprint("ui", __name__)
 @ui_bp.route("/")
 @ui_bp.route("/library")
 @require_auth
-def index():
-    authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
-    series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
-    tags = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
+def index() -> ResponseReturnValue:
+    """Render the main library bookshelf view with shelves, continue-reading, and SSR fallback."""
     total_items = db.session.scalar(select(func.count(MediaItem.id))) or 0
 
     user_id = current_user.id if current_user.is_authenticated else None
@@ -149,9 +148,6 @@ def index():
 
     return render_template(
         "library.html",
-        authors=authors,
-        series_list=series_list,
-        tags=tags,
         total_items=total_items,
         total_books=total_items,
         initial_items=initial_items,
@@ -167,7 +163,8 @@ def index():
 
 @ui_bp.route("/media/<int:item_id>")
 @require_auth
-def media_detail(item_id: int):
+def media_detail(item_id: int) -> ResponseReturnValue:
+    """Render the detailed view for a single media item with metadata and playback options."""
     item = db.session.get(MediaItem, item_id)
     if not item:
         abort(404, description="Media item not found")
@@ -190,7 +187,8 @@ def media_detail(item_id: int):
 
 @ui_bp.route("/authors")
 @require_auth
-def authors():
+def authors() -> ResponseReturnValue:
+    """Render the authors and creators catalog view."""
     from sqlalchemy import func
 
     from aarkib.models.creator import media_creators
@@ -207,7 +205,8 @@ def authors():
 
 @ui_bp.route("/series")
 @require_auth
-def series():
+def series() -> ResponseReturnValue:
+    """Render the series and collections catalog view."""
     from sqlalchemy import func
 
     rows = db.session.execute(
@@ -222,7 +221,8 @@ def series():
 
 @ui_bp.route("/tags")
 @require_auth
-def tags():
+def tags() -> ResponseReturnValue:
+    """Render the tags and genres catalog view."""
     from sqlalchemy import func
 
     from aarkib.models.tag import media_tags
@@ -250,7 +250,8 @@ ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users"}
 @ui_bp.route("/settings")
 @ui_bp.route("/settings/<category>")
 @require_auth
-def settings(category: str | None = None):
+def settings(category: str | None = None) -> ResponseReturnValue:
+    """Render settings views for configuration categories (system, libraries, users, plugins, integrations)."""
     is_admin = bool(current_user.is_authenticated and current_user.is_admin)
 
     # Default category selection: admin defaults to system, reader to libraries
@@ -330,7 +331,8 @@ def settings(category: str | None = None):
 
 
 @ui_bp.route("/manifest.webmanifest")
-def pwa_manifest():
+def pwa_manifest() -> ResponseReturnValue:
+    """Serve the Web App Manifest for PWA installation."""
     static_dir = Path(current_app.static_folder or "static")
     return send_from_directory(
         static_dir, "manifest.webmanifest", mimetype="application/manifest+json"
@@ -338,6 +340,7 @@ def pwa_manifest():
 
 
 @ui_bp.route("/sw.js")
-def pwa_sw():
+def pwa_sw() -> ResponseReturnValue:
+    """Serve the Progressive Web App service worker script."""
     static_dir = Path(current_app.static_folder or "static")
     return send_from_directory(static_dir, "sw.js", mimetype="application/javascript")

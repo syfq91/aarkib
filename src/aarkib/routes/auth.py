@@ -13,6 +13,7 @@ from flask import (
     request,
     url_for,
 )
+from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func, select
 
@@ -92,7 +93,8 @@ def is_safe_url(target: str | None) -> bool:
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
-def login():
+def login() -> ResponseReturnValue:
+    """Handle user login authentication and redirect to target page."""
     if request.method == "GET" and current_user.is_authenticated:
         return redirect(url_for("ui.index"))
 
@@ -120,7 +122,8 @@ def login():
 
 
 @auth_bp.route("/setup", methods=["GET", "POST"])
-def setup():
+def setup() -> ResponseReturnValue:
+    """Handle initial administrator account setup when database has 0 users."""
     user_count = db.session.scalar(select(func.count(User.id))) or 0
     if user_count > 0:
         if current_user.is_authenticated:
@@ -154,7 +157,8 @@ def setup():
 
 @auth_bp.route("/logout")
 @login_required
-def logout():
+def logout() -> ResponseReturnValue:
+    """Log out the current authenticated user and return to bookshelf."""
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("ui.index"))
@@ -162,7 +166,8 @@ def logout():
 
 @auth_bp.route("/profile", methods=["GET", "POST"])
 @login_required
-def profile():
+def profile() -> ResponseReturnValue:
+    """View and update current user credentials and reading statistics."""
     if request.method == "POST":
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
@@ -228,7 +233,8 @@ def profile():
 
 @auth_bp.route("/users", methods=["GET", "POST"])
 @admin_required
-def manage_users():
+def manage_users() -> ResponseReturnValue:
+    """Manage existing user accounts or create new reader/admin users."""
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -268,7 +274,8 @@ def manage_users():
 
 @auth_bp.route("/users/<int:user_id>/toggle-admin", methods=["POST"])
 @admin_required
-def toggle_admin(user_id: int):
+def toggle_admin(user_id: int) -> ResponseReturnValue:
+    """Toggle administrator privileges for a specific user account."""
     target_user = db.session.get(User, user_id)
     referrer = request.referrer or ""
     dest = (
@@ -302,7 +309,8 @@ def toggle_admin(user_id: int):
 
 @auth_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @admin_required
-def reset_password(user_id: int):
+def reset_password(user_id: int) -> ResponseReturnValue:
+    """Update, set, or remove the password for a specific user account."""
     target_user = db.session.get(User, user_id)
     referrer = request.referrer or ""
     dest = (
@@ -337,7 +345,8 @@ def reset_password(user_id: int):
 
 @auth_bp.route("/users/<int:user_id>/delete", methods=["POST"])
 @admin_required
-def delete_user(user_id: int):
+def delete_user(user_id: int) -> ResponseReturnValue:
+    """Delete a user account and purge all associated reading progress and bookmarks."""
     target_user = db.session.get(User, user_id)
     referrer = request.referrer or ""
     dest = (

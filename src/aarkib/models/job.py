@@ -57,7 +57,7 @@ class JobRecord(db.Model):
         if self.result_payload:
             try:
                 result = json.loads(self.result_payload)
-            except Exception:
+            except json.JSONDecodeError, TypeError:
                 result = {"raw": self.result_payload}
 
         created_iso = self.created_at.isoformat() if self.created_at else None

@@ -28,7 +28,6 @@ from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
-from aarkib.models.playlist import UserFavorite
 from aarkib.plugins.base import ProtocolPlugin
 from aarkib.services.media_service import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 
@@ -1309,23 +1308,15 @@ def toggle_favorite_item(user_id: str, item_id: str, user: User | None = None):
     if not uid or not db_id:
         abort(400, description="Invalid user or item id")
 
-    item = db.session.get(MediaItem, db_id)
-    if not item:
+    from aarkib.services.playlist_service import toggle_favorite as toggle_fav_service
+
+    explicit_state = True if request.method == "POST" else False
+    try:
+        toggle_fav_service(uid, db_id, explicit_state=explicit_state)
+    except KeyError:
         abort(404, description="Item not found")
 
-    fav = db.session.scalar(
-        select(UserFavorite).where(
-            UserFavorite.user_id == uid,
-            UserFavorite.media_item_id == item.id,
-        )
-    )
-    if request.method == "POST" and not fav:
-        fav = UserFavorite(user_id=uid, media_item_id=item.id)
-        db.session.add(fav)
-    elif request.method == "DELETE" and fav:
-        db.session.delete(fav)
-
-    db.session.commit()
+    item = db.session.get(MediaItem, db_id)
     return jsonify(_format_item(item, user_id=uid))
 
 

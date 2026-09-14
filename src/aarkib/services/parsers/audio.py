@@ -20,6 +20,8 @@ from aarkib.services.parsers.base import (
 
 logger = logging.getLogger(__name__)
 
+FFPROBE_CHAPTERS_TIMEOUT: int = 10
+
 AUDIO_FILENAME_PATTERNS = [
     # 01 - Artist - Title
     re.compile(
@@ -610,7 +612,9 @@ def read_ffprobe_chapters(file_path: Path) -> list[dict[str, Any]]:
             "-show_chapters",
             str(file_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=FFPROBE_CHAPTERS_TIMEOUT
+        )
         if res.returncode != 0:
             return []
 

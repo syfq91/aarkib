@@ -6,9 +6,11 @@ import os
 import zipfile
 from datetime import UTC, datetime
 from functools import wraps
+from http import HTTPStatus
 from pathlib import Path
 
 from flask import Blueprint, Response, abort, current_app, jsonify, request, send_file
+from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import selectinload
@@ -86,9 +88,11 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 MAX_PER_PAGE = 100
 
 
-def api_error(message: str, status: int = 400):
+def api_error(
+    message: str, status: int | HTTPStatus = HTTPStatus.BAD_REQUEST
+) -> ResponseReturnValue:
     """Return a standardized JSON error envelope."""
-    return jsonify({"error": message}), status
+    return jsonify({"error": message}), int(status)
 
 
 def _is_within_covers(file_path: Path) -> bool:
@@ -190,7 +194,10 @@ def api_admin_required(view):
     def wrapped(*args, **kwargs):
         """Reject non-admin requests with a JSON 403 before calling the view."""
         if not current_user.is_admin:
-            return jsonify({"error": "Administrator privileges required"}), 403
+            return (
+                jsonify({"error": "Administrator privileges required"}),
+                HTTPStatus.FORBIDDEN,
+            )
         return view(*args, **kwargs)
 
     return wrapped
@@ -211,17 +218,17 @@ def enforce_api_auth():
             login_user(user)
 
     if not current_user.is_authenticated:
-        return jsonify({"error": "Authentication required"}), 401
+        return jsonify({"error": "Authentication required"}), HTTPStatus.UNAUTHORIZED
 
 
 @api_bp.route("/health", methods=["GET"])
-def health():
+def health() -> ResponseReturnValue:
     """Healthcheck endpoint for container monitoring."""
     return jsonify({"status": "healthy", "app": "aarkib"})
 
 
 @api_bp.route("/plugins", methods=["GET"])
-def list_plugins():
+def list_plugins() -> ResponseReturnValue:
     """Lists all registered plugins with their status, type, and health metrics."""
     from aarkib.plugins import plugin_registry
 
@@ -240,7 +247,7 @@ def list_plugins():
 
 
 @api_bp.route("/jobs", methods=["GET"])
-def list_jobs():
+def list_jobs() -> ResponseReturnValue:
     """List recent background tasks and their execution states."""
     limit = min(request.args.get("limit", 20, type=int), 100)
     jobs = job_manager.list_jobs(limit=limit)
@@ -248,7 +255,7 @@ def list_jobs():
 
 
 @api_bp.route("/jobs/<job_id>", methods=["GET"])
-def get_job(job_id: str):
+def get_job(job_id: str) -> ResponseReturnValue:
     """Retrieve details, progress, and results for a specific background job."""
     job = job_manager.get_job(job_id)
     if not job:
@@ -258,7 +265,7 @@ def get_job(job_id: str):
 
 @api_bp.route("/jobs/<job_id>/cancel", methods=["POST"])
 @api_admin_required
-def cancel_job(job_id: str):
+def cancel_job(job_id: str) -> ResponseReturnValue:
     """Cancel a queued or running background job."""
     res = job_manager.cancel_job(job_id, app=current_app._get_current_object())
     if not res:
@@ -269,7 +276,7 @@ def cancel_job(job_id: str):
 
 
 @api_bp.route("/media", methods=["GET"])
-def list_media():
+def list_media() -> ResponseReturnValue:
     """List catalog items with filtering (q, media_type, library), pagination, and progress."""
     q = request.args.get("q", "").strip()
     author_id = request.args.get("author_id", type=int)
@@ -286,11 +293,12 @@ def list_media():
     )
     sort_by = request.args.get("sort", "added_at")
     order = request.args.get("order", "desc")
-    page = request.args.get("page", 1, type=int)
-    per_page = min(
-        request.args.get("per_page", current_app.config.get("PAGE_SIZE", 24), type=int),
-        MAX_PER_PAGE,
+    raw_page = request.args.get("page", 1, type=int)
+    page = max(1, raw_page if raw_page is not None else 1)
+    raw_per_page = request.args.get(
+        "per_page", current_app.config.get("PAGE_SIZE", 24), type=int
     )
+    per_page = max(1, min(raw_per_page or 24, MAX_PER_PAGE))
 
     query = select(MediaItem).options(
         selectinload(MediaItem.authors),
@@ -474,7 +482,7 @@ def list_media():
 
 
 @api_bp.route("/search", methods=["GET"])
-def search_catalog():
+def search_catalog() -> ResponseReturnValue:
     """Unified full-text search returning results grouped by media type."""
     q = request.args.get("q", "").strip()
     library_id = request.args.get("library_id", type=int)
@@ -488,7 +496,7 @@ def search_catalog():
 
 @api_bp.route("/search/reindex", methods=["POST"])
 @api_admin_required
-def reindex_search():
+def reindex_search() -> ResponseReturnValue:
     """Admin-only endpoint to trigger a complete rebuild of the SQLite FTS5 index."""
     from aarkib.services.search import rebuild_search_index
 
@@ -504,7 +512,7 @@ def reindex_search():
 
 @api_bp.route("/fs/directories", methods=["GET"])
 @api_admin_required
-def browse_directories():
+def browse_directories() -> ResponseReturnValue:
     """Browse server directories for interactive folder selection (Admin only)."""
     raw_path = request.args.get("path", "").strip()
     if not raw_path:
@@ -539,9 +547,14 @@ def browse_directories():
                 except PermissionError, OSError:
                     continue
     except PermissionError:
-        return jsonify({"error": f"Permission denied reading directory: {p}"}), 403
+        return (
+            jsonify({"error": f"Permission denied reading directory: {p}"}),
+            HTTPStatus.FORBIDDEN,
+        )
     except Exception as e:
-        return jsonify({"error": f"Error reading directory: {e}"}), 400
+        return jsonify(
+            {"error": f"Error reading directory: {e}"}
+        ), HTTPStatus.BAD_REQUEST
 
     subdirs.sort(key=lambda x: x["name"].lower())
 
@@ -553,14 +566,32 @@ def browse_directories():
         current_app.config.get("MEDIA_DIR", data_dir_path / "media")
     ).resolve()
 
-    candidates = [
+    candidates: list[tuple[str, Path]] = [
         ("Data Root", data_dir_path),
         ("Media Folder", media_dir_path),
-        ("System Root (/)", Path("/").resolve()),
-        ("Mounted Media (/media)", Path("/media").resolve()),
-        ("Mounts (/mnt)", Path("/mnt").resolve()),
-        ("App Data (/app/data)", Path("/app/data").resolve()),
     ]
+
+    for md in current_app.config.get("MEDIA_DIRS", []):
+        try:
+            p_md = Path(md).resolve()
+            candidates.append((f"Media ({p_md.name or str(p_md)})", p_md))
+        except Exception:
+            continue
+
+    try:
+        home_path = Path.home().resolve()
+        candidates.append(("User Home (~)", home_path))
+    except Exception:
+        pass
+
+    candidates.extend(
+        [
+            ("System Root (/)", Path("/").resolve()),
+            ("Mounted Media (/media)", Path("/media").resolve()),
+            ("Mounts (/mnt)", Path("/mnt").resolve()),
+            ("App Data (/app/data)", Path("/app/data").resolve()),
+        ]
+    )
     for label, candidate_path in candidates:
         try:
             if candidate_path.exists() and candidate_path.is_dir():
@@ -582,7 +613,7 @@ def browse_directories():
 
 
 @api_bp.route("/libraries", methods=["GET"])
-def list_libraries():
+def list_libraries() -> ResponseReturnValue:
     """List all configured media folders (libraries) with media types and item counts."""
     from aarkib.services.scanner import get_library_definitions
 
@@ -604,7 +635,7 @@ def list_libraries():
 
 @api_bp.route("/libraries", methods=["POST"])
 @api_admin_required
-def add_library():
+def add_library() -> ResponseReturnValue:
     """Add and auto-scan a new media folder (library) with an optional custom media type."""
     data = request.get_json(silent=True) or {}
     raw_path = str(data.get("path", "")).strip()
@@ -682,7 +713,7 @@ def add_library():
 
 
 @api_bp.route("/libraries/<identifier>", methods=["GET"])
-def get_library_info(identifier: str):
+def get_library_info(identifier: str) -> ResponseReturnValue:
     """Return details for a single library by ID or slug."""
     try:
         lib = resolve_library(identifier)
@@ -694,7 +725,7 @@ def get_library_info(identifier: str):
 
 @api_bp.route("/libraries/<identifier>", methods=["PUT"])
 @api_admin_required
-def update_library(identifier: str):
+def update_library(identifier: str) -> ResponseReturnValue:
     """Update a library's name/media_type and reclassify indexed books accordingly."""
     try:
         lib = resolve_library(identifier)
@@ -761,7 +792,7 @@ def update_library(identifier: str):
 
 @api_bp.route("/libraries/<identifier>", methods=["DELETE"])
 @api_admin_required
-def delete_library(identifier: str):
+def delete_library(identifier: str) -> ResponseReturnValue:
     """Delete a library and all catalog items indexed under its folder."""
     try:
         lib = resolve_library(identifier)
@@ -800,7 +831,7 @@ def delete_library(identifier: str):
 
 @api_bp.route("/libraries/<identifier>/scan", methods=["POST"])
 @api_admin_required
-def scan_single_library(identifier: str):
+def scan_single_library(identifier: str) -> ResponseReturnValue:
     """Trigger a targeted rescan of a specific media folder (library)."""
     sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
     if sync_mode:
@@ -830,7 +861,7 @@ def scan_single_library(identifier: str):
 
 
 @api_bp.route("/media/<int:item_id>", methods=["GET"])
-def get_media_item(item_id: int):
+def get_media_item(item_id: int) -> ResponseReturnValue:
     """Return full item details, including user progress, for a single catalog item."""
     item = db.session.scalar(
         select(MediaItem)
@@ -910,7 +941,7 @@ def get_media_item(item_id: int):
 
 
 @api_bp.route("/media/<int:item_id>/cover", methods=["GET"])
-def get_media_cover(item_id: int):
+def get_media_cover(item_id: int) -> ResponseReturnValue:
     """Serve the cached WebP cover/poster image for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -977,7 +1008,7 @@ def get_media_cover(item_id: int):
 @api_bp.route("/media/<int:item_id>/file", methods=["GET"])
 @api_bp.route("/media/<int:item_id>/file/<path:filename>", methods=["GET"])
 @api_bp.route("/media/<int:item_id>/stream", methods=["GET"])
-def get_media_file(item_id: int, filename: str | None = None):
+def get_media_file(item_id: int, filename: str | None = None) -> ResponseReturnValue:
     """Stream the original media file with HTTP 206 byte-range support."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1026,7 +1057,7 @@ def get_media_file(item_id: int, filename: str | None = None):
 
 
 @api_bp.route("/media/<int:item_id>/playback", methods=["GET"])
-def get_media_playback(item_id: int):
+def get_media_playback(item_id: int) -> ResponseReturnValue:
     """Retrieve format-agnostic playback or reading descriptor for any media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1062,7 +1093,7 @@ def get_media_playback(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/stream/info", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/info", methods=["GET"])
-def get_stream_info(item_id: int):
+def get_stream_info(item_id: int) -> ResponseReturnValue:
     """Returns technical stream metadata, codecs, tracks, and recommended playback strategy."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1106,7 +1137,7 @@ def get_stream_info(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/stream/remux", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/remux", methods=["GET"])
-def stream_remux_video(item_id: int):
+def stream_remux_video(item_id: int) -> ResponseReturnValue:
     """Progressive on-the-fly container remux (e.g. MKV -> fragmented MP4) via FFmpeg pipe."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1145,7 +1176,7 @@ def stream_remux_video(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/stream/hls/master.m3u8", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/hls/master.m3u8", methods=["GET"])
-def get_hls_master_playlist(item_id: int):
+def get_hls_master_playlist(item_id: int) -> ResponseReturnValue:
     """Spawns/attaches to an HLS transcode session and returns the master playlist."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1208,7 +1239,7 @@ def get_hls_master_playlist(item_id: int):
     "/media/<int:item_id>/stream/hls/<session_id>/playlist.m3u8", methods=["GET"]
 )
 @api_bp.route("/stream/<int:item_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
-def get_hls_session_playlist(item_id: int, session_id: str):
+def get_hls_session_playlist(item_id: int, session_id: str) -> ResponseReturnValue:
     """Serves the HLS playlist generated by an active transcode session."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -1231,7 +1262,9 @@ def get_hls_session_playlist(item_id: int, session_id: str):
 @api_bp.route(
     "/stream/<int:item_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
 )
-def get_hls_segment(item_id: int, session_id: str, segment_name: str):
+def get_hls_segment(
+    item_id: int, session_id: str, segment_name: str
+) -> ResponseReturnValue:
     """Serves an HLS segment (.m4s or init.mp4) and updates session heartbeat."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -1260,7 +1293,7 @@ def get_hls_segment(item_id: int, session_id: str, segment_name: str):
     "/media/<int:item_id>/stream/hls/<session_id>/heartbeat", methods=["POST"]
 )
 @api_bp.route("/stream/<int:item_id>/hls/<session_id>/heartbeat", methods=["POST"])
-def hls_heartbeat(item_id: int, session_id: str):
+def hls_heartbeat(item_id: int, session_id: str) -> ResponseReturnValue:
     """Client heartbeat ping to keep an active HLS transcode session alive."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -1274,7 +1307,7 @@ def hls_heartbeat(item_id: int, session_id: str):
 
 @api_bp.route("/media/<int:item_id>/stream/hls/<session_id>/stop", methods=["POST"])
 @api_bp.route("/stream/<int:item_id>/hls/<session_id>/stop", methods=["POST"])
-def stop_hls_session(item_id: int, session_id: str):
+def stop_hls_session(item_id: int, session_id: str) -> ResponseReturnValue:
     """Explicitly stops a transcode session and prunes its scratch directory."""
     from aarkib.services.transcoder import transcode_supervisor
 
@@ -1284,7 +1317,7 @@ def stop_hls_session(item_id: int, session_id: str):
 
 @api_bp.route("/media/<int:item_id>/stream/subtitles", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/subtitles", methods=["GET"])
-def list_subtitles(item_id: int):
+def list_subtitles(item_id: int) -> ResponseReturnValue:
     """Returns list of embedded subtitle tracks for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1316,7 +1349,7 @@ def list_subtitles(item_id: int):
     "/media/<int:item_id>/stream/subtitles/<int:track_index>.vtt", methods=["GET"]
 )
 @api_bp.route("/stream/<int:item_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
-def get_subtitle_vtt(item_id: int, track_index: int):
+def get_subtitle_vtt(item_id: int, track_index: int) -> ResponseReturnValue:
     """Extracts and converts the requested embedded subtitle track to WebVTT."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1347,7 +1380,7 @@ def get_subtitle_vtt(item_id: int, track_index: int):
     "/media/<int:item_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",
     methods=["GET"],
 )
-def download_media_file(item_id: int, preset: str | None = None):
+def download_media_file(item_id: int, preset: str | None = None) -> ResponseReturnValue:
     """Download a media file, optionally served from a precomputed e-ink optimized EPUB."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1420,7 +1453,7 @@ def download_media_file(item_id: int, preset: str | None = None):
 
 
 @api_bp.route("/optimizer/presets", methods=["GET"])
-def get_optimizer_presets():
+def get_optimizer_presets() -> ResponseReturnValue:
     """List supported e-ink optimization presets."""
     from aarkib.services.optimizer import DEVICE_PRESETS
 
@@ -1429,7 +1462,7 @@ def get_optimizer_presets():
 
 @api_bp.route("/media/<int:item_id>/optimize", methods=["POST"])
 @api_admin_required
-def precompute_media_optimization(item_id: int):
+def precompute_media_optimization(item_id: int) -> ResponseReturnValue:
     """Pre-generate optimized EPUB cache for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item or item.file_format != "epub":
@@ -1501,7 +1534,7 @@ def precompute_media_optimization(item_id: int):
 
 
 @api_bp.route("/media/<int:item_id>/pages", methods=["GET"])
-def get_cbz_pages(item_id: int):
+def get_cbz_pages(item_id: int) -> ResponseReturnValue:
     """List page metadata (path, width, height) for a CBZ comic."""
     item = db.session.get(MediaItem, item_id)
     if not item or item.file_format not in ("cbz", "zip", "cbr"):
@@ -1551,7 +1584,7 @@ def get_cbz_pages(item_id: int):
 
 
 @api_bp.route("/media/<int:item_id>/page/<int:page_num>", methods=["GET"])
-def get_cbz_page_image(item_id: int, page_num: int):
+def get_cbz_page_image(item_id: int, page_num: int) -> ResponseReturnValue:
     """Serve a single page image from a CBZ comic archive."""
     item = db.session.get(MediaItem, item_id)
     if not item or item.file_format not in ("cbz", "zip", "cbr"):
@@ -1608,7 +1641,7 @@ def get_cbz_page_image(item_id: int, page_num: int):
 
 
 @api_bp.route("/media/<int:item_id>/progress", methods=["GET", "POST"])
-def media_progress(item_id: int):
+def media_progress(item_id: int) -> ResponseReturnValue:
     """Fetch or update reading/video progress for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1636,7 +1669,7 @@ def media_progress(item_id: int):
 
 
 @api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])
-def bookmarks(item_id: int):
+def bookmarks(item_id: int) -> ResponseReturnValue:
     """List or create bookmarks for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1685,7 +1718,7 @@ def bookmarks(item_id: int):
 
 
 @api_bp.route("/bookmarks/<int:bookmark_id>", methods=["DELETE"])
-def delete_bookmark(bookmark_id: int):
+def delete_bookmark(bookmark_id: int) -> ResponseReturnValue:
     """Delete a bookmark, restricted to its owner (or any anonymous bookmark)."""
     user_id = current_user.id if current_user.is_authenticated else None
     try:
@@ -1700,7 +1733,7 @@ def delete_bookmark(bookmark_id: int):
 @api_bp.route("/library/scan", methods=["POST"])
 @api_bp.route("/libraries/scan", methods=["POST"])
 @api_admin_required
-def trigger_scan():
+def trigger_scan() -> ResponseReturnValue:
     """Trigger a full scan across all configured media folders."""
     sync_mode = request.args.get("sync", "").lower() in ("true", "1", "yes")
     if sync_mode:
@@ -1727,7 +1760,7 @@ def trigger_scan():
 
 @api_bp.route("/media/<int:item_id>/enrich", methods=["POST"])
 @api_admin_required
-def enrich_media_item(item_id: int):
+def enrich_media_item(item_id: int) -> ResponseReturnValue:
     """Fetch online metadata for a single media item (books, video, music)."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1748,7 +1781,7 @@ def enrich_media_item(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/metadata/search", methods=["GET"])
 @api_admin_required
-def search_metadata_candidates(item_id: int):
+def search_metadata_candidates(item_id: int) -> ResponseReturnValue:
     """Search external metadata providers for candidate matches with confidence scores."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1790,7 +1823,7 @@ def search_metadata_candidates(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/metadata/apply", methods=["POST"])
 @api_admin_required
-def apply_metadata_candidate(item_id: int):
+def apply_metadata_candidate(item_id: int) -> ResponseReturnValue:
     """Apply a selected metadata candidate to the media item and optionally update field locks."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1855,7 +1888,7 @@ def apply_metadata_candidate(item_id: int):
 
 @api_bp.route("/media/<int:item_id>/metadata/locked-fields", methods=["GET", "PUT"])
 @api_admin_required
-def manage_locked_fields(item_id: int):
+def manage_locked_fields(item_id: int) -> ResponseReturnValue:
     """Inspect or update the locked fields configuration for a media item."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1891,7 +1924,7 @@ def manage_locked_fields(item_id: int):
 @api_bp.route("/library/enrich", methods=["POST"])
 @api_bp.route("/libraries/enrich", methods=["POST"])
 @api_admin_required
-def enrich_library():
+def enrich_library() -> ResponseReturnValue:
     """Fetch online metadata for indexed media items across every library."""
     data = request.get_json(silent=True) or {}
     overwrite = bool(data.get("overwrite", False))
@@ -1946,7 +1979,7 @@ def enrich_library():
 @api_bp.route("/media/<int:item_id>", methods=["PATCH"])
 @api_bp.route("/media/<int:item_id>/edit", methods=["POST"])
 @api_admin_required
-def edit_media_metadata(item_id: int):
+def edit_media_metadata(item_id: int) -> ResponseReturnValue:
     """Manually edit a media item's title, creators, series, tags, and descriptive fields."""
     item = db.session.get(MediaItem, item_id)
     if not item:
@@ -1992,7 +2025,7 @@ def edit_media_metadata(item_id: int):
 
 
 @api_bp.route("/media/<int:item_id>/favorite", methods=["POST"])
-def toggle_favorite(item_id: int):
+def toggle_favorite(item_id: int) -> ResponseReturnValue:
     """Toggle or update favorite status for a media item."""
     if not current_user.is_authenticated:
         return api_error("Authentication required to manage favorites", 401)
@@ -2015,7 +2048,7 @@ def toggle_favorite(item_id: int):
 
 
 @api_bp.route("/favorites", methods=["GET"])
-def get_favorites():
+def get_favorites() -> ResponseReturnValue:
     """Returns all favorited media items for the current user."""
     if not current_user.is_authenticated:
         return api_error("Authentication required to list favorites", 401)
@@ -2047,7 +2080,7 @@ def get_favorites():
 
 
 @api_bp.route("/playlists", methods=["GET"])
-def get_playlists():
+def get_playlists() -> ResponseReturnValue:
     """List playlists belonging to the user or public playlists."""
     user_id = current_user.id if current_user.is_authenticated else None
     playlists = list_playlists_service(user_id)
@@ -2055,7 +2088,7 @@ def get_playlists():
 
 
 @api_bp.route("/playlists", methods=["POST"])
-def create_playlist():
+def create_playlist() -> ResponseReturnValue:
     """Create a new playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
     data = request.get_json(silent=True) or {}
@@ -2081,7 +2114,7 @@ def create_playlist():
 
 
 @api_bp.route("/playlists/<int:playlist_id>", methods=["GET"])
-def get_playlist_detail(playlist_id: int):
+def get_playlist_detail(playlist_id: int) -> ResponseReturnValue:
     """Get playlist details and its ordered items."""
     user_id = current_user.id if current_user.is_authenticated else None
     try:
@@ -2095,7 +2128,7 @@ def get_playlist_detail(playlist_id: int):
 
 
 @api_bp.route("/playlists/<int:playlist_id>/items", methods=["POST"])
-def add_playlist_item(playlist_id: int):
+def add_playlist_item(playlist_id: int) -> ResponseReturnValue:
     """Add a media item to a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
     data = request.get_json(silent=True) or {}
@@ -2119,7 +2152,7 @@ def add_playlist_item(playlist_id: int):
 
 
 @api_bp.route("/playlists/<int:playlist_id>/items/<int:item_id>", methods=["DELETE"])
-def remove_playlist_item(playlist_id: int, item_id: int):
+def remove_playlist_item(playlist_id: int, item_id: int) -> ResponseReturnValue:
     """Remove a media item from a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
     try:
@@ -2133,7 +2166,7 @@ def remove_playlist_item(playlist_id: int, item_id: int):
 
 
 @api_bp.route("/playlists/<int:playlist_id>/reorder", methods=["PUT", "POST"])
-def reorder_playlist_items(playlist_id: int):
+def reorder_playlist_items(playlist_id: int) -> ResponseReturnValue:
     """Reorder items in a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
     data = request.get_json(silent=True) or {}
@@ -2152,7 +2185,7 @@ def reorder_playlist_items(playlist_id: int):
 
 
 @api_bp.route("/playlists/<int:playlist_id>", methods=["DELETE"])
-def delete_playlist(playlist_id: int):
+def delete_playlist(playlist_id: int) -> ResponseReturnValue:
     """Delete a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
     try:
@@ -2167,7 +2200,7 @@ def delete_playlist(playlist_id: int):
 
 @api_bp.route("/podcasts/opml/import", methods=["POST"])
 @api_admin_required
-def import_opml():
+def import_opml() -> ResponseReturnValue:
     """Import podcast show subscriptions from an uploaded OPML file or XML payload."""
     xml_content = None
     if "file" in request.files:
@@ -2202,7 +2235,7 @@ def import_opml():
 
 @api_bp.route("/settings", methods=["GET"])
 @api_admin_required
-def get_settings():
+def get_settings() -> ResponseReturnValue:
     """Retrieve all effective system settings and their metadata."""
     from aarkib.services.settings_service import get_effective_settings
 
@@ -2212,7 +2245,7 @@ def get_settings():
 
 @api_bp.route("/settings", methods=["PATCH", "PUT"])
 @api_admin_required
-def update_system_settings():
+def update_system_settings() -> ResponseReturnValue:
     """Update system settings dynamically."""
     from aarkib.services.settings_service import update_settings
 
@@ -2238,7 +2271,7 @@ def update_system_settings():
 
 @api_bp.route("/settings/reset", methods=["POST"])
 @api_admin_required
-def reset_system_settings():
+def reset_system_settings() -> ResponseReturnValue:
     """Reset system settings to environment / hardcoded defaults."""
     from aarkib.services.settings_service import reset_settings_to_defaults
 

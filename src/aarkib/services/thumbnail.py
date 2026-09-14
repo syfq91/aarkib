@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def generate_cover_webp(
@@ -17,5 +20,6 @@ def generate_cover_webp(
             img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
             img.save(output_path, "WEBP", quality=85, method=6)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to generate cover webp at %s: %s", output_path, exc)
         return False

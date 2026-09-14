@@ -118,3 +118,43 @@ def test_configurable_ffmpeg_paths(monkeypatch, tmp_path):
     # Test config dict override
     assert get_ffmpeg_binary({"FFMPEG_PATH": str(fake_ffmpeg)}) == str(fake_ffmpeg)
     assert get_ffprobe_binary({"FFPROBE_PATH": str(fake_ffprobe)}) == str(fake_ffprobe)
+
+
+def test_symlink_escape_rejected(app, client, tmp_path):
+    """Verifies that symlinks within library pointing to external files are rejected with 403."""
+    outside_dir = tmp_path / "outside_jail"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    outside_file = outside_dir / "sensitive_secret.txt"
+    outside_file.write_text("classified symlink content")
+
+    media_dir = tmp_path / "data" / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    symlink_file = media_dir / "symlink_escape.txt"
+    symlink_file.symlink_to(outside_file)
+
+    try:
+        with app.app_context():
+            app.config["TESTING"] = False
+            # Direct check: resolves outside permitted library roots
+            assert is_safe_media_path(symlink_file) is False
+
+            # Endpoint check via API
+            item = MediaItem(
+                title="Symlink Escape Item",
+                media_type="book",
+                file_format="txt",
+                original_file_path=str(symlink_file),
+                file_hash="symlink12345",
+                file_size=26,
+            )
+            db.session.add(item)
+            db.session.commit()
+            item_id = item.id
+
+        resp = client.get(f"/api/media/{item_id}/file")
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert "outside configured library roots" in data["error"]
+    finally:
+        with app.app_context():
+            app.config["TESTING"] = True

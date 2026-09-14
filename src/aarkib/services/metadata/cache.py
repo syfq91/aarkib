@@ -45,9 +45,6 @@ class MetadataCacheManager:
             entry = db.session.get(MetadataCacheEntry, cache_key)
             if entry and not entry.is_expired:
                 return entry.get_data()
-            elif entry and entry.is_expired:
-                db.session.delete(entry)
-                db.session.commit()
         except Exception as exc:
             logger.debug("Metadata cache get error: %s", exc)
         return None

@@ -39,7 +39,7 @@ class MetadataCacheEntry(db.Model):
         """Parses and returns stored JSON response payload."""
         try:
             return json.loads(self.response_json)
-        except Exception:
+        except json.JSONDecodeError, TypeError:
             return None
 
     def __repr__(self) -> str:

@@ -14,6 +14,9 @@ from aarkib.services.parsers.base import ParsedVideoMetadata
 
 logger = logging.getLogger(__name__)
 
+FFPROBE_VIDEO_TIMEOUT: int = 10
+FFMPEG_FRAME_TIMEOUT: int = 10
+
 # TV Show pattern matchers
 TV_PATTERNS = [
     re.compile(
@@ -247,7 +250,9 @@ def read_ffprobe_metadata(file_path: Path) -> dict[str, Any] | None:
             "v:0",
             str(file_path),
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        res = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=FFPROBE_VIDEO_TIMEOUT
+        )
         if res.returncode != 0:
             return None
 
@@ -333,7 +338,7 @@ def extract_video_cover(file_path: Path) -> bytes | None:
                 "mjpeg",
                 "-",
             ]
-            res = subprocess.run(cmd, capture_output=True, timeout=10)
+            res = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_FRAME_TIMEOUT)
             if res.returncode == 0 and len(res.stdout) > 500:
                 return res.stdout
         except Exception as e:
