@@ -173,9 +173,9 @@ aarkib/
 │   │       ├── video.py      # Video container metadata (duration, dimensions, ffprobe inspection)
 │   │       ├── audio.py      # Pure-Python ID3v2, FLAC, and WAV audio metadata and cover extractor
 │   │       └── podcast.py    # RSS podcast feed XML parser
-│   ├── static/               # Obsidian design tokens, modern CSS, PWA Service Worker, offline vendor bundles
+│   ├── static/               # Obsidian design tokens, modern CSS, gamepad engine (gamepad.js), PWA SW
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (272 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (286 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition

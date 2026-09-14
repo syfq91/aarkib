@@ -518,6 +518,7 @@
 
   <audio id="audioElement" src="/api/media/{{ item.id }}/stream" preload="metadata"></audio>
 
+  <script src="/static/js/gamepad.js?v=1"></script>
   <script>
     const audio = document.getElementById("audioElement");
     const playBtn = document.getElementById("playBtn");
@@ -849,6 +850,86 @@
       if (!audio.paused) saveProgress();
     }, 10000);
     window.addEventListener("beforeunload", saveProgress);
+
+    if (window.AarkibGamepad) {
+      window.AarkibGamepad.setContext("audiobook", {
+        getPrompts: () => [
+          { key: "A", label: audio.paused ? "Play" : "Pause" },
+          { key: "B", label: "Exit" },
+          { key: "◄/►", label: "-15s/+30s" },
+          { key: "LB/RB", label: "Chapter" },
+          { key: "X", label: "Speed" },
+          { key: "Y", label: "Chapters" }
+        ],
+        onSelect: () => {
+          playBtn.click();
+          window.AarkibGamepad.updateHUD();
+          return true;
+        },
+        onStart: () => {
+          playBtn.click();
+          window.AarkibGamepad.updateHUD();
+          return true;
+        },
+        onBack: () => {
+          if (chaptersDrawer && chaptersDrawer.classList.contains("open")) {
+            closeChaptersDrawer();
+            return true;
+          }
+          window.location.href = `/media/${itemId}`;
+          return true;
+        },
+        onNavigate: (dir) => {
+          if (chaptersDrawer && chaptersDrawer.classList.contains("open")) {
+            return false;
+          }
+          if (dir === "left") {
+            rewind15Btn.click();
+            return true;
+          }
+          if (dir === "right") {
+            forward30Btn.click();
+            return true;
+          }
+          if (dir === "up") {
+            audio.volume = Math.min(1, audio.volume + 0.1);
+            return true;
+          }
+          if (dir === "down") {
+            audio.volume = Math.max(0, audio.volume - 0.1);
+            return true;
+          }
+          return false;
+        },
+        onBumperLeft: () => {
+          prevChBtn.click();
+          return true;
+        },
+        onBumperRight: () => {
+          nextChBtn.click();
+          return true;
+        },
+        onTriggerLeft: () => {
+          audio.currentTime = Math.max(0, audio.currentTime - 60);
+          return true;
+        },
+        onTriggerRight: () => {
+          audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 60);
+          return true;
+        },
+        onActionX: () => {
+          speedBtn.click();
+          return true;
+        },
+        onActionY: () => {
+          chaptersBtn.click();
+          return true;
+        }
+      });
+
+      audio.addEventListener("play", () => window.AarkibGamepad.updateHUD());
+      audio.addEventListener("pause", () => window.AarkibGamepad.updateHUD());
+    }
   </script>
 </body>
 </html>

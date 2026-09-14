@@ -330,6 +330,7 @@
 
   <audio id="audioElement" src="/api/media/{{ item.id }}/stream" preload="metadata"></audio>
 
+  <script src="/static/js/gamepad.js?v=1"></script>
   <script>
     const audio = document.getElementById("audioElement");
     const playPauseBtn = document.getElementById("playPauseBtn");
@@ -463,6 +464,87 @@
       window.location.href = "/reader/audio/{{ next_track.id }}";
     });
     {% endif %}
+
+    if (window.AarkibGamepad) {
+      window.AarkibGamepad.setContext("audio", {
+        getPrompts: () => [
+          { key: "A", label: audio.paused ? "Play" : "Pause" },
+          { key: "B", label: "Exit" },
+          { key: "◄/►", label: "Seek 10s" },
+          { key: "▲/▼", label: "Vol" },
+          { key: "X", label: "Speed" },
+          { key: "LB/RB", label: "Track" }
+        ],
+        onSelect: () => {
+          togglePlay();
+          window.AarkibGamepad.updateHUD();
+          return true;
+        },
+        onStart: () => {
+          togglePlay();
+          window.AarkibGamepad.updateHUD();
+          return true;
+        },
+        onBack: () => {
+          window.location.href = `/media/${itemId}`;
+          return true;
+        },
+        onNavigate: (dir) => {
+          if (dir === "left") {
+            audio.currentTime = Math.max(0, audio.currentTime - 10);
+            return true;
+          }
+          if (dir === "right") {
+            audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10);
+            return true;
+          }
+          if (dir === "up") {
+            audio.volume = Math.min(1, audio.volume + 0.1);
+            volumeSlider.value = audio.volume;
+            updateVolIcon();
+            return true;
+          }
+          if (dir === "down") {
+            audio.volume = Math.max(0, audio.volume - 0.1);
+            volumeSlider.value = audio.volume;
+            updateVolIcon();
+            return true;
+          }
+          return false;
+        },
+        onTriggerLeft: () => {
+          audio.currentTime = Math.max(0, audio.currentTime - 30);
+          return true;
+        },
+        onTriggerRight: () => {
+          audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 30);
+          return true;
+        },
+        onBumperLeft: () => {
+          {% if prev_track %}
+          window.location.href = "/reader/audio/{{ prev_track.id }}";
+          {% else %}
+          audio.currentTime = 0;
+          {% endif %}
+          return true;
+        },
+        onBumperRight: () => {
+          {% if next_track %}
+          window.location.href = "/reader/audio/{{ next_track.id }}";
+          {% else %}
+          audio.currentTime = audio.duration || audio.currentTime;
+          {% endif %}
+          return true;
+        },
+        onActionX: () => {
+          speedBtn.click();
+          return true;
+        }
+      });
+
+      audio.addEventListener("play", () => window.AarkibGamepad.updateHUD());
+      audio.addEventListener("pause", () => window.AarkibGamepad.updateHUD());
+    }
   </script>
 </body>
 </html>

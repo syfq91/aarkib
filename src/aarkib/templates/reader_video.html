@@ -286,6 +286,7 @@
   {% endif %}
 </div>
 
+<script src="/static/js/gamepad.js?v=1"></script>
 <script>
   const BOOK_ID = {{ item.id }};
   const INITIAL_TIME = {{ initial_time }};
@@ -616,6 +617,113 @@
   if (["mkv", "avi", "mov", "m4v"].includes(fileFmt)) {
     // Automatically evaluate playback strategy for non-standard browser containers
     switchStreamMode("auto", INITIAL_TIME);
+  }
+
+  function flashSeekPill(msg) {
+    if (resumePill) {
+      resumePill.innerText = msg;
+      resumePill.style.display = "block";
+      clearTimeout(resumePill._timer);
+      resumePill._timer = setTimeout(() => { resumePill.style.display = "none"; }, 1500);
+    }
+  }
+
+  // Gamepad Video Player Integration
+  if (window.AarkibGamepad) {
+    window.AarkibGamepad.setContext("video", {
+      getPrompts: () => [
+        { key: "A", label: video.paused ? "Play" : "Pause" },
+        { key: "B", label: "Exit" },
+        { key: "◄/►", label: "Seek 10s" },
+        { key: "▲/▼", label: "Vol" },
+        { key: "X", label: "Controls" },
+        { key: "Y", label: "Fullscreen" }
+      ],
+      onSelect: () => {
+        video.paused ? video.play() : video.pause();
+        showControls();
+        window.AarkibGamepad.updateHUD();
+        return true;
+      },
+      onStart: () => {
+        video.paused ? video.play() : video.pause();
+        showControls();
+        window.AarkibGamepad.updateHUD();
+        return true;
+      },
+      onBack: () => {
+        window.location.href = `/media/${BOOK_ID}`;
+        return true;
+      },
+      onNavigate: (dir) => {
+        if (dir === "left") {
+          video.currentTime = Math.max(0, video.currentTime - 10);
+          showControls();
+          flashSeekPill("⏪ -10s");
+          return true;
+        }
+        if (dir === "right") {
+          video.currentTime = Math.min(video.duration, video.currentTime + 10);
+          showControls();
+          flashSeekPill("⏩ +10s");
+          return true;
+        }
+        if (dir === "up") {
+          video.volume = Math.min(1, video.volume + 0.1);
+          flashSeekPill(`🔊 Vol ${Math.round(video.volume * 100)}%`);
+          return true;
+        }
+        if (dir === "down") {
+          video.volume = Math.max(0, video.volume - 0.1);
+          flashSeekPill(`🔉 Vol ${Math.round(video.volume * 100)}%`);
+          return true;
+        }
+        return false;
+      },
+      onTriggerLeft: () => {
+        video.currentTime = Math.max(0, video.currentTime - 30);
+        showControls();
+        flashSeekPill("⏪ -30s");
+        return true;
+      },
+      onTriggerRight: () => {
+        video.currentTime = Math.min(video.duration, video.currentTime + 30);
+        showControls();
+        flashSeekPill("⏩ +30s");
+        return true;
+      },
+      onBumperLeft: () => {
+        video.currentTime = Math.max(0, video.currentTime - 30);
+        showControls();
+        flashSeekPill("⏪ -30s");
+        return true;
+      },
+      onBumperRight: () => {
+        if (HAS_NEXT && NEXT_URL) {
+          window.location.href = NEXT_URL;
+        } else {
+          video.currentTime = Math.min(video.duration, video.currentTime + 30);
+          showControls();
+          flashSeekPill("⏩ +30s");
+        }
+        return true;
+      },
+      onActionX: () => {
+        if (header.classList.contains("hidden")) {
+          showControls();
+        } else {
+          header.classList.add("hidden");
+        }
+        return true;
+      },
+      onActionY: () => {
+        fullscreenBtn.click();
+        return true;
+      }
+    });
+
+    video.addEventListener("play", () => window.AarkibGamepad.updateHUD());
+    video.addEventListener("pause", () => window.AarkibGamepad.updateHUD());
   }
 </script>
 

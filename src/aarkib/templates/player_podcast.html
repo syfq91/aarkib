@@ -501,6 +501,7 @@
     </div>
   </div>
 
+  <script src="/static/js/gamepad.js?v=1"></script>
   <script>
     (function() {
       const audio = document.getElementById('podcast-audio');
@@ -686,6 +687,83 @@
 
       setInterval(saveProgress, 10000);
       window.addEventListener('beforeunload', saveProgress);
+
+      if (window.AarkibGamepad) {
+        window.AarkibGamepad.setContext("podcast", {
+          getPrompts: () => [
+            { key: "A", label: audio.paused ? "Play" : "Pause" },
+            { key: "B", label: "Exit" },
+            { key: "◄/►", label: "-15s/+30s" },
+            { key: "▲/▼", label: "Vol" },
+            { key: "X", label: "Speed" },
+            { key: "Y", label: "Notes" }
+          ],
+          onSelect: () => {
+            playBtn.click();
+            window.AarkibGamepad.updateHUD();
+            return true;
+          },
+          onStart: () => {
+            playBtn.click();
+            window.AarkibGamepad.updateHUD();
+            return true;
+          },
+          onBack: () => {
+            if (notesDrawer && notesDrawer.classList.contains("open")) {
+              closeNotes();
+              return true;
+            }
+            if (episodesDrawer && episodesDrawer.classList.contains("open")) {
+              closeEpisodes();
+              return true;
+            }
+            window.location.href = `/media/${itemId}`;
+            return true;
+          },
+          onNavigate: (dir) => {
+            if ((notesDrawer && notesDrawer.classList.contains("open")) ||
+                (episodesDrawer && episodesDrawer.classList.contains("open"))) {
+              return false;
+            }
+            if (dir === "left") {
+              jumpBackBtn.click();
+              return true;
+            }
+            if (dir === "right") {
+              jumpFwdBtn.click();
+              return true;
+            }
+            if (dir === "up") {
+              audio.volume = Math.min(1, audio.volume + 0.1);
+              return true;
+            }
+            if (dir === "down") {
+              audio.volume = Math.max(0, audio.volume - 0.1);
+              return true;
+            }
+            return false;
+          },
+          onTriggerLeft: () => {
+            audio.currentTime = Math.max(0, audio.currentTime - 45);
+            return true;
+          },
+          onTriggerRight: () => {
+            audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 45);
+            return true;
+          },
+          onActionX: () => {
+            speedBtn.click();
+            return true;
+          },
+          onActionY: () => {
+            notesBtn.click();
+            return true;
+          }
+        });
+
+        audio.addEventListener("play", () => window.AarkibGamepad.updateHUD());
+        audio.addEventListener("pause", () => window.AarkibGamepad.updateHUD());
+      }
     })();
   </script>
 </body>

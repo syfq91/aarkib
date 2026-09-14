@@ -1,9 +1,10 @@
-const CACHE_NAME = "aarkib-v1";
+const CACHE_NAME = "aarkib-v2";
 const STATIC_ASSETS = [
   "/",
   "/static/manifest.webmanifest",
   "/static/css/app.css",
   "/static/js/app.js",
+  "/static/js/gamepad.js",
   "/static/js/vendor/jszip.min.js",
   "/static/js/vendor/epub.min.js",
   "/static/icons/icon-192.png",

@@ -678,6 +678,103 @@ function setupUIEventListeners() {
   if (closeTocBtn) closeTocBtn.addEventListener("click", closeSidebars);
   if (closeSettingsBtn) closeSettingsBtn.addEventListener("click", closeSidebars);
   if (overlay) overlay.addEventListener("click", closeSidebars);
+  setupEPUBGamepad();
+}
+
+function setupEPUBGamepad() {
+  if (!window.AarkibGamepad) return;
+
+  window.AarkibGamepad.setContext("epub", {
+    getPrompts: () => [
+      { key: "A", label: "Next" },
+      { key: "B", label: "Exit" },
+      { key: "◄/►", label: "Turn Page" },
+      { key: "X", label: "Header" },
+      { key: "Y", label: "TOC" },
+      { key: "Start", label: "Settings" }
+    ],
+    onNavigate: (dir) => {
+      const openSidebarEl = document.querySelector(".sidebar.open");
+      if (openSidebarEl) {
+        return false;
+      }
+      if (!rendition) return false;
+      if (dir === "left") {
+        hideHeader();
+        rendition.prev();
+        return true;
+      }
+      if (dir === "right") {
+        hideHeader();
+        rendition.next();
+        return true;
+      }
+      return false;
+    },
+    onSelect: () => {
+      const openSidebarEl = document.querySelector(".sidebar.open");
+      if (openSidebarEl) return false;
+      hideHeader();
+      if (rendition) rendition.next();
+      return true;
+    },
+    onBack: () => {
+      const openSidebarEl = document.querySelector(".sidebar.open");
+      if (openSidebarEl) {
+        closeSidebars();
+        return true;
+      }
+      const bId = typeof BOOK_ID !== "undefined" ? BOOK_ID : null;
+      window.location.href = bId ? `/media/${bId}` : "/";
+      return true;
+    },
+    onActionX: () => {
+      toggleHeader();
+      return true;
+    },
+    onActionY: () => {
+      const toc = document.getElementById("toc-sidebar");
+      if (toc && toc.classList.contains("open")) {
+        closeSidebars();
+      } else {
+        openSidebar("toc-sidebar");
+      }
+      return true;
+    },
+    onStart: () => {
+      const s = document.getElementById("settings-sidebar");
+      if (s && s.classList.contains("open")) {
+        closeSidebars();
+      } else {
+        openSidebar("settings-sidebar");
+      }
+      return true;
+    },
+    onBumperLeft: () => {
+      hideHeader();
+      if (rendition) rendition.prev();
+      return true;
+    },
+    onBumperRight: () => {
+      hideHeader();
+      if (rendition) rendition.next();
+      return true;
+    },
+    onTriggerLeft: () => {
+      hideHeader();
+      if (rendition) {
+        for (let i = 0; i < 5; i++) rendition.prev();
+      }
+      return true;
+    },
+    onTriggerRight: () => {
+      hideHeader();
+      if (rendition) {
+        for (let i = 0; i < 5; i++) rendition.next();
+      }
+      return true;
+    }
+  });
 }
 
 function handleKeyNavigation(e) {

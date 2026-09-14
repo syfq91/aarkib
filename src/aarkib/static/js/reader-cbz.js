@@ -224,6 +224,7 @@ function setupEvents() {
       localStorage.setItem("aarkib-cbz-direction", currentDirection);
       updateSliderDirection();
       renderCurrentView(true);
+      if (window.AarkibGamepad) window.AarkibGamepad.updateHUD();
     });
   }
 
@@ -233,6 +234,7 @@ function setupEvents() {
   }
 
   document.addEventListener("keydown", handleKeyNavigation);
+  setupCBZGamepad();
 
   // Setup Webtoon Touch & Click Tap handling on viewport
   const viewport = document.getElementById("cbz-viewport");
@@ -323,6 +325,90 @@ function handleKeyNavigation(e) {
     hideControls();
   }
 }
+
+function setupCBZGamepad() {
+  if (!window.AarkibGamepad) return;
+
+  window.AarkibGamepad.setContext("cbz", {
+    getPrompts: () => [
+      { key: "A", label: "Next" },
+      { key: "B", label: "Exit" },
+      { key: "◄/►", label: currentDirection === "rtl" ? "Turn (RTL)" : "Turn" },
+      { key: "X", label: "Controls" },
+      { key: "Y", label: "Fullscreen" }
+    ],
+    onNavigate: (dir) => {
+      const isRTL = currentDirection === "rtl";
+      if (currentSpread === "webtoon") {
+        const vp = document.getElementById("cbz-viewport");
+        if (vp) {
+          const step = Math.round(vp.clientHeight * 0.7);
+          if (dir === "down") { vp.scrollBy({ top: step, behavior: "smooth" }); return true; }
+          if (dir === "up") { vp.scrollBy({ top: -step, behavior: "smooth" }); return true; }
+        }
+      }
+      if (dir === "left") {
+        hideControls();
+        isRTL ? nextPage() : prevPage();
+        return true;
+      }
+      if (dir === "right") {
+        hideControls();
+        isRTL ? prevPage() : nextPage();
+        return true;
+      }
+      return false;
+    },
+    onSelect: () => {
+      hideControls();
+      nextPage();
+      return true;
+    },
+    onBack: () => {
+      const bId = getBookId();
+      window.location.href = bId ? `/media/${bId}` : "/";
+      return true;
+    },
+    onActionX: () => {
+      toggleControls();
+      return true;
+    },
+    onActionY: () => {
+      toggleFullscreen();
+      return true;
+    },
+    onBumperLeft: () => {
+      hideControls();
+      prevPage();
+      return true;
+    },
+    onBumperRight: () => {
+      hideControls();
+      nextPage();
+      return true;
+    },
+    onTriggerLeft: () => {
+      hideControls();
+      goToPage(Math.max(1, currentPage - 5));
+      return true;
+    },
+    onTriggerRight: () => {
+      hideControls();
+      goToPage(Math.min(totalPages, currentPage + 5));
+      return true;
+    },
+    onAnalogStick: ({ ly, ry }) => {
+      if (currentSpread === "webtoon") {
+        const vp = document.getElementById("cbz-viewport");
+        const stickVal = Math.abs(ry) > 0.25 ? ry : (Math.abs(ly) > 0.25 ? ly : 0);
+        if (vp && stickVal !== 0) {
+          vp.scrollBy({ top: stickVal * 18, behavior: "auto" });
+        }
+      }
+    }
+  });
+}
+
 
 function applyWebtoonWidth() {
   const viewport = document.getElementById("cbz-viewport");

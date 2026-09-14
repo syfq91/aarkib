@@ -116,6 +116,7 @@
     <iframe id="pdf-frame" class="pdf-frame" src="/api/media/{{ item.id }}/file#page={{ initial_page }}"></iframe>
   </main>
 
+  <script src="/static/js/gamepad.js?v=1"></script>
   <script>
     const BOOK_ID = {{ item.id }};
     const TOTAL_PAGES = {{ total_pages }};
@@ -191,6 +192,56 @@
     window.addEventListener('beforeunload', () => {
       saveProgress(currentPage);
     });
+
+    if (window.AarkibGamepad) {
+      window.AarkibGamepad.setContext("pdf", {
+        getPrompts: () => [
+          { key: "A", label: "Next" },
+          { key: "B", label: "Exit" },
+          { key: "◄/►", label: "Page" },
+          { key: "Y", label: "Fullscreen" }
+        ],
+        onNavigate: (dir) => {
+          if (dir === "left") {
+            if (currentPage > 1) setPage(currentPage - 1);
+            return true;
+          }
+          if (dir === "right") {
+            if (currentPage < TOTAL_PAGES) setPage(currentPage + 1);
+            return true;
+          }
+          return false;
+        },
+        onSelect: () => {
+          if (currentPage < TOTAL_PAGES) setPage(currentPage + 1);
+          return true;
+        },
+        onBack: () => {
+          window.location.href = `/media/${BOOK_ID}`;
+          return true;
+        },
+        onActionY: () => {
+          fullscreenBtn.click();
+          return true;
+        },
+        onBumperLeft: () => {
+          if (currentPage > 1) setPage(currentPage - 1);
+          return true;
+        },
+        onBumperRight: () => {
+          if (currentPage < TOTAL_PAGES) setPage(currentPage + 1);
+          return true;
+        },
+        onTriggerLeft: () => {
+          setPage(Math.max(1, currentPage - 5));
+          return true;
+        },
+        onTriggerRight: () => {
+          setPage(Math.min(TOTAL_PAGES, currentPage + 5));
+          return true;
+        }
+      });
+    }
   </script>
 </body>
 </html>
