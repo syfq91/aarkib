@@ -16,16 +16,11 @@ from sqlalchemy.orm import selectinload
 from aarkib.extensions import db, safe_commit
 from aarkib.models import (
     Author,
-    Bookmark,
     Library,
     MediaItem,
-    Playlist,
-    PlaylistItem,
     Series,
     Tag,
     User,
-    UserFavorite,
-    UserProgress,
 )
 from aarkib.services.job_manager import job_manager
 from aarkib.services.media_service import (
@@ -39,6 +34,51 @@ from aarkib.services.media_service import (
     resolve_library,
 )
 from aarkib.services.parsers.cbz import IMAGE_EXTENSIONS, natural_sort_key
+from aarkib.services.playlist_service import (
+    add_playlist_item as add_playlist_item_service,
+)
+from aarkib.services.playlist_service import (
+    create_playlist as create_playlist_service,
+)
+from aarkib.services.playlist_service import (
+    delete_playlist as delete_playlist_service,
+)
+from aarkib.services.playlist_service import (
+    get_playlist as get_playlist_service,
+)
+from aarkib.services.playlist_service import (
+    list_favorites as list_favorites_service,
+)
+from aarkib.services.playlist_service import (
+    list_playlists as list_playlists_service,
+)
+from aarkib.services.playlist_service import (
+    remove_playlist_item as remove_playlist_item_service,
+)
+from aarkib.services.playlist_service import (
+    reorder_playlist_items as reorder_playlist_items_service,
+)
+from aarkib.services.playlist_service import (
+    toggle_favorite as toggle_favorite_service,
+)
+from aarkib.services.progress_service import (
+    add_bookmark as add_bookmark_service,
+)
+from aarkib.services.progress_service import (
+    delete_bookmark as delete_bookmark_service,
+)
+from aarkib.services.progress_service import (
+    get_progress as get_progress_service,
+)
+from aarkib.services.progress_service import (
+    get_progress_for_items as get_progress_for_items_service,
+)
+from aarkib.services.progress_service import (
+    list_bookmarks as list_bookmarks_service,
+)
+from aarkib.services.progress_service import (
+    update_progress as update_progress_service,
+)
 from aarkib.services.scanner import scan_library
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -367,27 +407,16 @@ def list_media():
 
     # Fetch user progress if user is authenticated or guest
     user_id = current_user.id if current_user.is_authenticated else None
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
-    progress_map = {}
     item_ids = [b.id for b in pagination.items]
-    if item_ids:
-        records = db.session.scalars(
-            select(UserProgress).where(
-                user_cond, UserProgress.media_item_id.in_(item_ids)
-            )
-        ).all()
-        progress_map = {
-            r.media_item_id: {
-                "percentage": r.percentage,
-                "location": r.progress_location,
-                "completed": r.is_completed,
-            }
-            for r in records
+    raw_progress = get_progress_for_items_service(user_id, item_ids) if item_ids else {}
+    progress_map = {
+        item_id: {
+            "percentage": p["percentage"],
+            "location": p["location"],
+            "completed": p["is_completed"],
         }
+        for item_id, p in raw_progress.items()
+    }
 
     items = []
     for b in pagination.items:
@@ -816,22 +845,17 @@ def get_media_item(item_id: int):
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
-    prog = None
-    prog_record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
-    )
-    if prog_record:
-        prog = {
-            "percentage": prog_record.percentage,
-            "location": prog_record.progress_location,
-            "is_completed": prog_record.is_completed,
-            "last_read_at": prog_record.last_read_at.isoformat(),
+    prog_data = get_progress_service(user_id, item)
+    prog = (
+        {
+            "percentage": prog_data["percentage"],
+            "location": prog_data["location"],
+            "is_completed": prog_data["is_completed"],
+            "last_read_at": prog_data["last_read_at"],
         }
+        if prog_data.get("last_read_at")
+        else None
+    )
 
     return jsonify(
         {
@@ -1591,75 +1615,10 @@ def media_progress(item_id: int):
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
 
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
-        location = str(data.get("location", "0"))
-        try:
-            percentage = float(data.get("percentage", 0.0))
-        except ValueError, TypeError:
-            percentage = 0.0
-        percentage = max(0.0, min(100.0, percentage))
-        is_completed = bool(data.get("is_completed", False) or percentage >= 99.0)
-
-        record = db.session.scalar(
-            select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
-        )
-
-        if not record:
-            record = UserProgress(user_id=user_id, media_item_id=item.id)
-
-        # Only update location if new location is non-zero or record has no valid location
-        if (location and location != "0") or not record.progress_location:
-            record.progress_location = location
-
-        # Don't reset a known positive percentage to 0 on race condition
-        if percentage > 0.0 or not record.percentage:
-            record.percentage = percentage
-
-        # Enriched playback & consumption metrics
-        pos_sec = data.get("position_seconds")
-        if pos_sec is None and "position" in data:
-            pos_sec = data.get("position")
-        if pos_sec is not None:
-            try:
-                record.position_seconds = float(pos_sec)
-            except ValueError, TypeError:
-                pass
-        elif location:
-            try:
-                record.position_seconds = float(location)
-            except ValueError, TypeError:
-                pass
-
-        duration_val = data.get("duration") or getattr(item, "duration", None)
-        if duration_val is not None:
-            try:
-                record.duration = float(duration_val)
-            except ValueError, TypeError:
-                pass
-
-        speed_val = data.get("playback_speed")
-        if speed_val is not None:
-            try:
-                record.playback_speed = max(0.25, min(4.0, float(speed_val)))
-            except ValueError, TypeError:
-                pass
-
-        pb_type = data.get("playback_type") or item.media_type
-        if pb_type:
-            record.playback_type = str(pb_type)
-
-        record.is_completed = is_completed
-        record.last_read_at = datetime.now(UTC)
-        db.session.add(record)
-        safe_commit()
-
+        record = update_progress_service(user_id, item, data)
         return jsonify(
             {
                 "status": "ok",
@@ -1673,34 +1632,7 @@ def media_progress(item_id: int):
         )
 
     # GET request
-    record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
-    )
-
-    if record:
-        return jsonify(
-            {
-                "percentage": record.percentage,
-                "location": record.progress_location,
-                "position_seconds": record.position_seconds,
-                "duration": record.duration,
-                "playback_speed": record.playback_speed,
-                "playback_type": record.playback_type,
-                "is_completed": record.is_completed,
-                "last_read_at": record.last_read_at.isoformat(),
-            }
-        )
-    return jsonify(
-        {
-            "percentage": 0.0,
-            "location": "0",
-            "position_seconds": None,
-            "duration": getattr(item, "duration", None),
-            "playback_speed": 1.0,
-            "playback_type": item.media_type,
-            "is_completed": False,
-        }
-    )
+    return jsonify(get_progress_service(user_id, item))
 
 
 @api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])
@@ -1715,34 +1647,29 @@ def bookmarks(item_id: int):
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         location = str(data.get("location", ""))
-        title = data.get("title", f"Bookmark at {location}")
+        title = data.get("title")
         snippet = data.get("snippet")
 
-        if not location:
-            return api_error("Location is required", 400)
+        try:
+            bm = add_bookmark_service(
+                item.id, user_id, location=location, title=title, snippet=snippet
+            )
+        except ValueError as exc:
+            return api_error(str(exc), 400)
 
-        bm = Bookmark(
-            user_id=user_id,
-            media_item_id=item.id,
-            location=location,
-            title=title,
-            snippet=snippet,
+        return (
+            jsonify(
+                {
+                    "id": bm.id,
+                    "location": bm.location,
+                    "title": bm.title,
+                    "snippet": bm.snippet,
+                }
+            ),
+            201,
         )
-        db.session.add(bm)
-        safe_commit()
-        return jsonify(
-            {
-                "id": bm.id,
-                "location": bm.location,
-                "title": bm.title,
-                "snippet": bm.snippet,
-            }
-        ), 201
 
-    query = select(Bookmark).where(Bookmark.media_item_id == item.id)
-    if user_id:
-        query = query.where(Bookmark.user_id == user_id)
-    bms = db.session.scalars(query.order_by(Bookmark.created_at.desc())).all()
+    bms = list_bookmarks_service(item.id, user_id)
     return jsonify(
         [
             {
@@ -1760,14 +1687,13 @@ def bookmarks(item_id: int):
 @api_bp.route("/bookmarks/<int:bookmark_id>", methods=["DELETE"])
 def delete_bookmark(bookmark_id: int):
     """Delete a bookmark, restricted to its owner (or any anonymous bookmark)."""
-    bm = db.session.get(Bookmark, bookmark_id)
-    if not bm:
-        return api_error("Bookmark not found", 404)
     user_id = current_user.id if current_user.is_authenticated else None
-    if bm.user_id and bm.user_id != user_id:
+    try:
+        delete_bookmark_service(bookmark_id, user_id)
+    except KeyError:
+        return api_error("Bookmark not found", 404)
+    except PermissionError:
         return api_error("Forbidden", 403)
-    db.session.delete(bm)
-    safe_commit()
     return jsonify({"status": "deleted"})
 
 
@@ -2068,69 +1994,33 @@ def edit_media_metadata(item_id: int):
 @api_bp.route("/media/<int:item_id>/favorite", methods=["POST"])
 def toggle_favorite(item_id: int):
     """Toggle or update favorite status for a media item."""
-    user_id = current_user.id if current_user.is_authenticated else None
-    if not user_id:
+    if not current_user.is_authenticated:
         return api_error("Authentication required to manage favorites", 401)
-
-    item = db.session.get(MediaItem, item_id)
-    if not item:
-        return api_error("Media item not found", 404)
 
     data = request.get_json(silent=True) or {}
     explicit_state = data.get("favorite")
+    if explicit_state is not None:
+        explicit_state = bool(explicit_state)
 
-    fav = db.session.scalar(
-        select(UserFavorite).where(
-            UserFavorite.user_id == user_id,
-            UserFavorite.media_item_id == item_id,
+    try:
+        favorited = toggle_favorite_service(
+            current_user.id, item_id, explicit_state=explicit_state
         )
+    except KeyError:
+        return api_error("Media item not found", 404)
+
+    return jsonify(
+        {"status": "success", "favorited": favorited, "media_item_id": item_id}
     )
-
-    if explicit_state is True:
-        if not fav:
-            fav = UserFavorite(user_id=user_id, media_item_id=item_id)
-            db.session.add(fav)
-            safe_commit()
-        return jsonify(
-            {"status": "success", "favorited": True, "media_item_id": item_id}
-        )
-    elif explicit_state is False:
-        if fav:
-            db.session.delete(fav)
-            safe_commit()
-        return jsonify(
-            {"status": "success", "favorited": False, "media_item_id": item_id}
-        )
-    else:
-        # Toggle
-        if fav:
-            db.session.delete(fav)
-            safe_commit()
-            return jsonify(
-                {"status": "success", "favorited": False, "media_item_id": item_id}
-            )
-        else:
-            fav = UserFavorite(user_id=user_id, media_item_id=item_id)
-            db.session.add(fav)
-            safe_commit()
-            return jsonify(
-                {"status": "success", "favorited": True, "media_item_id": item_id}
-            )
 
 
 @api_bp.route("/favorites", methods=["GET"])
 def get_favorites():
     """Returns all favorited media items for the current user."""
-    user_id = current_user.id if current_user.is_authenticated else None
-    if not user_id:
+    if not current_user.is_authenticated:
         return api_error("Authentication required to list favorites", 401)
 
-    favs = db.session.scalars(
-        select(UserFavorite)
-        .where(UserFavorite.user_id == user_id)
-        .order_by(UserFavorite.created_at.desc())
-    ).all()
-
+    favs = list_favorites_service(current_user.id)
     items = []
     for f in favs:
         if f.media_item:
@@ -2160,13 +2050,7 @@ def get_favorites():
 def get_playlists():
     """List playlists belonging to the user or public playlists."""
     user_id = current_user.id if current_user.is_authenticated else None
-    cond = Playlist.is_public.is_(True)
-    if user_id:
-        cond = or_(cond, Playlist.user_id == user_id)
-
-    playlists = db.session.scalars(
-        select(Playlist).where(cond).order_by(Playlist.updated_at.desc())
-    ).all()
+    playlists = list_playlists_service(user_id)
     return jsonify({"playlists": [p.to_dict(include_items=False) for p in playlists]})
 
 
@@ -2176,18 +2060,18 @@ def create_playlist():
     user_id = current_user.id if current_user.is_authenticated else None
     data = request.get_json(silent=True) or {}
     title = str(data.get("title", "")).strip()
-    if not title:
-        return api_error("Playlist title is required", 400)
 
-    playlist = Playlist(
-        user_id=user_id,
-        title=title,
-        description=data.get("description"),
-        media_type=data.get("media_type", "music"),
-        is_public=bool(data.get("is_public", False)),
-    )
-    db.session.add(playlist)
-    safe_commit()
+    try:
+        playlist = create_playlist_service(
+            user_id=user_id,
+            title=title,
+            description=data.get("description"),
+            media_type=data.get("media_type", "music"),
+            is_public=bool(data.get("is_public", False)),
+        )
+    except ValueError as exc:
+        return api_error(str(exc), 400)
+
     return (
         jsonify(
             {"status": "success", "playlist": playlist.to_dict(include_items=True)}
@@ -2200,11 +2084,12 @@ def create_playlist():
 def get_playlist_detail(playlist_id: int):
     """Get playlist details and its ordered items."""
     user_id = current_user.id if current_user.is_authenticated else None
-    playlist = db.session.get(Playlist, playlist_id)
-    if not playlist:
+    try:
+        playlist = get_playlist_service(playlist_id, user_id)
+    except KeyError:
         return api_error("Playlist not found", 404)
-    if not playlist.is_public and (not user_id or playlist.user_id != user_id):
-        return api_error("Access denied to private playlist", 403)
+    except PermissionError as exc:
+        return api_error(str(exc), 403)
 
     return jsonify({"playlist": playlist.to_dict(include_items=True)})
 
@@ -2213,32 +2098,22 @@ def get_playlist_detail(playlist_id: int):
 def add_playlist_item(playlist_id: int):
     """Add a media item to a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
-    playlist = db.session.get(Playlist, playlist_id)
-    if not playlist:
-        return api_error("Playlist not found", 404)
-    if playlist.user_id is not None and playlist.user_id != user_id:
-        return api_error("Only the playlist owner can add items", 403)
-
     data = request.get_json(silent=True) or {}
     item_id = data.get("media_item_id") or data.get("item_id")
     if not item_id:
         return api_error("media_item_id is required", 400)
 
-    media_item = db.session.get(MediaItem, item_id)
-    if not media_item:
-        return api_error("Media item not found", 404)
-
-    curr_count = len(playlist.items)
-    position = int(data.get("position", curr_count))
-
-    playlist_item = PlaylistItem(
-        playlist_id=playlist.id,
-        media_item_id=media_item.id,
-        position=position,
-    )
-    db.session.add(playlist_item)
-    playlist.updated_at = datetime.now(UTC)
-    safe_commit()
+    try:
+        playlist_item = add_playlist_item_service(
+            playlist_id=playlist_id,
+            user_id=user_id,
+            media_item_id=item_id,
+            position=data.get("position"),
+        )
+    except KeyError as exc:
+        return api_error(str(exc), 404)
+    except PermissionError as exc:
+        return api_error(str(exc), 403)
 
     return jsonify({"status": "success", "item": playlist_item.to_dict()}), 201
 
@@ -2247,24 +2122,13 @@ def add_playlist_item(playlist_id: int):
 def remove_playlist_item(playlist_id: int, item_id: int):
     """Remove a media item from a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
-    playlist = db.session.get(Playlist, playlist_id)
-    if not playlist:
-        return api_error("Playlist not found", 404)
-    if playlist.user_id is not None and playlist.user_id != user_id:
-        return api_error("Only the playlist owner can remove items", 403)
+    try:
+        remove_playlist_item_service(playlist_id, user_id, item_id)
+    except KeyError as exc:
+        return api_error(str(exc), 404)
+    except PermissionError as exc:
+        return api_error(str(exc), 403)
 
-    target_entry = db.session.scalar(
-        select(PlaylistItem).where(
-            PlaylistItem.playlist_id == playlist_id,
-            or_(PlaylistItem.id == item_id, PlaylistItem.media_item_id == item_id),
-        )
-    )
-    if not target_entry:
-        return api_error("Playlist item entry not found", 404)
-
-    db.session.delete(target_entry)
-    playlist.updated_at = datetime.now(UTC)
-    safe_commit()
     return jsonify({"status": "success", "message": "Item removed from playlist"})
 
 
@@ -2272,29 +2136,18 @@ def remove_playlist_item(playlist_id: int, item_id: int):
 def reorder_playlist_items(playlist_id: int):
     """Reorder items in a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
-    playlist = db.session.get(Playlist, playlist_id)
-    if not playlist:
-        return api_error("Playlist not found", 404)
-    if playlist.user_id is not None and playlist.user_id != user_id:
-        return api_error("Only the playlist owner can reorder items", 403)
-
     data = request.get_json(silent=True) or {}
     item_ids = data.get("item_ids", [])
     if not isinstance(item_ids, list):
         return api_error("item_ids list is required", 400)
 
-    for idx, mid in enumerate(item_ids):
-        db.session.execute(
-            update(PlaylistItem)
-            .where(
-                PlaylistItem.playlist_id == playlist_id,
-                or_(PlaylistItem.id == mid, PlaylistItem.media_item_id == mid),
-            )
-            .values(position=idx)
-        )
+    try:
+        reorder_playlist_items_service(playlist_id, user_id, item_ids)
+    except KeyError as exc:
+        return api_error(str(exc), 404)
+    except PermissionError as exc:
+        return api_error(str(exc), 403)
 
-    playlist.updated_at = datetime.now(UTC)
-    safe_commit()
     return jsonify({"status": "success", "message": "Playlist reordered"})
 
 
@@ -2302,14 +2155,13 @@ def reorder_playlist_items(playlist_id: int):
 def delete_playlist(playlist_id: int):
     """Delete a playlist."""
     user_id = current_user.id if current_user.is_authenticated else None
-    playlist = db.session.get(Playlist, playlist_id)
-    if not playlist:
-        return api_error("Playlist not found", 404)
-    if playlist.user_id is not None and playlist.user_id != user_id:
-        return api_error("Only the playlist owner can delete this playlist", 403)
+    try:
+        delete_playlist_service(playlist_id, user_id)
+    except KeyError as exc:
+        return api_error(str(exc), 404)
+    except PermissionError as exc:
+        return api_error(str(exc), 403)
 
-    db.session.delete(playlist)
-    safe_commit()
     return jsonify({"status": "success", "message": "Playlist deleted"})
 
 

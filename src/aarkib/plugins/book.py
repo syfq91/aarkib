@@ -67,10 +67,8 @@ class BookMediaPlugin(MediaPlugin):
         return info
 
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
-        """Returns the web reader blueprint for EPUB and CBZ formats."""
-        from aarkib.routes.reader import reader_bp
-
-        return reader_bp
+        """BookMediaPlugin delegates reader rendering to core reader_bp."""
+        return None
 
     def check_health(self) -> dict[str, Any]:
         """Verifies book plugin dependencies."""

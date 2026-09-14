@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import logging
 import mimetypes
+import platform
 import re
 import time
 import uuid
@@ -483,6 +484,20 @@ def get_system_info_public():
     )
 
 
+def get_system_architecture() -> str:
+    """Returns the Jellyfin-compatible system architecture string dynamically."""
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "X64"
+    if machine in ("aarch64", "arm64"):
+        return "Arm64"
+    if machine.startswith("arm"):
+        return "Arm"
+    if machine in ("i386", "i686", "x86"):
+        return "X86"
+    return "X64"
+
+
 @jellyfin_bp.route("/System/Info", methods=["GET"])
 @jellyfin_bp.route("/system/info", methods=["GET"])
 @jellyfin_auth
@@ -505,7 +520,7 @@ def get_system_info(user: User | None = None):
             "HasUpdateAvailable": False,
             "SupportsLibraryMonitor": True,
             "EncoderLocationType": "System",
-            "SystemArchitecture": "X64",
+            "SystemArchitecture": get_system_architecture(),
         }
     )
 

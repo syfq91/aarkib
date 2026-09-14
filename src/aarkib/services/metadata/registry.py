@@ -65,6 +65,10 @@ class MetadataProviderRegistry:
         """Returns list of registered provider names."""
         return sorted(self._providers.keys())
 
+    def get_available_providers(self) -> list[str]:
+        """Returns all registered provider names prefixed by 'all'."""
+        return ["all", *self.list_providers()]
+
     def search(
         self,
         media_type: str,

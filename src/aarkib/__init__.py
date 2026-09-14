@@ -167,8 +167,7 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
     # Register core blueprints
     app.register_blueprint(ui_bp)
     app.register_blueprint(api_bp)
-    if "reader" not in app.blueprints:
-        app.register_blueprint(reader_bp)
+    app.register_blueprint(reader_bp)
     app.register_blueprint(auth_bp)
 
     # Security settings & headers

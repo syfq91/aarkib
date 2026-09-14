@@ -25,6 +25,18 @@ class SettingDefinition:
     min_value: int | None = None
     max_value: int | None = None
 
+    @property
+    def resolved_choices(self) -> tuple[str, ...] | None:
+        """Returns allowed choices, dynamically deriving metadata providers if key is METADATA_PROVIDER."""
+        if self.key == "METADATA_PROVIDER":
+            try:
+                from aarkib.services.metadata import metadata_registry
+
+                return tuple(metadata_registry.get_available_providers())
+            except Exception:
+                pass
+        return self.choices
+
 
 MANAGED_SETTINGS: dict[str, SettingDefinition] = {
     "AUTO_SCAN_ON_START": SettingDefinition(
@@ -176,8 +188,9 @@ def parse_setting_value(spec: SettingDefinition, raw: Any) -> Any:
 
     if spec.type is str:
         s = str(raw).strip()
-        if spec.choices and s not in spec.choices:
-            valid = ", ".join(repr(c) for c in spec.choices)
+        choices = spec.resolved_choices
+        if choices and s not in choices:
+            valid = ", ".join(repr(c) for c in choices)
             raise ValueError(
                 f"Setting '{spec.key}' must be one of: {valid} (got {s!r})."
             )
@@ -261,7 +274,7 @@ def get_effective_settings(app: Flask) -> dict[str, Any]:
             "display_name": spec.display_name,
             "description": spec.description,
             "category": spec.category,
-            "choices": list(spec.choices) if spec.choices else None,
+            "choices": (list(spec.resolved_choices) if spec.resolved_choices else None),
             "min_value": spec.min_value,
             "max_value": spec.max_value,
             "updated_at": (

@@ -208,7 +208,7 @@ def test_parser_registry_and_base_metadata(tmp_path):
     assert book_meta.authors == ["Synced Author"]
 
     # Test registering a mock custom parser (e.g. for audio)
-    fake_audio = tmp_path / "song.mp3"
+    fake_audio = tmp_path / "song.custom_audio"
     fake_audio.write_bytes(b"ID3mock")
 
     def mock_audio_parser(path: Path) -> BaseParsedMetadata:
@@ -216,15 +216,20 @@ def test_parser_registry_and_base_metadata(tmp_path):
             title=path.stem.title(),
             creators=["Test Musician"],
             media_type="audio",
-            file_format="mp3",
+            file_format="custom_audio",
         )
 
-    register_parser(".mp3", mock_audio_parser)
-    extracted = extract_metadata_from_file(fake_audio)
-    assert extracted is not None
-    assert extracted.title == "Song"
-    assert extracted.media_type == "audio"
-    assert extracted.creators == ["Test Musician"]
+    register_parser(".custom_audio", mock_audio_parser)
+    try:
+        extracted = extract_metadata_from_file(fake_audio)
+        assert extracted is not None
+        assert extracted.title == "Song"
+        assert extracted.media_type == "audio"
+        assert extracted.creators == ["Test Musician"]
+    finally:
+        from aarkib.services.parsers.base import PARSER_REGISTRY
+
+        PARSER_REGISTRY.pop(".custom_audio", None)
 
 
 def test_media_item_first_class_model(app):
