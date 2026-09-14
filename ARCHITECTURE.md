@@ -170,7 +170,7 @@ sequenceDiagram
 
 ---
 
-### 3.3 E-Ink On-Demand Optimization Engine (`services/optimizer.py`)
+### 3.3 E-Ink On-Demand Optimization Engine (`plugins/optimizer.py`)
 
 Dedicated e-paper devices suffer from limited CPU processing power, small RAM envelopes, and fixed e-ink display refresh modes. Modern EPUBs often contain embedded web fonts (multi-megabyte WOFF/OTF files), complex CSS resets, and high-resolution 24-bit color illustrations that cause sluggish page turns or rendering artifacts on e-ink hardware.
 
@@ -200,7 +200,7 @@ graph LR
 
 ---
 
-### 3.4 OPDS Catalog & Sync Protocols (`routes/opds.py`)
+### 3.4 OPDS Catalog & Sync Protocols (`plugins/opds.py`)
 
 Aarkib exposes a complete suite of OPDS endpoints tailored for modern e-readers and synchronization clients:
 
@@ -552,7 +552,7 @@ erDiagram
 5. **Administrative Boundaries**:
    - Modifying media metadata, triggering full-library scans, creating users, and changing user permissions are protected by `@admin_required`.
 6. **Defensive Parsing & SSRF Protection**:
-   - All external XML processing (`parsers/epub.py`, `parsers/cbz.py`, `parsers/podcast.py`, and `services/optimizer.py`) utilizes `defusedxml` to defend against XML entity expansion (Billion Laughs) and XXE vulnerabilities.
+   - All external XML processing (`parsers/epub.py`, `parsers/cbz.py`, `parsers/podcast.py`, and `plugins/optimizer.py`) utilizes `defusedxml` to defend against XML entity expansion (Billion Laughs) and XXE vulnerabilities.
    - The metadata enricher verifies URL schemes (`http`, `https`) before issuing outbound requests to prevent SSRF or arbitrary local file disclosure (`file://`).
 7. **Filesystem Traversal Prevention**:
    - All file downloads, streams, and page reads validate paths using `is_safe_media_path()` to ensure files strictly resolve inside registered `Library.path` roots or configured system cache directories.

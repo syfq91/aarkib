@@ -139,8 +139,10 @@ aarkib/
 │   │   ├── video.py          # VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V metadata, remux/transcode strategies
 │   │   ├── audio.py          # AudioMediaPlugin (Music, Audiobook): MP3, M4B, FLAC, AAC, WAV descriptors
 │   │   ├── podcast.py        # PodcastMediaPlugin for RSS audio podcast feeds
+│   │   ├── optimizer.py      # EInkOptimizerPlugin: E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
-│   │   └── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
+│   │   ├── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
+│   │   └── jellyfin.py       # Jellyfin protocol plugin
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints
@@ -154,9 +156,9 @@ aarkib/
 │   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
 │   │   ├── job_manager.py    # Asynchronous background job manager and ThreadPoolExecutor queue
 │   │   ├── scanner.py        # Recursive crawler, watchdog watcher, SHA-256 deduplication, cover caching (.webp)
+│   │   ├── watcher.py        # Filesystem watcher with debounced event handling for library directories
 │   │   ├── search.py         # SQLite FTS5 full-text search engine, query builder, and field-qualified filters
 │   │   ├── transcoder.py     # On-demand video/audio remuxing, HLS adaptive streaming supervisor, VAAPI detection
-│   │   ├── optimizer.py      # E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── enricher.py       # Multi-source metadata enrichment client
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
 │   │   ├── opml.py           # OPML podcast feed import and parser
@@ -172,7 +174,7 @@ aarkib/
 │   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/               # Obsidian design tokens, modern CSS, PWA Service Worker, offline vendor bundles
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (253+ tests covering all features)
+├── tests/                    # Deterministic Pytest suite (258 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
