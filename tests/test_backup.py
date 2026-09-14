@@ -16,6 +16,8 @@ from aarkib.services.backup import (
     DATABASE_FILENAME,
     MANIFEST_FILENAME,
     create_backup,
+    list_backups,
+    prune_backups,
     restore_backup,
     validate_backup,
 )
@@ -190,3 +192,34 @@ def test_backup_api_endpoints(file_app: Flask) -> None:
     # Verify deleted
     list_res2 = client.get("/api/backup")
     assert not any(b["filename"] == filename for b in list_res2.get_json()["backups"])
+
+
+def test_prune_backups(file_app: Flask) -> None:
+    """Test pruning old backups when count exceeds retention quota."""
+    with file_app.app_context():
+        # Create 5 backups
+        for _ in range(5):
+            create_backup(file_app, include_covers=False)
+
+        current_backups = list_backups(file_app)
+        assert len(current_backups) == 5
+
+        # Prune to max_count=3
+        pruned = prune_backups(file_app, max_count=3)
+        assert pruned == 2
+
+        remaining = list_backups(file_app)
+        assert len(remaining) == 3
+
+
+def test_create_backup_auto_pruning(file_app: Flask) -> None:
+    """Verify that create_backup automatically prunes when exceeding BACKUP_RETENTION_COUNT."""
+    file_app.config["BACKUP_RETENTION_COUNT"] = 2
+    with file_app.app_context():
+        create_backup(file_app, include_covers=False)
+        create_backup(file_app, include_covers=False)
+        assert len(list_backups(file_app)) == 2
+
+        # 3rd backup should auto-prune the oldest, keeping exactly 2
+        create_backup(file_app, include_covers=False)
+        assert len(list_backups(file_app)) == 2

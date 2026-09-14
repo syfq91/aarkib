@@ -206,6 +206,12 @@ class Config:
     )
     PAGE_SIZE: int = 24
 
+    # Scheduled Maintenance & Automation
+    BACKUP_SCHEDULE: str = os.getenv("AARKIB_BACKUP_SCHEDULE", "disabled").lower()
+    BACKUP_RETENTION_COUNT: int = int(os.getenv("AARKIB_BACKUP_RETENTION_COUNT", "7"))
+    PERIODIC_RESCAN_HOURS: int = int(os.getenv("AARKIB_PERIODIC_RESCAN_HOURS", "0"))
+    CACHE_REAP_HOURS: int = int(os.getenv("AARKIB_CACHE_REAP_HOURS", "24"))
+
     # Plugin & Feature Toggles
     ENABLE_OPDS: bool = (os.getenv("AARKIB_ENABLE_OPDS", "true")).lower() in (
         "true",
@@ -300,6 +306,8 @@ class TestConfig(Config):
     WATCH_LIBRARY: bool = False
     AUTO_ENRICH: bool = False
     AUTH_RATE_LIMIT_ENABLED: bool = False
+    BACKUP_SCHEDULE: str = "disabled"
+    PERIODIC_RESCAN_HOURS: int = 0
     # CSRF is disabled in tests so request payloads don't need tokens.
     WTF_CSRF_ENABLED: bool = False
 

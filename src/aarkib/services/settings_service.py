@@ -55,6 +55,35 @@ MANAGED_SETTINGS: dict[str, SettingDefinition] = {
         description="Continuously monitor media folders for filesystem changes to auto-index new or removed files.",
         category="Library & Automation",
     ),
+    "PERIODIC_RESCAN_HOURS": SettingDefinition(
+        key="PERIODIC_RESCAN_HOURS",
+        type=int,
+        default=0,
+        display_name="Periodic Library Rescan (Hours)",
+        description="Hours between automated full library rescans (0 to disable). Ideal for network drives (NFS/SMB) without real-time inotify events.",
+        category="Library & Automation",
+        min_value=0,
+        max_value=168,
+    ),
+    "BACKUP_SCHEDULE": SettingDefinition(
+        key="BACKUP_SCHEDULE",
+        type=str,
+        default="disabled",
+        display_name="Automated Backup Schedule",
+        description="Automatically create a hot SQLite snapshot and cover archive on a recurring schedule.",
+        category="Maintenance & Backups",
+        choices=("disabled", "daily", "weekly"),
+    ),
+    "BACKUP_RETENTION_COUNT": SettingDefinition(
+        key="BACKUP_RETENTION_COUNT",
+        type=int,
+        default=7,
+        display_name="Backup Retention Quota",
+        description="Maximum number of backup archives to keep. Older backups beyond this quota are automatically pruned.",
+        category="Maintenance & Backups",
+        min_value=1,
+        max_value=30,
+    ),
     "AUTO_ENRICH": SettingDefinition(
         key="AUTO_ENRICH",
         type=bool,
@@ -326,6 +355,15 @@ def update_settings(app: Flask, updates: dict[str, Any]) -> dict[str, Any]:
         else:
             stop_library_watcher(app)
 
+    try:
+        from aarkib.services.scheduler import get_scheduler
+
+        sched = get_scheduler()
+        if sched:
+            sched.reconfigure(app)
+    except Exception:
+        pass
+
     return get_effective_settings(app)
 
 
@@ -356,5 +394,14 @@ def reset_settings_to_defaults(app: Flask) -> dict[str, Any]:
             start_library_watcher(app)
         else:
             stop_library_watcher(app)
+
+    try:
+        from aarkib.services.scheduler import get_scheduler
+
+        sched = get_scheduler()
+        if sched:
+            sched.reconfigure(app)
+    except Exception:
+        pass
 
     return get_effective_settings(app)

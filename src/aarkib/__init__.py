@@ -302,6 +302,20 @@ def create_app(config_class: type[Config] | dict[str, Any] | None = None) -> Fla
             transcode_supervisor.clean_stale_directories(transcode_dir)
         except Exception as e:
             logger.debug("Startup transcode cleanup skipped: %s", e)
+
+        if not app.config.get("TESTING", False):
+            try:
+                import atexit
+
+                from aarkib.services.scheduler import (
+                    start_scheduler,
+                    stop_scheduler,
+                )
+
+                start_scheduler(app)
+                atexit.register(stop_scheduler)
+            except Exception as e:
+                logger.debug("Scheduler startup skipped: %s", e)
     return app
 
 

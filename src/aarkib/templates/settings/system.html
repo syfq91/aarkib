@@ -58,6 +58,24 @@
             <div style="margin: 0.25rem 0 0 1.7rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.WATCH_LIBRARY.default_value if system_settings.settings.WATCH_LIBRARY.default_value is defined else system_settings.settings.WATCH_LIBRARY.env_default }})</span></div>
           {% endif %}
         </div>
+
+        <!-- PERIODIC_RESCAN_HOURS -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Periodic Rescan Interval</label>
+          <select id="setting-PERIODIC_RESCAN_HOURS" class="input-text" style="width: 100%; font-size: 0.85rem;">
+            <option value="0" {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.value == 0 %}selected{% endif %}>Disabled (Watcher Only)</option>
+            <option value="6" {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.value == 6 %}selected{% endif %}>Every 6 Hours</option>
+            <option value="12" {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.value == 12 %}selected{% endif %}>Every 12 Hours</option>
+            <option value="24" {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.value == 24 %}selected{% endif %}>Every 24 Hours (Daily)</option>
+            <option value="48" {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.value == 48 %}selected{% endif %}>Every 48 Hours</option>
+          </select>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Interval between automatic background library rescans. Ideal for network shares (NFS/CIFS) without inotify.
+          </p>
+          {% if system_settings and system_settings.settings.PERIODIC_RESCAN_HOURS.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.PERIODIC_RESCAN_HOURS.default_value }})</span></div>
+          {% endif %}
+        </div>
       </div>
 
       <!-- Card 2: Metadata Enrichment -->
@@ -118,6 +136,41 @@
           </p>
           {% if system_settings and system_settings.settings.PAGE_SIZE.is_overridden %}
             <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.PAGE_SIZE.default_value if system_settings.settings.PAGE_SIZE.default_value is defined else system_settings.settings.PAGE_SIZE.env_default }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Card 4: Automated Backups & Maintenance -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>💾</span> Automated Backups &amp; Maintenance
+        </h4>
+
+        <!-- BACKUP_SCHEDULE -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Backup Schedule</label>
+          <select id="setting-BACKUP_SCHEDULE" class="input-text" style="width: 100%; font-size: 0.85rem;">
+            <option value="disabled" {% if system_settings and system_settings.settings.BACKUP_SCHEDULE.value == 'disabled' %}selected{% endif %}>Disabled (Manual Only)</option>
+            <option value="daily" {% if system_settings and system_settings.settings.BACKUP_SCHEDULE.value == 'daily' %}selected{% endif %}>Daily Snapshot (Every 24 Hours)</option>
+            <option value="weekly" {% if system_settings and system_settings.settings.BACKUP_SCHEDULE.value == 'weekly' %}selected{% endif %}>Weekly Snapshot (Every 7 Days)</option>
+          </select>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Automatically create hot SQLite and cover snapshots in the background.
+          </p>
+          {% if system_settings and system_settings.settings.BACKUP_SCHEDULE.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.BACKUP_SCHEDULE.default_value }})</span></div>
+          {% endif %}
+        </div>
+
+        <!-- BACKUP_RETENTION_COUNT -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Backup Retention Quota</label>
+          <input type="number" id="setting-BACKUP_RETENTION_COUNT" min="1" max="30" class="input-text" style="width: 100%; font-size: 0.85rem;" value="{{ system_settings.settings.BACKUP_RETENTION_COUNT.value if system_settings and system_settings.settings.BACKUP_RETENTION_COUNT else 7 }}">
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Maximum number of backup archives to keep. Older backups beyond this quota are automatically pruned.
+          </p>
+          {% if system_settings and system_settings.settings.BACKUP_RETENTION_COUNT.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.BACKUP_RETENTION_COUNT.default_value }})</span></div>
           {% endif %}
         </div>
       </div>
@@ -287,6 +340,12 @@ async function saveSystemSettings() {
   });
   if (payload.PAGE_SIZE !== undefined) {
     payload.PAGE_SIZE = parseInt(payload.PAGE_SIZE, 10);
+  }
+  if (payload.PERIODIC_RESCAN_HOURS !== undefined) {
+    payload.PERIODIC_RESCAN_HOURS = parseInt(payload.PERIODIC_RESCAN_HOURS, 10);
+  }
+  if (payload.BACKUP_RETENTION_COUNT !== undefined) {
+    payload.BACKUP_RETENTION_COUNT = parseInt(payload.BACKUP_RETENTION_COUNT, 10);
   }
 
   try {

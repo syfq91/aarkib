@@ -68,6 +68,7 @@ def create_backup(
     app: Flask,
     output_path: Path | None = None,
     include_covers: bool = True,
+    **kwargs: Any,
 ) -> Path:
     """Creates a full backup archive of the Aarkib database and cover art.
 
@@ -81,6 +82,10 @@ def create_backup(
         timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d-%H%M%S")
         if output_path is None:
             archive_path = backup_dir / f"aarkib-backup-{timestamp}.zip"
+            counter = 1
+            while archive_path.exists():
+                archive_path = backup_dir / f"aarkib-backup-{timestamp}-{counter}.zip"
+                counter += 1
         else:
             archive_path = Path(output_path)
             archive_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +161,7 @@ def create_backup(
             media_count,
             covers_count,
         )
+        prune_backups(app)
         return archive_path
 
 
@@ -363,3 +369,37 @@ def delete_backup(app: Flask, filename: str) -> bool:
     except OSError as e:
         logger.error("Failed to delete backup '%s': %s", filename, e)
         return False
+
+
+def prune_backups(app: Flask, max_count: int | None = None) -> int:
+    """Prunes oldest backup archives if total backups exceed max_count.
+
+    Returns the number of pruned backup archives.
+    """
+    if max_count is None:
+        raw_val = app.config.get("BACKUP_RETENTION_COUNT", 7)
+        try:
+            max_count = int(raw_val)
+        except ValueError, TypeError:
+            max_count = 7
+
+    if max_count <= 0:
+        return 0
+
+    backups = list_backups(app)
+    if len(backups) <= max_count:
+        return 0
+
+    excess = backups[max_count:]
+    pruned_count = 0
+    for b in excess:
+        filename = b["filename"]
+        if delete_backup(app, filename):
+            pruned_count += 1
+            logger.info(
+                "Retention policy pruned backup '%s' (retaining %d)",
+                filename,
+                max_count,
+            )
+
+    return pruned_count

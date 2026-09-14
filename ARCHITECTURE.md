@@ -364,6 +364,8 @@ Aarkib includes a zero-downtime, crash-consistent backup and restore pipeline:
 3. **Archive Validation & Atomic Restore**:
    - `validate_backup()` inspects the archive structure, validates `manifest.json`, and verifies the database SHA-256 hash.
    - `restore_backup()` implements transactional safety: before restoring, it takes a pre-restore rollback backup of current state. Database and cover assets are atomically replaced.
+4. **Automated Retention Management (`prune_backups`)**:
+   - Automatically maintains a configurable retention quota (`BACKUP_RETENTION_COUNT`, default: 7). Oldest snapshot archives beyond the quota are pruned automatically after every backup creation.
 
 ---
 
@@ -376,6 +378,16 @@ Aarkib includes a zero-downtime, crash-consistent backup and restore pipeline:
    - To avoid excessive disk I/O when crawling multi-gigabyte video or audiobook files (e.g. 10GB+ MKVs), Aarkib utilizes a fast partial fingerprint (`compute_fast_fingerprint()`) for files over 32 MB.
    - Computes SHA-256 over: `file_size (8 bytes) + first 64 KB + last 64 KB`.
    - Streaming hash computations (`compute_sha256()`) utilize an optimized 1 MB buffer chunk size.
+
+---
+
+### 3.12 Scheduled Maintenance & Automation Subsystem (`services/scheduler.py`)
+
+Aarkib features a non-blocking, lightweight background scheduler daemon running alongside the Flask application:
+1. **Automated Database & Asset Backups**: Runs daily or weekly hot crash-consistent SQLite and cover art snapshots based on `BACKUP_SCHEDULE` (`disabled`, `daily`, `weekly`).
+2. **Periodic Library Rescan**: Triggers full directory rescans at configurable intervals (`PERIODIC_RESCAN_HOURS`, 0 to disable) to detect new media on network mounts (NFS/SMB) that do not support inotify/FSEvents filesystem watcher notifications.
+3. **Stale Cache Reaper**: Periodically cleans up orphaned or expired HLS transcode segments and temporary files older than 24 hours (`CACHE_REAP_HOURS`).
+4. **Dynamic Reconfiguration**: Integrates with `settings_service.py` to hot-reload intervals and active policies without requiring server restarts. Automatically disabled when `TESTING=True` to guarantee unit test isolation.
 
 ---
 

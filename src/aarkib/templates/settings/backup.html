@@ -40,9 +40,16 @@
 
 <!-- Existing Backups List -->
 <div class="settings-card" style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem;">
-  <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
-    <span>📦</span> Available Backup Snapshots
-    <span class="badge" style="background: var(--bg-canvas-elevated); color: var(--text-secondary);">{{ backups|length }}</span>
+  <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span>📦</span> Available Backup Snapshots
+      <span class="badge" style="background: var(--bg-canvas-elevated); color: var(--text-secondary);">{{ backups|length }}</span>
+    </div>
+    {% if config.BACKUP_RETENTION_COUNT %}
+      <span style="font-size: 0.78rem; color: var(--text-secondary);">
+        Retention quota: <strong>{{ config.BACKUP_RETENTION_COUNT }}</strong> snapshots (older snapshots auto-pruned)
+      </span>
+    {% endif %}
   </h4>
 
   {% if backups %}

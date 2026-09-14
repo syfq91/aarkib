@@ -152,6 +152,7 @@ aarkib/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── backup.py         # Hot SQLite snapshot, ZIP packaging, validation, atomic database restore
+│   │   ├── scheduler.py      # Background maintenance scheduler (automated backups, library rescans, cache reaping)
 │   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting
 │   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
 │   │   ├── job_manager.py    # Asynchronous background job manager and ThreadPoolExecutor queue
@@ -174,7 +175,7 @@ aarkib/
 │   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/               # Obsidian design tokens, modern CSS, PWA Service Worker, offline vendor bundles
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (258 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (272 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
