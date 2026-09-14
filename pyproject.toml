@@ -12,6 +12,7 @@ dependencies = [
     "flask-wtf>=1.2.2",
     "pillow>=12.3.0",
     "pypdf>=6.18.1",
+    "waitress>=3.0.0",
     "watchdog>=6.0.0",
 ]
 

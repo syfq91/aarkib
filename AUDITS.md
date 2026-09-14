@@ -564,3 +564,19 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 - [x] **14. M16**: Eliminated read-time write transactions in `MetadataCache.get()`.
 - [x] **15. M18**: Delegated protocol actions (`toggle_favorite`) to domain service.
 - [x] **16. Testing Gap Closures**: Added direct view integration tests for `/authors`, `/series`, `/tags` (`tests/test_ui.py`), symlink escape rejection test (`tests/test_filesystem_safety.py`), and true asynchronous reaper background test (`tests/test_transcoder.py`).
+
+---
+
+## 🛡️ Post-Audit Architectural & Security Hardening (`improvement1.txt` Review) — **100% RESOLVED**
+
+An independent architectural and operational review (`improvement1.txt`) flagged 7 specific findings covering production readiness, authentication security, and documentation clarity. All 7 items have been evaluated, implemented, verified, and closed:
+
+| # | Finding in `improvement1.txt` | Category | Status | Resolution Details |
+|:--|:------------------------------|:---------|:-------|:-------------------|
+| **1** | **Passwordless auth + Basic Auth combo**: Reader accounts reachable over public WAN | 🔒 Security | **✅ RESOLVED** | Implemented private network detection (`is_private_or_local_ip` via RFC 1918 + loopback). In `User.check_password()`, passwordless authentication (`password_hash is None`) is strictly restricted to LAN/private IP connections unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is explicitly configured. |
+| **2** | **No rate limiting on `/auth/login` or Basic Auth endpoints** | 🔒 Security | **✅ RESOLVED** | Implemented thread-safe sliding-window `AuthRateLimiter` in `services/security.py`. Protects `/auth/login`, API before-request, OPDS, and Subsonic authentication, returning HTTP 429 Too Many Requests with standard `Retry-After` headers upon repeated failures. |
+| **3** | **Schema migrations via ad-hoc `ALTER TABLE ADD COLUMN` vs Alembic** | 🏛️ Architecture | **✅ RESOLVED** | Documented in `ARCHITECTURE.md` as an acknowledged design trade-off and tech debt. Current additive auto-migration eliminates external migration overhead for single-file self-hosted SQLite instances; Alembic adoption criteria (renames, column drops, non-null backfills) are formally specified. |
+| **4** | **No WSGI server specified**: `uv run aarkib` executing Flask development server | 🚀 Production | **✅ RESOLVED** | Integrated `waitress>=3.0.0` as production WSGI server dependency in `pyproject.toml`. `main()` in `__init__.py` starts Waitress (`threads=8`) by default, preserving in-process singletons (`JobManager`, `watchdog.Observer`, transcode supervisor) with slow-client protection. Automatic fallback to Werkzeug in debug mode. |
+| **5** | **In-process Job Manager (`ThreadPoolExecutor`) scaling ceiling** | 📖 Architecture | **✅ RESOLVED** | Added explicit architectural rationale in Section 3.7 of `ARCHITECTURE.md`: zero broker overhead (no Redis/Celery required), minimal memory footprint (< 50MB idle) tailored for Raspberry Pi 4/5, and SQLite durability across restarts. |
+| **6** | **Python 3.14 minimum version bleeding-edge choice** | 📖 Documentation | **✅ RESOLVED** | Documented in Section 1 and Section 6 of `ARCHITECTURE.md`: container-first deployment via official multi-arch Docker image, hermetic host installation via `uv python install 3.14`, PEP 649 deferred annotation evaluation, and future-proof free-threading compatibility. |
+| **7** | **Section 3 in `ARCHITECTURE.md` lacks writeup for FFmpeg Transcoder** | 📖 Documentation | **✅ RESOLVED** | Added Section 3.9 `Transcoding & On-Demand Remuxing Subsystem (services/transcoder.py)` in `ARCHITECTURE.md`, detailing the decision matrix (Direct Play, Direct Remux, Audio Transcode, HLS), VA-API hardware acceleration, process group management (`os.setsid`), and automated background session reaper. |

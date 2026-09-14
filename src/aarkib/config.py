@@ -269,6 +269,20 @@ class Config:
         "on",
     )
 
+    # Security & Authentication Controls
+    ALLOW_PASSWORDLESS_REMOTE: bool = (
+        os.getenv("AARKIB_ALLOW_PASSWORDLESS_REMOTE", "false")
+    ).lower() in ("true", "1", "yes", "on")
+    AUTH_RATE_LIMIT_ENABLED: bool = (
+        os.getenv("AARKIB_AUTH_RATE_LIMIT_ENABLED", "true")
+    ).lower() in ("true", "1", "yes", "on")
+    AUTH_RATE_LIMIT_MAX_ATTEMPTS: int = int(
+        os.getenv("AARKIB_AUTH_RATE_LIMIT_MAX_ATTEMPTS", "5")
+    )
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = int(
+        os.getenv("AARKIB_AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    )
+
     # Maximum request payload limit (16 MB)
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 
@@ -281,6 +295,7 @@ class TestConfig(Config):
     AUTO_SCAN_ON_START: bool = False
     WATCH_LIBRARY: bool = False
     AUTO_ENRICH: bool = False
+    AUTH_RATE_LIMIT_ENABLED: bool = False
     # CSRF is disabled in tests so request payloads don't need tokens.
     WTF_CSRF_ENABLED: bool = False
 

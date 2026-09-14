@@ -213,9 +213,36 @@ def enforce_api_auth():
     # Authenticate via HTTP Basic auth if credentials are provided
     auth = request.authorization
     if auth and auth.username:
+        from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+        client_ip = get_client_ip()
+        limited, retry_after = auth_rate_limiter.is_rate_limited(client_ip)
+        if limited:
+            return (
+                jsonify(
+                    {
+                        "error": f"Too many failed login attempts. Retry after {retry_after}s."
+                    }
+                ),
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"Retry-After": str(retry_after)},
+            )
+
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password or ""):
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+        if user and user.check_password(
+            auth.password or "",
+            client_ip=client_ip,
+            allow_remote_passwordless=allow_remote_pwless,
+        ):
+            auth_rate_limiter.reset(client_ip)
             login_user(user)
+        else:
+            auth_rate_limiter.record_failure(client_ip)
+            return (
+                jsonify({"error": "Invalid credentials"}),
+                HTTPStatus.UNAUTHORIZED,
+            )
 
     if not current_user.is_authenticated:
         return jsonify({"error": "Authentication required"}), HTTPStatus.UNAUTHORIZED

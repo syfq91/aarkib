@@ -258,7 +258,31 @@ def main() -> None:
         or os.getenv("AARKIB_DEBUG")
         or str(app.config.get("DEBUG", False))
     ).lower() in ("true", "1", "yes")
-    app.run(host=host, port=port, debug=debug)
+
+    if debug:
+        logger.info(
+            "Starting Aarkib in DEBUG mode via Werkzeug development server on %s:%d...",
+            host,
+            port,
+        )
+        app.run(host=host, port=port, debug=True)
+    else:
+        try:
+            import waitress
+
+            threads = int(os.getenv("AARKIB_WSGI_THREADS", "8"))
+            logger.info(
+                "Starting Aarkib production WSGI server (Waitress) on %s:%d (%d threads)...",
+                host,
+                port,
+                threads,
+            )
+            waitress.serve(app, host=host, port=port, threads=threads)
+        except ImportError:
+            logger.warning(
+                "Waitress not available; falling back to Werkzeug development server."
+            )
+            app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":

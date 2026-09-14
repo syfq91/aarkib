@@ -294,6 +294,10 @@ Aarkib isolates heavy operations from the Flask HTTP request/response cycle usin
   - Web clients poll status or receive real-time updates via `GET /api/jobs/<task_id>`.
 - **Deduplication**: Prevents overlapping scans or enrichment jobs from executing concurrently on the same library.
 - **Graceful Shutdown**: On process termination, `JobManager.shutdown()` safely awaits running worker tasks and cancels pending queue items.
+- **Architectural Rationale: Why In-Process ThreadPoolExecutor?**:
+  - **Zero Broker Footprint**: Aarkib intentionally avoids external distributed message brokers (such as Celery, Redis, RabbitMQ, or PostgreSQL). This keeps server startup instant and total RAM consumption under 50 MB at idle, making Aarkib ideal for single-node homelabs, Raspberry Pis, and NAS appliances.
+  - **SQLite Job Persistence**: Completed and running jobs are persisted directly to the SQLite `background_jobs` table, ensuring auditability and history across server restarts.
+  - **Explicit Scaling Boundary**: The single-node in-process queue is a deliberate architectural choice. In homelab and personal cloud contexts, compute and disk I/O reside on a single machine; external queuing distributed across multiple worker nodes would add operational complexity with zero performance benefit.
 
 ---
 
@@ -317,6 +321,31 @@ Aarkib decouples runtime application preferences from static environment configu
    - Modifying settings via `PATCH /api/settings` immediately commits to SQLite and updates `app.config` in-memory without restarting the server.
    - Toggling `WATCH_LIBRARY` dynamically starts or stops the background `watchdog.Observer` thread on the fly.
    - Admins can revert all customizations to system defaults at any time via `POST /api/settings/reset`.
+
+---
+
+### 3.9 Transcoding & On-Demand Remuxing Subsystem (`services/transcoder.py`)
+
+Aarkib features an automated streaming and transcoding supervisor inspired by Plex and Jellyfin, shielding frontend clients from raw video/audio container incompatibilities while minimizing CPU load:
+
+1. **Deterministic Playback Decision Matrix**:
+   Exposed via `GET /api/media/<id>/playback`, the engine analyzes client capabilities and media stream descriptors:
+   - **Direct Play**: Codecs (`h264`, `aac`, etc.) and container are natively supported by the web browser or client application. Media is served directly with HTTP 206 byte-range seeking.
+   - **Direct Remux**: Codecs are compatible, but container is incompatible (e.g. `.mkv` or `.avi` containing H.264/AAC). Transmuxed on-the-fly to fragmented MP4 (`fmp4`) without re-encoding video.
+   - **Audio Transcode**: Video stream is copied directly; incompatible multi-channel or lossless audio (e.g. AC3, DTS, TrueHD) is transcoded on-the-fly to stereo AAC.
+   - **Full Transcode / HLS**: Incompatible video codec (e.g. HEVC/H.265 on older devices, MPEG-2) or explicit quality downscaling (1080p, 720p, 480p). Transcoded into fragmented HLS playlists (`.m3u8` with `.ts`/`.m4s` segments).
+
+2. **Hardware Acceleration (VA-API)**:
+   - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using `vainfo` and safe argument lists.
+   - Enables hardware-accelerated decoding and scaling for Intel QuickSync and AMD Radeon GPUs (`-hwaccel vaapi -vaapi_device ...`), drastically reducing CPU consumption in Docker and bare-metal environments.
+
+3. **Transcode Supervisor & Session Lifecycle**:
+   - `TranscodeSupervisor` tracks active HLS and remuxing sessions with unique session tokens.
+   - All FFmpeg processes run inside dedicated process groups (`os.setsid`) to guarantee cleanup of subprocess trees upon client disconnect or abort.
+   - An asynchronous background reaper thread periodically audits active sessions, cleaning expired HLS segments and terminating idle processes after the inactivity threshold (`idle_timeout`).
+
+4. **Subtitle Extraction**:
+   - Embedded SRT, ASS, or SSA subtitles are extracted on-the-fly and converted to standard WebVTT (`.vtt`) format for seamless in-browser overlay rendering.
 
 ---
 
@@ -468,9 +497,10 @@ erDiagram
    - If the database contains zero users, the application automatically redirects visitors to `/auth/setup` to bootstrap the initial Administrator account (with a compulsory password). Once >=1 users exist, `/auth/setup` is permanently locked out.
    - Unauthenticated web visitors are redirected to `/auth/login`.
    - Public registration (`/auth/register`) is disabled; accounts can only be created by administrators in **Settings → Users** (`/settings/users`).
-2. **Dual-Credential Interceptor**:
+2. **Dual-Credential Interceptor & Passwordless LAN Gating**:
    - Web sessions are secured with signed HTTP-only cookies (`Lax` SameSite policy).
-   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. When present, Flask-Login's `request_loader` validates credentials against the `User` model (including blank password for passwordless users) and populates `current_user`, allowing headless readers to sync progress and access collections seamlessly without browser cookies.
+   - API and OPDS requests inspect the `Authorization: Basic <credentials>` header. When present, Flask-Login's `request_loader` validates credentials against the `User` model.
+   - **Passwordless Security Boundary**: Reader accounts configured without passwords (`password_hash = None`) are strictly restricted to local and private IP networks (RFC 1918: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.1`, `::1`). Public internet requests attempting to authenticate as passwordless users over Web UI or Basic Auth are rejected with HTTP 401 Unauthorized unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is explicitly enabled.
 3. **Security Headers**:
    - Injected on all outgoing responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
 4. **Data Isolation**:
@@ -482,26 +512,43 @@ erDiagram
    - The metadata enricher verifies URL schemes (`http`, `https`) before issuing outbound requests to prevent SSRF or arbitrary local file disclosure (`file://`).
 7. **Filesystem Traversal Prevention**:
    - All file downloads, streams, and page reads validate paths using `is_safe_media_path()` to ensure files strictly resolve inside registered `Library.path` roots or configured system cache directories.
+8. **Authentication Rate Limiting**:
+   - An in-memory, thread-safe sliding-window rate limiter (`AuthRateLimiter`) guards `/auth/login`, API, and Basic Auth endpoints against brute-force and credential stuffing attacks. Repeated authentication failures trigger HTTP 429 Too Many Requests with standard `Retry-After` headers.
 
 ---
 
 ## 6. Deployment & Runtime Operations
 
 ### Packaging & Environment
-- **Python Version**: `>=3.14`
+- **Python Version & Runtime Rationale (`>=3.14`)**:
+  - **Container-First Strategy**: Official production distribution is container-first via multi-arch Docker images (`ghcr.io/astral-sh/uv:python3.14-bookworm-slim`), isolating end-users from host Linux distribution package managers.
+  - **Hermetic Host Installs**: Outside Docker, `uv` enables hermetic local runtime management via `uv python install 3.14` and `uv sync` without altering system packages.
+  - **Modern Language Features**: Leveraging PEP 649 (deferred evaluation of annotations) for accelerated import times and cleaner typing, enhanced standard library performance, and forward readiness for free-threading / per-interpreter GIL concurrency.
 - **Dependency Management**: `uv` using pinned `uv.lock`.
-- **Container Strategy**: Multi-stage `Dockerfile` using `python:3.14-slim` and `uv` for minimal attack surface and lightweight image footprints. Runs as an unprivileged user (`USER aarkib`) with a standard container `HEALTHCHECK` querying `/api/health`.
+- **Container Strategy**: Multi-stage `Dockerfile` using `ghcr.io/astral-sh/uv:python3.14-bookworm-slim` for minimal attack surface and lightweight image footprints. Runs as an unprivileged user (`USER aarkib`) with a standard container `HEALTHCHECK` querying `/api/health`.
 - **Persistent Volumes**:
   - `/app/data`: Houses `aarkib.db`, `covers/`, `optimized/`, and runtime caches.
   - `/media` (or individual category mounts like `/media/books`, `/media/comics`, `/media/videos`): Primary external media storage.
 
-### Server Launcher & Web Administration
-- `uv run aarkib`: Start the web application server (or container startup via `aarkib`).
+### Server Launcher & Production WSGI Architecture
+- `uv run aarkib`: Start the media server (or container startup via `aarkib`).
+- **Production WSGI Server (Waitress)**:
+  - When running in production mode, Aarkib launches the multi-threaded Waitress WSGI server (`threads=8`).
+  - Waitress is pure-Python, zero-dependency, works across both `x86_64` and `aarch64` architectures without compilation, and buffers slow clients.
+  - Running a single multi-threaded process preserves Aarkib's in-process singleton guarantees (`JobManager`, `watchdog.Observer`, in-memory transcode session locks, SQLite WAL writer), preventing race conditions that occur with multi-worker process models.
+  - When `FLASK_DEBUG=1` or `AARKIB_DEBUG=1` is set, Aarkib automatically falls back to Werkzeug's development server for live reloading.
 - **Administrative Operations**: Managed exclusively via the modern Web UI:
   - Account setup & user management: First-run setup wizard (`/auth/setup`) and `/settings/users`.
   - Content discovery: Background filesystem watchers and on-demand rescan via `/settings/libraries`.
   - Full-Text Search: Automatic startup synchronization and manual reindexing via `/settings/jobs`.
   - Metadata enrichment: Background enricher jobs triggered via `/settings/jobs` or per-media detail views.
+
+### Schema Evolution & Migration Architecture
+- **Current Additive Auto-Migrations**:
+  - Aarkib employs a non-destructive auto-migration routine (`migrate_database()`) at server startup. Using SQLAlchemy reflection and SQLite `PRAGMA table_info`, it introspects the current schema and executes safe `ALTER TABLE ... ADD COLUMN` statements for missing fields without downtime or manual migration files.
+- **Acknowledged Tech Debt & Migration Boundary**:
+  - This zero-overhead approach is optimal for single-file self-hosted SQLite databases during active feature development.
+  - If future schema changes require destructive alterations (such as column renames, column drops, table decomposition, or non-nullable columns without defaults on existing tables), Aarkib will transition to an Alembic migration tree (`alembic.ini`).
 
 ---
 

@@ -195,9 +195,23 @@ def get_authenticated_user() -> User | None:
 
     auth = request.authorization
     if auth and auth.username:
+        from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+        client_ip = get_client_ip()
+        limited, _ = auth_rate_limiter.is_rate_limited(client_ip)
+        if limited:
+            return None
+
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password):
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+        if user and user.check_password(
+            auth.password,
+            client_ip=client_ip,
+            allow_remote_passwordless=allow_remote_pwless,
+        ):
+            auth_rate_limiter.reset(client_ip)
             return user
+        auth_rate_limiter.record_failure(client_ip)
 
     return None
 
@@ -553,6 +567,21 @@ def get_system_endpoint():
 @jellyfin_bp.route("/users/authenticatebyname", methods=["POST"])
 def authenticate_by_name():
     """Authenticates a user and returns UserDto, SessionInfo, and AccessToken."""
+    from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+    client_ip = get_client_ip()
+    limited, retry_after = auth_rate_limiter.is_rate_limited(client_ip)
+    if limited:
+        return (
+            jsonify(
+                {
+                    "message": f"Too many failed login attempts. Retry after {retry_after}s."
+                }
+            ),
+            429,
+            {"Retry-After": str(retry_after)},
+        )
+
     data = request.get_json(silent=True) or request.form
     username = data.get("Username", "").strip()
     password = data.get("Pw", "")
@@ -561,9 +590,16 @@ def authenticate_by_name():
         return jsonify({"message": "Invalid username or password"}), 401
 
     user = db.session.scalar(select(User).where(User.username == username))
-    if not user or not user.check_password(password):
+    allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+    if not user or not user.check_password(
+        password,
+        client_ip=client_ip,
+        allow_remote_passwordless=allow_remote_pwless,
+    ):
+        auth_rate_limiter.record_failure(client_ip)
         return jsonify({"message": "Invalid username or password"}), 401
 
+    auth_rate_limiter.reset(client_ip)
     token = generate_jellyfin_token(user.id)
     server_id = get_server_id()
     client_info = parse_client_info()

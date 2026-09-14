@@ -54,9 +54,26 @@ class User(UserMixin, db.Model):
         else:
             self.password_hash = generate_password_hash(password.strip())
 
-    def check_password(self, password: str | None) -> bool:
-        """Verifies password. If the user has no password set, entering nothing matches."""
+    def check_password(
+        self,
+        password: str | None,
+        client_ip: str | None = None,
+        allow_remote_passwordless: bool = False,
+    ) -> bool:
+        """Verifies password. If the user has no password set, entering nothing matches.
+
+        Passwordless access is strictly restricted to private/local network clients (RFC 1918)
+        unless allow_remote_passwordless is explicitly enabled.
+        """
         if not self.has_password:
+            from aarkib.services.security import is_private_or_local_ip
+
+            if (
+                not allow_remote_passwordless
+                and client_ip
+                and not is_private_or_local_ip(client_ip)
+            ):
+                return False
             return not password or not password.strip()
         if not password:
             return False

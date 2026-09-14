@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
+from http import HTTPStatus
 from typing import Any
 from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
+    current_app,
     flash,
     redirect,
     render_template,
@@ -34,11 +36,25 @@ def load_user(user_id: str) -> User | None:
 @login_manager.request_loader
 def load_user_from_request(req: Any) -> User | None:
     """Authenticates API and OPDS requests using HTTP Basic Auth."""
+    from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+    client_ip = get_client_ip()
+    limited, _ = auth_rate_limiter.is_rate_limited(client_ip)
+    if limited:
+        return None
+
     auth = req.authorization
     if auth and auth.username:
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password or ""):
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+        if user and user.check_password(
+            auth.password or "",
+            client_ip=client_ip,
+            allow_remote_passwordless=allow_remote_pwless,
+        ):
+            auth_rate_limiter.reset(client_ip)
             return user
+        auth_rate_limiter.record_failure(client_ip)
     return None
 
 
@@ -103,12 +119,33 @@ def login() -> ResponseReturnValue:
         return redirect(url_for("auth.setup"))
 
     if request.method == "POST":
+        from aarkib.services.security import (
+            auth_rate_limiter,
+            get_client_ip,
+            is_private_or_local_ip,
+        )
+
+        client_ip = get_client_ip()
+        limited, retry_after = auth_rate_limiter.is_rate_limited(client_ip)
+        if limited:
+            flash(
+                f"Too many failed login attempts. Please wait {retry_after} seconds before trying again.",
+                "error",
+            )
+            return render_template("login.html"), HTTPStatus.TOO_MANY_REQUESTS
+
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         remember = bool(request.form.get("remember"))
 
         user = db.session.scalar(select(User).where(User.username == username))
-        if user and user.check_password(password):
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+        if user and user.check_password(
+            password,
+            client_ip=client_ip,
+            allow_remote_passwordless=allow_remote_pwless,
+        ):
+            auth_rate_limiter.reset(client_ip)
             login_user(user, remember=remember)
             next_page = request.args.get("next")
             redirect_target = (
@@ -116,7 +153,19 @@ def login() -> ResponseReturnValue:
             )
             flash(f"Welcome back, {user.username}!", "success")
             return redirect(redirect_target)
-        flash("Invalid username or password.", "error")
+
+        auth_rate_limiter.record_failure(client_ip)
+        if (
+            user
+            and not user.has_password
+            and not allow_remote_pwless
+            and not is_private_or_local_ip(client_ip)
+        ):
+            flash(
+                "Passwordless accounts can only log in from a local network.", "error"
+            )
+        else:
+            flash("Invalid username or password.", "error")
 
     return render_template("login.html")
 

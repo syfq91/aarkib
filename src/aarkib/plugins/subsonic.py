@@ -109,9 +109,23 @@ def get_authenticated_user() -> User | None:
 
     # If credentials were provided, always validate them
     if username:
+        from aarkib.services.security import (
+            auth_rate_limiter,
+            get_client_ip,
+            is_private_or_local_ip,
+        )
+
+        client_ip = get_client_ip()
+        limited, _ = auth_rate_limiter.is_rate_limited(client_ip)
+        if limited:
+            return None
+
         user = db.session.scalar(select(User).where(User.username == username))
         if not user:
+            auth_rate_limiter.record_failure(client_ip)
             return None
+
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
 
         # 1. Plain password authentication
         if password is not None:
@@ -121,8 +135,14 @@ def get_authenticated_user() -> User | None:
                     clean_pw = bytes.fromhex(clean_pw[4:]).decode("utf-8")
                 except Exception as exc:
                     logger.debug("Failed decoding hex password: %s", exc)
-            if user.check_password(clean_pw):
+            if user.check_password(
+                clean_pw,
+                client_ip=client_ip,
+                allow_remote_passwordless=allow_remote_pwless,
+            ):
+                auth_rate_limiter.reset(client_ip)
                 return user
+            auth_rate_limiter.record_failure(client_ip)
             return None
 
         # 2. Token auth: token = md5(password + salt)
@@ -134,16 +154,28 @@ def get_authenticated_user() -> User | None:
                     (api_token + salt).encode("utf-8"), usedforsecurity=False
                 ).hexdigest()
                 if token.lower() == expected.lower():
+                    auth_rate_limiter.reset(client_ip)
                     return user
             # Allow checking if token matches direct MD5
-            if user.check_password(token):
+            if user.check_password(
+                token,
+                client_ip=client_ip,
+                allow_remote_passwordless=allow_remote_pwless,
+            ):
+                auth_rate_limiter.reset(client_ip)
                 return user
+            auth_rate_limiter.record_failure(client_ip)
             return None
 
         # 3. Passwordless user without credentials parameter
         if not user.has_password:
-            return user
+            if allow_remote_pwless or is_private_or_local_ip(client_ip):
+                auth_rate_limiter.reset(client_ip)
+                return user
+            auth_rate_limiter.record_failure(client_ip)
+            return None
 
+        auth_rate_limiter.record_failure(client_ip)
         return None
 
     if current_user.is_authenticated:

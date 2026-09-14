@@ -74,9 +74,23 @@ def get_opds_user() -> User | None:
 
     auth = request.authorization
     if auth and auth.username:
+        from aarkib.services.security import auth_rate_limiter, get_client_ip
+
+        client_ip = get_client_ip()
+        limited, _ = auth_rate_limiter.is_rate_limited(client_ip)
+        if limited:
+            return None
+
         user = db.session.scalar(select(User).where(User.username == auth.username))
-        if user and user.check_password(auth.password or ""):
+        allow_remote_pwless = current_app.config.get("ALLOW_PASSWORDLESS_REMOTE", False)
+        if user and user.check_password(
+            auth.password or "",
+            client_ip=client_ip,
+            allow_remote_passwordless=allow_remote_pwless,
+        ):
+            auth_rate_limiter.reset(client_ip)
             return user
+        auth_rate_limiter.record_failure(client_ip)
     return None
 
 

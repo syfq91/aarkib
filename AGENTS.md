@@ -91,7 +91,7 @@ graph TD
 | **Media Probing & Transcoding** | FFmpeg & FFprobe | Safe subprocess execution via argument lists. Never `shell=True`. Configurable binary paths (`AARKIB_FFMPEG_PATH`, `AARKIB_FFPROBE_PATH`). |
 | **Code Formatting & Linting** | Ruff | Canonical linter and formatter. Run `uv run ruff check` and `uv run ruff format` before declaring work complete. Narrowest suppression if genuinely needed. |
 | **Testing** | Pytest | Deterministic synthetic fixtures. Never depend on personal media files. 100% test pass rate required. |
-| **Deployment** | Docker & Direct `uv` | Must support both Linux `x86_64` (amd64) and `ARM64` (aarch64). Non-root unprivileged execution. |
+| **Deployment** | Docker & Direct `uv` | Production WSGI via `waitress` (`threads=8`), development via Werkzeug. Must support both Linux `x86_64` (amd64) and `ARM64` (aarch64). Non-root unprivileged execution. |
 
 ---
 
@@ -231,7 +231,9 @@ aarkib/
 
 ### 8. Authentication, Authorization & Security
 - **Mandatory Authentication**: Enforced across all endpoints (WebUI, REST API, OPDS, Subsonic).
-- **Password Security**: Passwords hashed using industry-standard cryptography (`werkzeug.security`). Administrators strictly require strong passwords (>= 4 chars). Passwordless reader accounts supported.
+- **Password Security**: Passwords hashed using industry-standard cryptography (`werkzeug.security`). Administrators strictly require strong passwords (>= 4 chars).
+- **Passwordless Account Boundary**: Passwordless reader accounts are strictly restricted to local and private IP networks (RFC 1918 / loopback). Requests from public WAN addresses attempting to authenticate without a password are automatically rejected with HTTP 401 Unauthorized unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is set.
+- **Authentication Rate Limiting**: All login and Basic Auth verification routes are protected by `AuthRateLimiter` to thwart brute-force and enumeration attacks.
 - **No Secrets in Logs**: Never log passwords, API tokens, session IDs, or private keys.
 - **API Boundaries**: Validate all incoming parameters (IDs, query params, request bodies). Never construct raw SQL queries via string interpolation.
 
