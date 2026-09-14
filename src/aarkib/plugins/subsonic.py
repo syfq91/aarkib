@@ -426,6 +426,7 @@ def stream_media(user: User | None = None):
     if not mime:
         mime = "audio/mpeg" if item.file_format == "mp3" else "audio/mp4"
 
+    db.session.close()
     return send_file(file_path, mimetype=mime, conditional=True)
 
 
@@ -448,6 +449,7 @@ def get_cover_art(user: User | None = None):
         covers_dir = Path(current_app.config.get("COVERS_DIR", "data/covers")).resolve()
         cover_file = (covers_dir / item.cover_image_path).resolve()
         if cover_file.is_file() and cover_file.is_relative_to(covers_dir):
+            db.session.close()
             return send_file(cover_file, mimetype="image/webp", conditional=True)
 
     # Fallback default 1x1 png or 404

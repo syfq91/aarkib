@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-14 (Updated Post-Remediation)  
 **Scope**: Full codebase (`src/aarkib/`, `tests/`)  
-**Baseline**: 207/207 tests passing, ruff clean (102 files, 0 errors), Python ≥ 3.14  
+**Baseline**: 209/209 tests passing, ruff clean (102 files, 0 errors), Python ≥ 3.14  
 
 ---
 
@@ -16,7 +16,7 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 
 | Severity | Initial | Resolved | Remaining | Current Status |
 |:---------|--------:|---------:|----------:|:---------------|
-| 🔴 **CRITICAL** | 7 | 6 | 1 | **86% Resolved**: C1, C2, C3, C5, C6, C7 resolved; C4 streaming close added |
+| 🔴 **CRITICAL** | 7 | 7 | 0 | **100% Resolved**: All 7/7 Criticals resolved (C1, C2, C3, C4, C5, C6, C7) |
 | 🟠 **HIGH** | 22 | 6 | 16 | **Tier 1 Highs Resolved**: H1, H2, H3, H8, H11 resolved; H4 count queries resolved |
 | 🟡 **MEDIUM** | 18 | 4 | 14 | M5 (indexes), M7 (secrets), M8 (exemption), M9 (syntax) resolved |
 | 🔵 **LOW** | 13 | 0 | 13 | Polish & ergonomics items scheduled for future iterations |
@@ -28,8 +28,8 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 |:----------|:------:|:-------:|:----------|
 | **Security** | ⚠️ Fair | 🟢 Good | **C1** optimizer traversal patched; **H2** Jellyfin streaming auth enforced; **H1** `is_safe_media_path` applied to all 10 endpoints; **H8** API key log redaction |
 | **Architecture** | ⚠️ Poor | ⚠️ In Progress | M5 indexes added; M7/M8/M9 fixed; service extraction (M1) and scanner decomposition (M2) scheduled for Tier 3 |
-| **Performance** | ⚠️ Poor | 🟢 Good | **C2** `busy_timeout=10000` eliminates lock failures; **C5** mtime/size fast-path skips SHA-256; **C6** scanner commits batched; **C7** incremental FTS |
-| **Testing** | ⚠️ Fair | 🟢 Good | Test suite expanded to 207 tests (100% pass rate); added path traversal rejection and stream auth enforcement tests |
+| **Performance** | ⚠️ Poor | 🟢 Good | **C2** `busy_timeout=10000` eliminates lock failures; **C3/C4** zero DB locks during HTTP I/O & streaming; **C5** mtime fast-path; **C6** commit batching; **C7** incremental FTS |
+| **Testing** | ⚠️ Fair | 🟢 Good | Test suite expanded to 209 tests (100% pass rate); added path traversal rejection, stream auth enforcement, and session detachment tests |
 | **Code Quality** | 🟢 Good | 🟢 Excellent | Ruff linter (0 errors) and formatter (0 diffs) clean across 102 files; Python 3 exception tuple syntax corrected |
 
 ---
@@ -82,20 +82,24 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 
 > [!NOTE]
 > **Status: ✅ RESOLVED (2026-09-14)**  
-> **Fix**: In `src/aarkib/services/enricher.py`, `enrich_all_media()` now queries only item IDs (`select(MediaItem.id)`), closes the ambient session immediately, and fetches/commits each item individually while ensuring the session is closed between external HTTP calls.
+> **Fix**: In `src/aarkib/services/enricher.py`, `enrich_media_item()` detaches model attributes, closes `db.session` before any remote HTTP lookups or artwork downloads (`ResilientHttpClient`), and re-fetches the record in an isolated write transaction for commits. `enrich_all_media()` queries only item IDs (`select(MediaItem.id)`), closes ambient sessions, and commits each item separately. In `src/aarkib/routes/api.py`, `/api/media/<int:item_id>/metadata/search` and `apply` detach sessions before querying `metadata_registry`. Covered by `test_enrich_database_session_detached_during_external_io` and `test_api_metadata_search_session_detached` in `tests/test_enricher.py`.
 
 - **Files**: `src/aarkib/services/enricher.py`, `src/aarkib/routes/api.py`
 - **Impact**: Batch enrichment previously iterated over all items making HTTP requests (10s timeout + retries each) while holding an open SQLite transaction, blocking concurrent writes.
 
 ---
 
-### C4. Database Session Held During FFmpeg Remux Streaming (Hours)
+### C4. Database Session Held During FFmpeg Remux Streaming & File Serving
 
 > [!NOTE]
-> **Status: ⚠️ IN PROGRESS (Partially Resolved)**  
-> **Fix**: Explicit `db.session.close()` added in `routes/api.py` before returning streaming responses in `stream_remux_video()`. Additional endpoints (HLS session creation, subtitle extraction) scheduled for session isolation review in Tier 2.
+> **Status: ✅ RESOLVED (2026-09-14)**  
+> **Fix**: Explicit `db.session.close()` added across all streaming, subprocess, and `send_file` endpoints prior to returning responses:
+> - `routes/api.py`: `stream_remux_video()`, `get_hls_master_playlist()`, `get_media_file()`, `get_media_cover()`, `get_stream_info()`, `list_subtitles()`, `get_subtitle_vtt()`, `download_media_file()`, `precompute_media_optimization()`, `get_cbz_pages()`, `get_cbz_page_image()`.
+> - `plugins/jellyfin.py`: `stream_jellyfin_media()`, `get_item_image()`.
+> - `plugins/subsonic.py`: `stream_media()`, `get_cover_art()`.
+> Prevents Flask WSGI streaming generator contexts from holding checked-out SQLite connections during long playback sessions (hours).
 
-- **File**: `src/aarkib/routes/api.py` (lines 1052–1084)
+- **Files**: `src/aarkib/routes/api.py`, `src/aarkib/plugins/jellyfin.py`, `src/aarkib/plugins/subsonic.py`
 - **Impact**: In Flask/WSGI, streaming response generators delay session teardown until stream completion unless `db.session.close()` is called explicitly prior to returning `Response(...)`.
 
 ---
@@ -434,13 +438,13 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 - [x] **8. M8**: Fix dead endpoint exemption `"api.get_book_cover"` → `"api.get_media_cover"`.
 - [x] **9. M9**: Fix malformed `except ValueError, AttributeError:` → `except (ValueError, AttributeError):`.
 
-### Tier 2 — High Priority (Performance & Reliability) — **55% RESOLVED**
+### Tier 2 — High Priority (Performance & Reliability) — **60% RESOLVED**
 
 - [x] **1. C5**: Scanner fast-path — compare `st_mtime` and `st_size` before computing SHA-256.
 - [x] **2. C6**: Batch database commits in scanner (every 100 items).
 - [x] **3. C7**: Use incremental FTS updates (`sync_batch_fts`) instead of full rebuild.
 - [x] **4. C3**: Close DB sessions between external HTTP calls during enrichment.
-- [ ] **5. C4**: Complete session detachment across remaining streaming/subprocess routes.
+- [x] **5. C4**: Complete session detachment across remaining streaming/subprocess routes.
 - [x] **6. H4 (Partial)**: Web UI author/series/tag counts migrated to SQL `GROUP BY` counts.
 - [ ] **7. H4 (Remaining)**: Add `selectinload` for Subsonic/Jellyfin/OPDS protocols.
 - [ ] **8. H5**: Wrap `db.session.commit()` calls with try/except rollback.

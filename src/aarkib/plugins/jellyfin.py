@@ -1006,6 +1006,7 @@ def get_item_image(item_id: str, image_index: int = 0):
         cover_file = (covers_dir / item.cover_image_path).resolve()
         if cover_file.is_file() and cover_file.is_relative_to(covers_dir):
             mime, _ = mimetypes.guess_type(str(cover_file))
+            db.session.close()
             return send_file(
                 cover_file, mimetype=mime or "image/webp", conditional=True
             )
@@ -1090,6 +1091,7 @@ def stream_jellyfin_media(
         else:
             mime = "application/octet-stream"
 
+    db.session.close()
     return send_file(file_path, mimetype=mime, conditional=True)
 
 

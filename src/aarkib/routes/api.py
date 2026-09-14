@@ -878,6 +878,7 @@ def get_media_cover(item_id: int):
         covers_dir = Path(current_app.config["COVERS_DIR"])
         cover_file = covers_dir / item.cover_image_path
         if cover_file.exists() and _is_within_covers(cover_file):
+            db.session.close()
             return send_file(cover_file, mimetype="image/webp")
 
     # Generate fallback SVG cover
@@ -907,6 +908,7 @@ def get_media_cover(item_id: int):
         <text x="150" y="314" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" font-weight="bold" letter-spacing="1" text-anchor="middle">{(item.file_format or "video").upper()}</text>
         <text x="150" y="410" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" letter-spacing="2" font-weight="600" text-anchor="middle">AARKIB VIDEO</text>
     </svg>"""
+        db.session.close()
         return (
             io.BytesIO(svg.encode("utf-8")).getvalue(),
             200,
@@ -922,6 +924,7 @@ def get_media_cover(item_id: int):
         <text x="150" y="240" fill="#94a3b8" font-size="14" font-family="'Inter', system-ui, sans-serif" text-anchor="middle">{author}</text>
         <text x="150" y="380" fill="#00d2ff" font-size="11" font-family="'Inter', system-ui, sans-serif" letter-spacing="2" font-weight="bold" text-anchor="middle">AARKIB</text>
     </svg>"""
+    db.session.close()
     return (
         io.BytesIO(svg.encode("utf-8")).getvalue(),
         200,
@@ -976,6 +979,7 @@ def get_media_file(item_id: int, filename: str | None = None):
     else:
         mimetype = "application/octet-stream"
 
+    db.session.close()
     return send_file(file_path, mimetype=mimetype, conditional=True)
 
 
@@ -1030,6 +1034,11 @@ def get_stream_info(item_id: int):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
+    item_id_val = item.id
+    item_title = item.title
+    item_format = item.file_format
+    db.session.close()
+
     from aarkib.services.transcoder import (
         evaluate_playback_strategy,
         probe_media_streams,
@@ -1040,15 +1049,15 @@ def get_stream_info(item_id: int):
 
     return jsonify(
         {
-            "id": item.id,
-            "title": item.title,
-            "file_format": item.file_format,
+            "id": item_id_val,
+            "title": item_title,
+            "file_format": item_format,
             "original_file_path": str(file_path),
             "streams": streams,
             "evaluation": eval_res,
-            "direct_url": f"/api/media/{item.id}/file",
-            "remux_url": f"/api/media/{item.id}/stream/remux",
-            "hls_url": f"/api/media/{item.id}/stream/hls/master.m3u8",
+            "direct_url": f"/api/media/{item_id_val}/file",
+            "remux_url": f"/api/media/{item_id_val}/stream/remux",
+            "hls_url": f"/api/media/{item_id_val}/stream/hls/master.m3u8",
         }
     )
 
@@ -1108,6 +1117,9 @@ def get_hls_master_playlist(item_id: int):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
+    item_id_val = item.id
+    db.session.close()
+
     from aarkib.services.transcoder import RESOLUTION_PRESETS, transcode_supervisor
 
     resolution = request.args.get("resolution", "original")
@@ -1122,7 +1134,7 @@ def get_hls_master_playlist(item_id: int):
     )
 
     session = transcode_supervisor.create_or_get_hls_session(
-        media_item_id=item.id,
+        media_item_id=item_id_val,
         file_path=file_path,
         transcode_base_dir=transcode_dir,
         resolution=resolution,
@@ -1137,7 +1149,7 @@ def get_hls_master_playlist(item_id: int):
         "#EXTM3U\n"
         "#EXT-X-VERSION:7\n"
         f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},NAME="{resolution}"\n'
-        f"/api/media/{item.id}/stream/hls/{session.session_id}/playlist.m3u8\n"
+        f"/api/media/{item_id_val}/stream/hls/{session.session_id}/playlist.m3u8\n"
     )
 
     return Response(
@@ -1244,12 +1256,15 @@ def list_subtitles(item_id: int):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
+    item_id_val = item.id
+    db.session.close()
+
     from aarkib.services.transcoder import probe_media_streams
 
     streams = probe_media_streams(file_path)
     return jsonify(
         {
-            "id": item.id,
+            "id": item_id_val,
             "subtitles": streams.get("subtitles", []),
         }
     )
@@ -1272,6 +1287,8 @@ def get_subtitle_vtt(item_id: int, track_index: int):
         )
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
+
+    db.session.close()
 
     from aarkib.services.transcoder import generate_vtt_subtitles
 
@@ -1315,7 +1332,13 @@ def download_media_file(item_id: int, preset: str | None = None):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
-    if preset_arg and item.file_format == "epub":
+    item_id_val = item.id
+    item_title = item.title
+    item_format = item.file_format
+    item_file_hash = item.file_hash
+    orig_path_str = item.original_file_path
+
+    if preset_arg and item_format == "epub":
         optimized_dir = Path(
             current_app.config.get(
                 "OPTIMIZED_DIR",
@@ -1324,15 +1347,16 @@ def download_media_file(item_id: int, preset: str | None = None):
         )
         from aarkib.services.optimizer import get_or_create_optimized_epub
 
+        db.session.close()
         try:
             opt_path = get_or_create_optimized_epub(
-                item_id=item.id,
-                file_path=item.original_file_path,
-                file_hash=item.file_hash,
+                item_id=item_id_val,
+                file_path=orig_path_str,
+                file_hash=item_file_hash,
                 preset_key=preset_arg,
                 optimized_dir=optimized_dir,
             )
-            download_name = f"{item.title} ({preset_arg.upper()}).epub"
+            download_name = f"{item_title} ({preset_arg.upper()}).epub"
             return send_file(
                 opt_path,
                 as_attachment=True,
@@ -1341,12 +1365,13 @@ def download_media_file(item_id: int, preset: str | None = None):
             )
         except Exception as e:
             current_app.logger.error(
-                "Failed optimizing on download for %s: %s", item.title, e
+                "Failed optimizing on download for %s: %s", item_title, e
             )
 
-    filename = f"{item.title}.{item.file_format}"
+    filename = f"{item_title}.{item_format}"
     guessed, _ = mimetypes.guess_type(str(file_path))
     mimetype = guessed or "application/octet-stream"
+    db.session.close()
     return send_file(
         file_path, as_attachment=True, download_name=filename, mimetype=mimetype
     )
@@ -1389,6 +1414,12 @@ def precompute_media_optimization(item_id: int):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
+    item_id_val = item.id
+    item_hash = item.file_hash
+    orig_path_str = item.original_file_path
+    orig_size = item.file_size or Path(item.original_file_path).stat().st_size
+    db.session.close()
+
     optimized_dir = Path(
         current_app.config.get(
             "OPTIMIZED_DIR",
@@ -1399,14 +1430,13 @@ def precompute_media_optimization(item_id: int):
 
     try:
         opt_path = get_or_create_optimized_epub(
-            item_id=item.id,
-            file_path=item.original_file_path,
-            file_hash=item.file_hash,
+            item_id=item_id_val,
+            file_path=orig_path_str,
+            file_hash=item_hash,
             preset_key=preset_arg,
             optimized_dir=optimized_dir,
         )
         opt_size = opt_path.stat().st_size
-        orig_size = item.file_size or Path(item.original_file_path).stat().st_size
         reduction = (
             round((1.0 - (opt_size / orig_size)) * 100, 1) if orig_size > 0 else 0
         )
@@ -1414,13 +1444,13 @@ def precompute_media_optimization(item_id: int):
         return jsonify(
             {
                 "status": "success",
-                "id": item.id,
-                "item_id": item.id,
+                "id": item_id_val,
+                "item_id": item_id_val,
                 "preset": preset_arg,
                 "original_size": orig_size,
                 "optimized_size": opt_size,
                 "reduction_percent": reduction,
-                "download_url": f"/api/media/{item.id}/download/optimized/{preset_arg}",
+                "download_url": f"/api/media/{item_id_val}/download/optimized/{preset_arg}",
             }
         )
     except Exception as e:
@@ -1443,6 +1473,9 @@ def get_cbz_pages(item_id: int):
     if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
+    item_id_val = item.id
+    db.session.close()
+
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
             image_names = [
@@ -1460,15 +1493,15 @@ def get_cbz_pages(item_id: int):
     pages = [
         {
             "page_number": idx + 1,
-            "url": f"/api/media/{item.id}/page/{idx + 1}",
+            "url": f"/api/media/{item_id_val}/page/{idx + 1}",
             "filename": Path(name).name,
         }
         for idx, name in enumerate(image_names)
     ]
     return jsonify(
         {
-            "id": item.id,
-            "item_id": item.id,
+            "id": item_id_val,
+            "item_id": item_id_val,
             "total_pages": len(pages),
             "pages": pages,
         }
@@ -1487,6 +1520,8 @@ def get_cbz_page_image(item_id: int, page_num: int):
         abort(403)
     if not file_path.is_file():
         abort(404)
+
+    db.session.close()
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -1782,11 +1817,16 @@ def search_metadata_candidates(item_id: int):
         or getattr(item, "release_year", None)
     )
     provider_name = request.args.get("provider")
+    media_type = item.media_type or "all"
+    item_id_val = item.id
+
+    # C3 fix: Detach DB session before performing external provider search
+    db.session.close()
 
     from aarkib.services.metadata import metadata_registry
 
     candidates = metadata_registry.search(
-        media_type=item.media_type or "all",
+        media_type=media_type,
         query=query,
         year=str(year)[:4] if year else None,
         provider_name=provider_name,
@@ -1795,8 +1835,8 @@ def search_metadata_candidates(item_id: int):
     return jsonify(
         {
             "status": "success",
-            "media_id": item.id,
-            "media_type": item.media_type,
+            "media_id": item_id_val,
+            "media_type": media_type,
             "query": query,
             "count": len(candidates),
             "candidates": [c.to_dict() for c in candidates],
@@ -1833,6 +1873,11 @@ def apply_metadata_candidate(item_id: int):
 
     if result.get("status") == "not_found":
         return api_error("Failed to fetch details for candidate from provider", 404)
+
+    # Re-fetch item since run_enrich closed the previous session and committed in a new one
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found after enrichment", 404)
 
     # If lock_fields specified, set them on the item after applying metadata
     if lock_fields is not None:

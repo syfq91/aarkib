@@ -452,7 +452,9 @@ erDiagram
 ### Database Pragmas & Concurrency
 - Configured with SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`).
 - `PRAGMA synchronous=NORMAL` to maximize transaction throughput while maintaining durability.
+- `PRAGMA busy_timeout=10000` (10-second wait) to eliminate immediate lock errors under concurrent reader/writer workloads.
 - `PRAGMA foreign_keys=ON` to enforce relational constraints.
+- **Short Write Transactions & Session Detachment**: Database sessions are strictly detached (`db.session.close()`) prior to external HTTP requests (enrichment, artwork fetching), progressive FFmpeg pipe streaming, and `send_file` downloads. This guarantees SQLite connections are never held open during client network latency or subprocess execution.
 - Automatic schema migration (`migrate_database()`) checks `db.metadata.tables` against runtime SQLite columns and executes non-destructive `ALTER TABLE ADD COLUMN` operations on startup.
 
 ---

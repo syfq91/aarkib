@@ -298,20 +298,38 @@ def enrich_media_item(
     )
     from aarkib.services.metadata import metadata_registry
 
+    # 1. Detach search parameters before external network I/O
+    item_id = item.id
+    media_type = item.media_type or "all"
+    is_book = getattr(item, "is_book", False)
+    item_isbn = getattr(item, "isbn", None)
+    item_title = item.title
+    first_author = item.authors[0].name if getattr(item, "authors", None) else None
+    item_year = getattr(item, "publication_date", None) or getattr(
+        item, "release_year", None
+    )
+    file_hash = item.file_hash
+    has_cover = bool(item.cover_image_path)
+    locked_fields = (
+        set(item.get_locked_fields()) if hasattr(item, "get_locked_fields") else set()
+    )
+
+    # Invariant: Close session so no SQLite transaction/lock is held during network requests
+    db.session.close()
+
     details = None
     if candidate_external_id and candidate_provider:
         details = metadata_registry.fetch_details(
             candidate_provider,
             candidate_external_id,
-            media_type=item.media_type or "all",
+            media_type=media_type,
         )
     else:
         # If it's a book and no explicit candidate requested, use fetch_external_metadata
-        if item.is_book:
-            first_author = item.authors[0].name if item.authors else None
+        if is_book:
             legacy_meta = fetch_external_metadata(
-                isbn=item.isbn,
-                title=item.title,
+                isbn=item_isbn,
+                title=item_title,
                 author=first_author,
                 provider=provider,
             )
@@ -319,9 +337,9 @@ def enrich_media_item(
                 from aarkib.services.metadata.base import MediaMetadataDetails
 
                 details = MediaMetadataDetails(
-                    id=legacy_meta.isbn or legacy_meta.title or str(item.id),
+                    id=legacy_meta.isbn or legacy_meta.title or str(item_id),
                     provider=legacy_meta.source,
-                    title=legacy_meta.title or item.title,
+                    title=legacy_meta.title or item_title,
                     creators=legacy_meta.authors,
                     overview=legacy_meta.description,
                     poster_url=legacy_meta.cover_url,
@@ -335,146 +353,25 @@ def enrich_media_item(
                 )
         else:
             # Query registry
-            search_query = item.title
+            search_query = item_title
             candidates = metadata_registry.search(
-                media_type=item.media_type or "all",
+                media_type=media_type,
                 query=search_query,
-                year=item.publication_date or getattr(item, "release_year", None),
+                year=item_year,
                 provider_name=provider if provider != "all" else None,
             )
             if candidates and candidates[0].score >= 0.5:
                 top = candidates[0]
                 details = metadata_registry.fetch_details(
-                    top.provider, top.id, media_type=item.media_type or "all"
+                    top.provider, top.id, media_type=media_type
                 )
 
     if not details:
-        return {"status": "not_found", "media_id": item.id, "changes": []}
+        return {"status": "not_found", "media_id": item_id, "changes": []}
 
-    changes: list[str] = []
-
-    # Title
-    if (
-        not item.is_field_locked("title")
-        and (not item.title or overwrite)
-        and details.title
-    ):
-        item.title = details.title
-        changes.append("title")
-
-    # Overview / Description
-    if (
-        not item.is_field_locked("description")
-        and (not item.description or overwrite)
-        and details.overview
-    ):
-        item.description = details.overview
-        changes.append("description")
-
-    # Creators / Authors / Directors
-    if (
-        not item.is_field_locked("creators")
-        and not item.is_field_locked("authors")
-        and (not item.authors or overwrite)
-        and details.creators
-    ):
-        item.authors = resolve_or_create_authors(details.creators)
-        changes.append("creators")
-
-    # Publisher
-    if (
-        not item.is_field_locked("publisher")
-        and (not item.publisher or overwrite)
-        and details.publisher
-    ):
-        item.publisher = details.publisher
-        changes.append("publisher")
-
-    # Release / Publication date
-    if (
-        not item.is_field_locked("publication_date")
-        and (not item.publication_date or overwrite)
-        and details.release_date
-    ):
-        item.publication_date = str(details.release_date)[:10]
-        changes.append("publication_date")
-
-    # Language
-    if (
-        not item.is_field_locked("language")
-        and (not item.language or overwrite)
-        and details.language
-    ):
-        item.language = details.language
-        changes.append("language")
-
-    # Genres / Tags
-    if (
-        not item.is_field_locked("tags")
-        and not item.is_field_locked("genres")
-        and (not item.tags or overwrite)
-        and details.genres
-    ):
-        item.tags = resolve_or_create_tags(details.genres)
-        changes.append(f"tags ({len(item.tags)})")
-
-    # Video specifics
-    if (
-        hasattr(item, "season")
-        and not item.is_field_locked("season")
-        and details.season is not None
-    ):
-        item.season = details.season
-        changes.append("season")
-    if (
-        hasattr(item, "episode")
-        and not item.is_field_locked("episode")
-        and details.episode is not None
-    ):
-        item.episode = details.episode
-        changes.append("episode")
-    if (
-        hasattr(item, "duration")
-        and not item.is_field_locked("duration")
-        and details.duration
-        and not item.duration
-    ):
-        item.duration = details.duration
-        changes.append("duration")
-
-    # Music specifics
-    if (
-        hasattr(item, "album")
-        and not item.is_field_locked("album")
-        and details.album
-        and (not item.album or overwrite)
-    ):
-        item.album = details.album
-        changes.append("album")
-
-    # Book / Comic specifics
-    if (
-        hasattr(item, "page_count")
-        and not item.is_field_locked("page_count")
-        and (not item.page_count or overwrite)
-        and details.page_count
-    ):
-        item.page_count = details.page_count
-        changes.append("page_count")
-
-    if (
-        hasattr(item, "isbn")
-        and not item.is_field_locked("isbn")
-        and (not item.isbn or overwrite)
-        and details.isbn
-    ):
-        item.isbn = details.isbn
-        changes.append("isbn")
-
-    # Cover
-    if not item.is_field_locked("cover_image") and (
-        not item.cover_image_path or overwrite
-    ):
+    # 2. Download and prepare cover art while session is closed
+    cover_filename = None
+    if "cover_image" not in locked_fields and (not has_cover or overwrite):
         cover_bytes = details.poster_bytes
         if not cover_bytes and details.poster_url:
             from aarkib.services.metadata.client import ResilientHttpClient
@@ -483,33 +380,165 @@ def enrich_media_item(
             cover_bytes = client.get_bytes(details.poster_url)
 
         if cover_bytes:
-            cover_filename = f"{item.file_hash[:16]}.webp"
-            cover_output_path = covers_dir / cover_filename
+            filename = f"{file_hash[:16]}.webp"
+            cover_output_path = covers_dir / filename
             if generate_cover_webp(cover_bytes, cover_output_path):
-                item.cover_image_path = cover_filename
-                changes.append("cover_image")
+                cover_filename = filename
+
+    # 3. Re-acquire item and apply changes in a brief database write transaction
+    target_item = db.session.get(MediaItem, item_id)
+    if not target_item:
+        db.session.close()
+        return {"status": "not_found", "media_id": item_id, "changes": []}
+
+    changes: list[str] = []
+
+    # Title
+    if (
+        not target_item.is_field_locked("title")
+        and (not target_item.title or overwrite)
+        and details.title
+    ):
+        target_item.title = details.title
+        changes.append("title")
+
+    # Overview / Description
+    if (
+        not target_item.is_field_locked("description")
+        and (not target_item.description or overwrite)
+        and details.overview
+    ):
+        target_item.description = details.overview
+        changes.append("description")
+
+    # Creators / Authors / Directors
+    if (
+        not target_item.is_field_locked("creators")
+        and not target_item.is_field_locked("authors")
+        and (not target_item.authors or overwrite)
+        and details.creators
+    ):
+        target_item.authors = resolve_or_create_authors(details.creators)
+        changes.append("creators")
+
+    # Publisher
+    if (
+        not target_item.is_field_locked("publisher")
+        and (not target_item.publisher or overwrite)
+        and details.publisher
+    ):
+        target_item.publisher = details.publisher
+        changes.append("publisher")
+
+    # Release / Publication date
+    if (
+        not target_item.is_field_locked("publication_date")
+        and (not target_item.publication_date or overwrite)
+        and details.release_date
+    ):
+        target_item.publication_date = str(details.release_date)[:10]
+        changes.append("publication_date")
+
+    # Language
+    if (
+        not target_item.is_field_locked("language")
+        and (not target_item.language or overwrite)
+        and details.language
+    ):
+        target_item.language = details.language
+        changes.append("language")
+
+    # Genres / Tags
+    if (
+        not target_item.is_field_locked("tags")
+        and not target_item.is_field_locked("genres")
+        and (not target_item.tags or overwrite)
+        and details.genres
+    ):
+        target_item.tags = resolve_or_create_tags(details.genres)
+        changes.append(f"tags ({len(target_item.tags)})")
+
+    # Video specifics
+    if (
+        hasattr(target_item, "season")
+        and not target_item.is_field_locked("season")
+        and details.season is not None
+    ):
+        target_item.season = details.season
+        changes.append("season")
+    if (
+        hasattr(target_item, "episode")
+        and not target_item.is_field_locked("episode")
+        and details.episode is not None
+    ):
+        target_item.episode = details.episode
+        changes.append("episode")
+    if (
+        hasattr(target_item, "duration")
+        and not target_item.is_field_locked("duration")
+        and details.duration
+        and not target_item.duration
+    ):
+        target_item.duration = details.duration
+        changes.append("duration")
+
+    # Music specifics
+    if (
+        hasattr(target_item, "album")
+        and not target_item.is_field_locked("album")
+        and details.album
+        and (not target_item.album or overwrite)
+    ):
+        target_item.album = details.album
+        changes.append("album")
+
+    # Book / Comic specifics
+    if (
+        hasattr(target_item, "page_count")
+        and not target_item.is_field_locked("page_count")
+        and (not target_item.page_count or overwrite)
+        and details.page_count
+    ):
+        target_item.page_count = details.page_count
+        changes.append("page_count")
+
+    if (
+        hasattr(target_item, "isbn")
+        and not target_item.is_field_locked("isbn")
+        and (not target_item.isbn or overwrite)
+        and details.isbn
+    ):
+        target_item.isbn = details.isbn
+        changes.append("isbn")
+
+    # Cover
+    if cover_filename:
+        target_item.cover_image_path = cover_filename
+        changes.append("cover_image")
 
     # Stash external_id
     if details.id:
-        item.external_id = f"{details.provider}:{details.id}"
+        target_item.external_id = f"{details.provider}:{details.id}"
 
     if changes:
         db.session.commit()
         from aarkib.services.search import sync_media_item_fts
 
-        sync_media_item_fts(item.id)
+        sync_media_item_fts(target_item.id)
         logger.info(
             "Enriched %s ID %d (%s) with: %s",
-            item.media_type,
-            item.id,
-            item.title,
+            target_item.media_type,
+            target_item.id,
+            target_item.title,
             ", ".join(changes),
         )
+    else:
+        db.session.close()
 
     return {
         "status": "success" if changes else "no_changes_needed",
-        "media_id": item.id,
-        "title": item.title,
+        "media_id": target_item.id,
+        "title": target_item.title,
         "source": details.provider,
         "changes": changes,
     }

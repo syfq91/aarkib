@@ -175,3 +175,70 @@ def test_is_safe_http_url():
     # Verify functions reject non-http schemes without making network calls
     assert _http_get_json("file:///etc/passwd") is None
     assert _http_get_bytes("file:///etc/passwd") is None
+
+
+def test_enrich_database_session_detached_during_external_io(app, sample_epub):
+    """C3 test: verifies that db.session has no open transaction during external network requests."""
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        assert book is not None
+
+        mock_meta = EnrichedMetadata(
+            title="Sample Test Book",
+            authors=["John Doe"],
+            description="Enriched description",
+            publisher="Enriched Publishing",
+            source="Mock Source",
+        )
+
+        in_transaction_during_call = None
+
+        def mock_fetch(*args, **kwargs):
+            nonlocal in_transaction_during_call
+            in_transaction_during_call = db.session().in_transaction()
+            return mock_meta
+
+        with patch(
+            "aarkib.services.enricher.fetch_external_metadata", side_effect=mock_fetch
+        ):
+            result = enrich_book(book, covers_dir, overwrite=True)
+            assert result["status"] == "success"
+            assert in_transaction_during_call is False
+
+
+def test_api_metadata_search_session_detached(client, app, sample_epub):
+    """C3 test: verifies that db.session is detached before external metadata search."""
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        assert book is not None
+        book_id = book.id
+
+    from aarkib.models import User
+
+    with app.app_context():
+        admin = User(username="search_admin", is_admin=True)
+        admin.set_password("adminpass")
+        db.session.add(admin)
+        db.session.commit()
+
+    client.post(
+        "/auth/login",
+        data={"username": "search_admin", "password": "adminpass"},
+        follow_redirects=True,
+    )
+
+    in_transaction_during_search = None
+
+    def mock_search(*args, **kwargs):
+        nonlocal in_transaction_during_search
+        in_transaction_during_search = db.session().in_transaction()
+        return []
+
+    with patch(
+        "aarkib.services.metadata.metadata_registry.search", side_effect=mock_search
+    ):
+        res = client.get(f"/api/media/{book_id}/metadata/search?q=test")
+        assert res.status_code == 200
+        assert in_transaction_during_search is False
