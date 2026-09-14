@@ -137,23 +137,24 @@ class JobManager:
             logger.debug("Failed to persist job start for %s: %s", job.id, e)
 
     def _persist_job_progress(self, job: Job, app: Flask | None) -> None:
+        """Persist job progress using an isolated DB connection."""
         if app is None:
             return
-        from flask import has_app_context
-
-        def _update():
-            rec = db.session.get(JobRecord, job.id)
-            if rec and rec.status == JobStatus.RUNNING.value:
-                rec.progress = job.progress
-                rec.progress_message = job.progress_message
-                db.session.commit()
-
         try:
-            if has_app_context():
-                _update()
-            else:
-                with app.app_context():
-                    _update()
+            from sqlalchemy import update
+
+            with db.engine.begin() as conn:
+                conn.execute(
+                    update(JobRecord)
+                    .where(
+                        JobRecord.id == job.id,
+                        JobRecord.status == JobStatus.RUNNING.value,
+                    )
+                    .values(
+                        progress=job.progress,
+                        progress_message=job.progress_message,
+                    )
+                )
         except Exception as e:
             logger.debug("Failed to persist job progress for %s: %s", job.id, e)
 

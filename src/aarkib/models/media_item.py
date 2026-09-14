@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aarkib.extensions import db
@@ -37,6 +37,9 @@ class MediaItem(
     """Unified catalog model representing books, comics, videos, and audio in Aarkib."""
 
     __tablename__ = "media_items"
+    __table_args__ = (
+        Index("ix_media_items_collection_series", "collection_id", "series_index"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 

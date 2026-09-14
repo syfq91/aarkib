@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -46,6 +46,7 @@ class MediaItemMixin:
     file_format: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    file_mtime: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     cover_image_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # Generalized metadata

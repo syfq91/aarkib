@@ -428,3 +428,40 @@ def test_jellyfin_runtime_settings_guard(app, client, tmp_path):
     resp_enabled = client.get("/System/Info/Public")
     assert resp_enabled.status_code == 200
     assert resp_enabled.get_json()["ServerName"] == "Aarkib"
+
+
+def test_jellyfin_stream_auth_enforced(app, tmp_path):
+    """Verify that streaming endpoints strictly require authentication (H2)."""
+    ids = _setup_jellyfin_data(app, tmp_path)
+    movie_hex = to_jellyfin_id(ids["movie_id"])
+    song_hex = to_jellyfin_id(ids["song_id"])
+
+    # Use a fresh, unauthenticated test client
+    unauth_client = app.test_client()
+
+    # 1. Unauthenticated video stream attempt -> 401
+    resp_unauth_video = unauth_client.get(f"/Videos/{movie_hex}/stream")
+    assert resp_unauth_video.status_code == 401
+
+    # 2. Unauthenticated audio stream attempt -> 401
+    resp_unauth_audio = unauth_client.get(f"/Audio/{song_hex}/stream")
+    assert resp_unauth_audio.status_code == 401
+
+    # 3. Authenticate to obtain token
+    resp_auth = unauth_client.post(
+        "/Users/AuthenticateByName",
+        json={"Username": "jf_user", "Pw": "jf_pass"},
+    )
+    assert resp_auth.status_code == 200
+    token = resp_auth.get_json()["AccessToken"]
+
+    # 4. Stream using another client with ?api_key query parameter
+    clean_client = app.test_client()
+    resp_query_stream = clean_client.get(f"/Videos/{movie_hex}/stream?api_key={token}")
+    assert resp_query_stream.status_code in (200, 206)
+
+    # 5. Stream using header X-Emby-Token
+    resp_hdr_stream = clean_client.get(
+        f"/Audio/{song_hex}/stream", headers={"X-Emby-Token": token}
+    )
+    assert resp_hdr_stream.status_code in (200, 206)

@@ -4,10 +4,10 @@
 {% block content %}
 <h2 style="margin-bottom: 1.5rem;">Series & Shows</h2>
 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
-  {% for s in series_list %}
+  {% for s, count in series_list %}
     <a href="/?series_id={{ s.id }}" class="book-card" style="padding: 1.25rem; text-decoration: none;">
       <div style="font-weight: 600; font-size: 1.05rem; margin-bottom: 0.25rem;">{{ s.name }}</div>
-      <div style="font-size: 0.85rem; color: var(--text-secondary);">{{ s.books|length }} item(s)</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">{{ count }} item(s)</div>
     </a>
   {% endfor %}
 </div>

@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -27,6 +28,7 @@ class UserFavorite(db.Model):
     __tablename__ = "user_favorites"
     __table_args__ = (
         UniqueConstraint("user_id", "media_item_id", name="uq_user_favorite"),
+        Index("ix_user_favorites_user_created", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -113,6 +115,9 @@ class PlaylistItem(db.Model):
     """Ordered entries inside a Playlist."""
 
     __tablename__ = "playlist_items"
+    __table_args__ = (
+        Index("ix_playlist_items_playlist_pos", "playlist_id", "position"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     playlist_id: Mapped[int] = mapped_column(

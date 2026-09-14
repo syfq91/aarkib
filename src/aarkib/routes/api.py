@@ -160,7 +160,7 @@ def api_admin_required(view):
 def enforce_api_auth():
     """Authenticate the API request (HTTP Basic or session) and enforce auth settings."""
     # Endpoints exempt from authentication
-    if request.endpoint in ("api.get_book_cover", "api.health"):
+    if request.endpoint in ("api.get_media_cover", "api.health"):
         return None
 
     # Authenticate via HTTP Basic auth if credentials are provided
@@ -1022,8 +1022,12 @@ def get_stream_info(item_id: int):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     from aarkib.services.transcoder import (
@@ -1057,8 +1061,12 @@ def stream_remux_video(item_id: int):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     from aarkib.services.transcoder import stream_remux_pipe
@@ -1070,6 +1078,7 @@ def stream_remux_video(item_id: int):
         "yes",
     )
 
+    db.session.close()
     return Response(
         stream_remux_pipe(
             file_path, seek_seconds=seek_sec, audio_transcode=audio_transcode
@@ -1091,8 +1100,12 @@ def get_hls_master_playlist(item_id: int):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     from aarkib.services.transcoder import RESOLUTION_PRESETS, transcode_supervisor
@@ -1223,8 +1236,12 @@ def list_subtitles(item_id: int):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     from aarkib.services.transcoder import probe_media_streams
@@ -1248,8 +1265,12 @@ def get_subtitle_vtt(item_id: int, track_index: int):
     if not item:
         return api_error("Media item not found", 404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
         return api_error("File missing from storage", 404)
 
     from aarkib.services.transcoder import generate_vtt_subtitles
@@ -1274,6 +1295,18 @@ def download_media_file(item_id: int, preset: str | None = None):
         return api_error("Media item not found", 404)
 
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
+    if preset_arg:
+        from aarkib.plugins.optimizer import DEVICE_PRESETS
+
+        clean_preset = preset_arg.lower().strip()
+        if item.file_format == "epub" and clean_preset not in DEVICE_PRESETS:
+            return api_error(
+                f"Invalid optimizer preset '{preset_arg}'. "
+                f"Supported: {', '.join(sorted(DEVICE_PRESETS.keys()))}",
+                400,
+            )
+        preset_arg = clean_preset
+
     file_path = Path(item.original_file_path).resolve()
     if not is_safe_media_path(file_path):
         return api_error(
@@ -1337,6 +1370,24 @@ def precompute_media_optimization(item_id: int):
 
     data = request.get_json(silent=True) or {}
     preset_arg = str(data.get("preset", "generic"))
+    from aarkib.plugins.optimizer import DEVICE_PRESETS
+
+    clean_preset = preset_arg.lower().strip()
+    if clean_preset not in DEVICE_PRESETS:
+        return api_error(
+            f"Invalid optimizer preset '{preset_arg}'. "
+            f"Supported: {', '.join(sorted(DEVICE_PRESETS.keys()))}",
+            400,
+        )
+    preset_arg = clean_preset
+
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
+        return api_error("File missing from storage", 404)
 
     optimized_dir = Path(
         current_app.config.get(
@@ -1384,9 +1435,13 @@ def get_cbz_pages(item_id: int):
     if not item or item.file_format not in ("cbz", "zip", "cbr"):
         return api_error("Item is not a CBZ comic", 400)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
-        return api_error("File not found", 404)
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
+        return api_error("File missing from storage", 404)
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -1427,8 +1482,10 @@ def get_cbz_page_image(item_id: int, page_num: int):
     if not item or item.file_format not in ("cbz", "zip", "cbr"):
         abort(404)
 
-    file_path = Path(item.original_file_path)
-    if not file_path.exists():
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        abort(403)
+    if not file_path.is_file():
         abort(404)
 
     try:

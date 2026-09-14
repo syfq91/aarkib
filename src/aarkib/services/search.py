@@ -203,6 +203,26 @@ def sync_batch_fts(item_ids: list[int], session: Session | None = None) -> None:
         logger.warning("Failed to batch sync FTS items: %s", exc)
 
 
+def remove_batch_fts(item_ids: list[int], session: Session | None = None) -> None:
+    """Remove specific item IDs from the FTS index."""
+    if not item_ids:
+        return
+    sess = session or db.session
+    try:
+        chunk_size = 500
+        for i in range(0, len(item_ids), chunk_size):
+            chunk = item_ids[i : i + chunk_size]
+            placeholders = ", ".join(f":id_{j}" for j in range(len(chunk)))
+            params = {f"id_{j}": val for j, val in enumerate(chunk)}
+            sess.execute(
+                text(f"DELETE FROM media_items_fts WHERE rowid IN ({placeholders})"),
+                params,
+            )
+        sess.commit()
+    except Exception as e:
+        logger.warning("Failed to remove FTS entries: %s", e)
+
+
 def _search_media_ids_fallback_ilike(
     q: str,
     media_type: str | None = None,

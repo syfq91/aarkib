@@ -1,0 +1,657 @@
+My top 10 improvements
+1. Replace startup schema migration with real migrations
+
+This is probably my highest-priority architectural change.
+
+The project currently checks the runtime SQLAlchemy metadata against SQLite and performs non-destructive ALTER TABLE ADD COLUMN migrations on startup. GGitHub
+
+That works early on, but eventually becomes problematic:
+
+Version 1
+   ↓
+Version 2
+   ↓
+Version 3
+   ↓
+Version 4
+
+You need to know exactly which schema version the database is on.
+
+I'd introduce Alembic:
+
+migrations/
+├── 001_initial.py
+├── 002_add_bookmarks.py
+├── 003_add_playlists.py
+├── 004_add_media_indexes.py
+└── ...
+
+Then:
+
+aarkib db upgrade
+
+Benefits:
+
+    reproducible upgrades
+    rollback capability
+    safer releases
+    easier debugging
+    easier development/testing
+    explicit schema history
+
+Priority: 🔴 Very high
+2. Improve the MediaItem data model
+
+This is the biggest conceptual weakness I see in the architecture.
+
+MediaItem currently contains fields for essentially everything:
+
+title
+isbn
+series_index
+duration
+resolution
+codec
+season
+episode
+bitrate
+album
+track_number
+disc_number
+chapters_json
+...
+
+The architecture explicitly uses mixins to accommodate video/audio-specific fields. GGitHub
+
+But eventually you get:
+
+MediaItem
+├── book fields
+├── comic fields
+├── audio fields
+├── video fields
+├── podcast fields
+└── fields for the next format...
+
+I'd move toward a core + typed metadata model.
+
+For example:
+
+MediaItem
+├── identity
+├── title
+├── path
+├── hash
+├── type
+├── library
+└── metadata_id
+       │
+       ├── BookMetadata
+       ├── AudioMetadata
+       ├── VideoMetadata
+       ├── ComicMetadata
+       └── PodcastMetadata
+
+Or, if keeping SQLite simplicity is important:
+
+MediaItem
+    core columns
+
+MediaBook
+MediaAudio
+MediaVideo
+MediaComic
+MediaPodcast
+
+This makes plugins much more genuinely independent.
+
+Priority: 🟠 High
+3. Make file identity stronger than SHA-256 alone
+
+The current design hashes every file and uses the hash as the identity mechanism. GGitHub
+
+That's good for correctness, but potentially expensive.
+
+Imagine:
+
+10 TB library
+100,000 files
+
+A full SHA-256 scan can mean reading 10 TB from storage.
+
+For a NAS, that's expensive.
+
+I'd use a two-stage identity strategy:
+
+filesystem event
+       │
+       ▼
+size + mtime + inode/path
+       │
+       ├── unchanged → skip
+       │
+       └── changed
+              │
+              ▼
+          SHA-256
+
+And perhaps:
+
+fast fingerprint
+=
+file size
++
+first 1 MB
++
+last 1 MB
+
+followed by full SHA-256 only when needed.
+
+This would make large-library rescans dramatically faster.
+
+Priority: 🔴 Very high
+4. Turn scanning into an incremental indexing engine
+
+The architecture currently describes scanning as:
+
+enumerate
+→ hash
+→ parse
+→ database
+
+and Watchdog triggers scans for filesystem events. GGitHub
+
+I'd make the scanner event-driven:
+
+CREATE
+  ↓
+queue(file)
+
+MODIFY
+  ↓
+debounce
+  ↓
+queue(file)
+
+MOVE
+  ↓
+update identity
+
+DELETE
+  ↓
+mark missing
+
+Instead of:
+
+file changed
+   ↓
+scan entire library
+
+Use:
+
+filesystem event
+       ↓
+event queue
+       ↓
+debouncer
+       ↓
+scanner worker
+       ↓
+single-file update
+
+For example, copying a 5,000-file directory shouldn't cause 5,000 overlapping operations.
+
+You already have a JobManager with deduplication, so this is a natural evolution. GGitHub
+
+Priority: 🔴 Very high
+5. Add a proper search engine
+
+The architecture mentions full-text search/reindexing, but this could become one of Aarkib's killer features. GGitHub
+
+SQLite is actually perfectly capable of doing this.
+
+I'd use SQLite FTS5:
+
+media_search
+├── title
+├── creator
+├── series
+├── description
+├── tags
+└── publisher
+
+Then support:
+
+Dune
+
+author:"Frank Herbert"
+
+series:"The Expanse"
+
+tag:scifi
+
+type:book
+
+year:2024
+
+And eventually:
+
+author:"Tolkien" type:book
+
+This would be substantially better than repeatedly querying multiple relational tables.
+
+Priority: 🔴 Very high
+6. Make metadata enrichment much more intelligent
+
+The current architecture supports Google Books, Open Library, ComicVine, TMDB and MusicBrainz. GGitHub
+
+The next step shouldn't simply be "more providers."
+
+It should be:
+
+                    Media
+                      │
+                      ▼
+                 Identification
+                      │
+              ┌───────┴────────┐
+              ▼                ▼
+           ISBN/ID          Fuzzy match
+              │                │
+              └───────┬────────┘
+                      ▼
+                Candidate list
+                      │
+                      ▼
+                Confidence score
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+        0.95        0.72        0.31
+       accept      suggest      ignore
+
+And importantly:
+
+never overwrite user edits automatically.
+
+You want field-level provenance:
+
+title:
+  value: Dune
+  source: user
+
+description:
+  value: ...
+  source: openlibrary
+
+cover:
+  value: ...
+  source: user
+
+That would make enrichment much safer.
+
+Priority: 🟠 High
+7. Add proper backup/restore
+
+For a self-hosted application, this is surprisingly important.
+
+Aarkib has:
+
+SQLite
+covers
+optimized files
+settings
+users
+progress
+playlists
+bookmarks
+metadata
+
+But the user really needs:
+
+Settings
+→ Backup
+→ Create backup
+
+producing something like:
+
+aarkib-backup-2026-09-14.tar.zst
+├── database.sqlite
+├── manifest.json
+└── assets/
+
+And:
+
+Settings
+→ Restore
+
+with validation before replacement.
+
+Even better:
+
+backup
+  ↓
+integrity check
+  ↓
+versioned archive
+  ↓
+restore test
+
+This is one of those features users only appreciate after something goes wrong.
+
+Priority: 🔴 Very high
+8. Strengthen the security model
+
+The architecture already has several good protections:
+
+    HTTP-only session cookies
+    Basic Auth for API/protocol clients
+    CSRF
+    path validation
+    defusedxml
+    SSRF scheme checks
+    admin authorization
+    security headers GGitHub 
+
+But I'd strengthen several things.
+Passwordless accounts
+
+The architecture deliberately supports passwordless normal users, authenticated with a blank password. GGitHub
+
+That's convenient, but dangerous if Aarkib is accidentally exposed outside a trusted LAN.
+
+I'd make it explicit:
+
+Passwordless account
+      │
+      ├── LAN only
+      │
+      └── configurable IP/network restriction
+
+Or replace blank-password authentication with generated API/device tokens.
+
+For example:
+
+User
+ ├── Web password
+ └── API tokens
+       ├── KOReader
+       ├── Jellyfin TV
+       └── phone
+
+Then users can revoke one device without changing their password.
+9. Add API/device tokens
+
+This follows naturally from the previous point.
+
+Instead of:
+
+Authorization: Basic username:password
+
+support:
+
+Authorization: Bearer <token>
+
+with:
+
+DeviceToken
+├── id
+├── user_id
+├── name
+├── token_hash
+├── scopes
+├── created_at
+├── last_used_at
+└── expires_at
+
+Then:
+
+KOReader token
+→ read-only books + progress
+
+Jellyfin TV token
+→ video streaming
+
+Admin CLI token
+→ library management
+
+This is much better for a multi-device self-hosted application.
+
+Priority: 🟠 High
+10. Introduce observability
+
+Once you have:
+
+Scanner
+JobManager
+Watchdog
+Metadata enrichment
+FFmpeg
+Plugins
+External APIs
+
+debugging becomes difficult.
+
+I'd add structured logs:
+
+{
+  "event": "media_scan",
+  "library_id": 3,
+  "file": "Dune.epub",
+  "duration_ms": 412,
+  "status": "success"
+}
+
+And a small admin dashboard:
+
+System Health
+
+Scanner          ● Running
+Watchdog         ● Running
+Metadata API     ● Healthy
+Database         ● Healthy
+FFmpeg           ● Available
+
+Last scan
+  12,481 files
+  12,321 unchanged
+  143 updated
+  17 failed
+
+The existing BackgroundJob system is already a good foundation for this. GGitHub
+One architectural change I'd seriously consider
+
+There's one bigger change I'd make before Aarkib gets much larger.
+
+Currently:
+
+Flask routes
+      ↓
+Services
+      ↓
+Plugins
+      ↓
+Database
+
+I'd formalize the middle into:
+
+             Presentation
+                  │
+                  ▼
+          Application Layer
+                  │
+          ┌───────┴───────┐
+          ▼               ▼
+      Domain           Ports
+          │               │
+          ▼               ▼
+      Entities       Plugin adapters
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+           EPUB        Music       TMDB
+
+In other words, introduce explicit ports/adapters.
+
+For example:
+
+class MetadataProvider(Protocol):
+    def search(self, query: str) -> list[MetadataCandidate]:
+        ...
+
+Then:
+
+OpenLibraryProvider
+GoogleBooksProvider
+ComicVineProvider
+TMDBProvider
+
+all implement that interface.
+
+Likewise:
+
+class MediaParser(Protocol):
+    def supports(self, path): ...
+    def parse(self, path): ...
+
+This would make plugins genuinely replaceable instead of just being a convenient organizational mechanism.
+Another big opportunity: unified "Collections"
+
+Aarkib already has:
+
+Creator
+Collection
+Tag
+Playlist
+
+but I think you could make the user experience much more powerful by introducing a unified concept of Collections.
+
+For example:
+
+📚 Dune
+   ├── Dune
+   ├── Dune Messiah
+   ├── Children of Dune
+   └── God Emperor of Dune
+
+or:
+
+🎬 Star Wars
+   ├── Movies
+   ├── TV
+   └── Specials
+
+or:
+
+🎵 Pink Floyd
+   ├── Albums
+   └── Singles
+
+The underlying model could remain generic:
+
+Collection
+   │
+   ├── CollectionItem
+   │
+   └── metadata
+
+That would make Aarkib much more cohesive across books, comics, music and video.
+Performance roadmap
+
+If I were optimizing for a large NAS library, I'd target this:
+
+                 Current
+                   │
+                   ▼
+        ┌────────────────────┐
+        │ Full scanner       │
+        │ SHA-256 every file │
+        └─────────┬──────────┘
+                  │
+                  ▼
+                 DB
+
+to:
+
+              Filesystem events
+                     │
+                     ▼
+                 Event Queue
+                     │
+                     ▼
+                 Debouncer
+                     │
+                     ▼
+               Incremental Scan
+                     │
+              ┌──────┴──────┐
+              ▼             ▼
+          unchanged       changed
+              │             │
+              │             ▼
+              │        Content hash
+              │             │
+              │             ▼
+              │        Parse metadata
+              │             │
+              └──────┬──────┘
+                     ▼
+                 SQLite
+                     │
+                     ▼
+                  FTS5
+
+That would make Aarkib feel extremely fast even with hundreds of thousands of files.
+What I would NOT do
+
+I wouldn't immediately introduce:
+
+    PostgreSQL
+    Redis
+    Celery
+    Kubernetes
+    microservices
+    Elasticsearch
+    Kafka
+
+The architecture's lightweight approach is one of its strengths. It explicitly targets Raspberry Pi/NAS-class deployments and deliberately avoids Redis/Celery. GGitHub
+
+For this project, I'd aim for:
+
+    "SQLite, but exceptionally well engineered."
+
+rather than:
+
+    "Turn it into a distributed enterprise system."
+
+My priority order
+
+If I were maintaining the project, I'd do it roughly like this:
+Priority	Improvement	Why
+🔴 P0	Proper DB migrations	Prevent future upgrade disasters
+🔴 P0	Incremental scanner	Biggest scalability win
+🔴 P0	Backup/restore	Protect user data
+🔴 P0	FTS5 search	Major UX improvement
+🔴 P0	File identity optimization	Large-library performance
+🟠 P1	Metadata provenance	Prevent enrichment damage
+🟠 P1	API/device tokens	Better security/device management
+🟠 P1	Typed media metadata	Cleaner long-term schema
+🟠 P1	Observability	Makes operations/debugging easier
+🟡 P2	Unified collections	Better cross-media UX
+🟡 P2	Recommendation/discovery	Product differentiation
+🟡 P2	More plugins/providers	Expand ecosystem
+The most interesting opportunity
+
+I actually think Aarkib's biggest potential isn't "another Jellyfin/Kavita clone."
+
+The unique combination is:
+
+books + comics + audiobooks + music + video + podcasts + e-ink optimization + OPDS + unified progress
+
+in a single lightweight server.
+
+The architecture already has the right foundations for that: a generic MediaItem, plugin registry, protocol plugins, background jobs, non-destructive storage, and per-user progress. GGitHub+1
+
+I'd therefore focus the next phase on making the core catalog extremely strong rather than adding more integrations.
+
+If you want, I can go further and do a proper code review of the actual Aarkib source, identifying specific files/functions that should be changed, with a proposed v2 architecture and concrete implementation roadmap (P0 → P3).

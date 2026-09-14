@@ -559,6 +559,7 @@ def index_media_file(
     library_media_type: str | None = None,
     library_id: int | None = None,
     metadata_provider: str | None = None,
+    commit: bool = True,
 ) -> MediaItem | None:
     """Parses and updates or inserts a single media record in the database."""
     supported = get_supported_extensions()
@@ -567,13 +568,19 @@ def index_media_file(
 
     try:
         resolved_path = str(file_path.resolve())
-        file_size = file_path.stat().st_size
-        file_hash = compute_sha256(file_path)
+        stat_info = file_path.stat()
+        file_size = stat_info.st_size
+        file_mtime = stat_info.st_mtime
 
         existing_book = db.session.scalar(
             select(Book).where(Book.original_file_path == resolved_path)
         )
-        if existing_book and existing_book.file_hash == file_hash:
+        if (
+            existing_book
+            and existing_book.file_size == file_size
+            and existing_book.file_mtime is not None
+            and abs(existing_book.file_mtime - file_mtime) < 0.01
+        ):
             updated = False
             if (
                 library_media_type
@@ -589,8 +596,11 @@ def index_media_file(
                 existing_book.library_id = library_id
                 updated = True
             if updated:
-                db.session.commit()
+                if commit:
+                    db.session.commit()
             return existing_book
+
+        file_hash = compute_sha256(file_path)
 
         plugin = None
         if library_media_type and library_media_type != "all":
@@ -624,6 +634,7 @@ def index_media_file(
         book.file_format = metadata.file_format
         book.file_size = file_size
         book.file_hash = file_hash
+        book.file_mtime = file_mtime
 
         if not is_locked("description"):
             book.description = metadata.description
@@ -692,7 +703,8 @@ def index_media_file(
 
         _assign_authors_tags_series(book, metadata)
 
-        db.session.commit()
+        if commit:
+            db.session.commit()
         logger.info(
             "Indexed %s: %s (%s)", book.media_type, book.title, book.file_format
         )
@@ -759,10 +771,21 @@ def scan_library(
 
         supported = get_supported_extensions()
         candidate_files: list[tuple[Library, Path]] = []
+        visited_dirs: set[tuple[int, int]] = set()
         for lib in libraries:
             lib_dir = Path(lib.path).expanduser()
-            lib_dir.mkdir(parents=True, exist_ok=True)
-            for root, _, filenames in os.walk(lib_dir, followlinks=True):
+            if not lib_dir.exists():
+                lib_dir.mkdir(parents=True, exist_ok=True)
+            for root, dirs, filenames in os.walk(lib_dir, followlinks=True):
+                try:
+                    dir_stat = Path(root).stat()
+                    dir_key = (dir_stat.st_dev, dir_stat.st_ino)
+                    if dir_key in visited_dirs:
+                        dirs.clear()
+                        continue
+                    visited_dirs.add(dir_key)
+                except OSError:
+                    continue
                 for filename in filenames:
                     file_path = Path(root) / filename
                     if file_path.suffix.lower() in supported:
@@ -776,6 +799,7 @@ def scan_library(
 
         added = 0
         existing_files: set[str] = set()
+        new_item_ids: list[int] = []
 
         for idx, (lib, file_path) in enumerate(candidate_files):
             existing_files.add(str(file_path.resolve()))
@@ -793,15 +817,24 @@ def scan_library(
                 library_media_type=lib.media_type,
                 library_id=getattr(lib, "id", None),
                 metadata_provider=lib_provider,
+                commit=False,
             )
             if book:
+                if book.id is None:
+                    db.session.flush()
+                new_item_ids.append(book.id)
                 added += 1
 
             if progress_callback and (idx % 5 == 0 or idx == total_candidates - 1):
+                db.session.commit()
                 pct = 10.0 + ((idx + 1) / max(total_candidates, 1)) * 80.0
                 progress_callback(
                     pct, f"Indexing {file_path.name} ({idx + 1}/{total_candidates})"
                 )
+            elif (idx + 1) % 100 == 0:
+                db.session.commit()
+
+        db.session.commit()
 
         # Clean up deleted files from DB
         if progress_callback:
@@ -837,13 +870,13 @@ def scan_library(
         if deleted > 0:
             db.session.commit()
 
-        if added > 0 or deleted > 0:
+        if new_item_ids:
             try:
-                from aarkib.services.search import rebuild_search_index
+                from aarkib.services.search import sync_batch_fts
 
-                rebuild_search_index()
+                sync_batch_fts(new_item_ids)
             except Exception as e:
-                logger.warning("FTS search index rebuild failed after scan: %s", e)
+                logger.warning("FTS incremental sync failed after scan: %s", e)
 
         if progress_callback:
             progress_callback(

@@ -113,9 +113,11 @@ def generate_jellyfin_token(user_id: int) -> str:
     ts = int(time.time())
     payload = f"{user_id}:{ts}"
     try:
-        secret = current_app.config.get("SECRET_KEY", "aarkib-default-secret")
+        secret = current_app.config.get("SECRET_KEY")
     except Exception:
-        secret = "aarkib-default-secret"
+        secret = None
+    if not secret:
+        raise RuntimeError("SECRET_KEY is required to generate Jellyfin tokens")
     sig = hmac.new(
         secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()[:32]
@@ -140,9 +142,11 @@ def verify_jellyfin_token(token: str) -> User | None:
 
     payload = f"{user_id}:{ts}"
     try:
-        secret = current_app.config.get("SECRET_KEY", "aarkib-default-secret")
+        secret = current_app.config.get("SECRET_KEY")
     except Exception:
-        secret = "aarkib-default-secret"
+        secret = None
+    if not secret:
+        return None
     expected_sig = hmac.new(
         secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()[:32]
@@ -1049,7 +1053,10 @@ def get_playback_info(item_id: str, user: User | None = None):
 @jellyfin_bp.route("/audio/<item_id>/universal", methods=["GET"])
 @jellyfin_bp.route("/Items/<item_id>/Download", methods=["GET"])
 @jellyfin_bp.route("/items/<item_id>/download", methods=["GET"])
-def stream_jellyfin_media(item_id: str, ext: str | None = None):
+@jellyfin_auth
+def stream_jellyfin_media(
+    item_id: str, ext: str | None = None, user: User | None = None
+):
     """Direct media streaming with HTTP 206 Partial Content byte range support."""
     db_id = from_jellyfin_id(item_id)
     if not db_id:
@@ -1059,7 +1066,14 @@ def stream_jellyfin_media(item_id: str, ext: str | None = None):
     if not item:
         abort(404, description="Media item not found")
 
+    from aarkib.routes.api import is_safe_media_path
+
     file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        abort(
+            403,
+            description="Access denied: file resides outside configured library roots",
+        )
     if not file_path.is_file():
         abort(404, description="File missing on disk")
 

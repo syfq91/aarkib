@@ -411,8 +411,15 @@ def get_or_create_optimized_epub(
     """
     optimized_dir.mkdir(parents=True, exist_ok=True)
     clean_preset = preset_key.lower().strip() if preset_key else "generic"
+    if clean_preset not in DEVICE_PRESETS:
+        raise ValueError(
+            f"Invalid optimizer preset '{preset_key}'. "
+            f"Supported: {list(DEVICE_PRESETS.keys())}"
+        )
     cache_filename = f"{item_id}_{file_hash[:12]}_{clean_preset}.epub"
-    cached_path = optimized_dir / cache_filename
+    cached_path = (optimized_dir / cache_filename).resolve()
+    if not cached_path.is_relative_to(optimized_dir.resolve()):
+        raise ValueError("Preset path escapes target optimized directory")
 
     if cached_path.exists() and cached_path.stat().st_size > 0:
         return cached_path

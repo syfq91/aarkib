@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -103,6 +104,14 @@ class UserProgress(db.Model):
 
 class Bookmark(db.Model):
     __tablename__ = "bookmarks"
+    __table_args__ = (
+        Index(
+            "ix_bookmarks_item_user_created",
+            "media_item_id",
+            "user_id",
+            "created_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(

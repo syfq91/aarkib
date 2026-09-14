@@ -411,7 +411,14 @@ def stream_media(user: User | None = None):
     if not item:
         abort(404, description="Media item not found")
 
+    from aarkib.routes.api import is_safe_media_path
+
     file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        abort(
+            403,
+            description="Access denied: file resides outside configured library roots",
+        )
     if not file_path.is_file():
         abort(404, description="File missing on disk")
 

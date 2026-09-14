@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -18,6 +19,16 @@ DEFAULT_USER_AGENT = (
     "Aarkib/0.1.0 (https://github.com/syfq91/aarkib; contact: support@aarkib.local)"
 )
 DEFAULT_TIMEOUT = 10
+
+
+def _sanitize_url(url: str) -> str:
+    """Masks API keys and secrets in URLs before logging."""
+    return re.sub(
+        r"([?&](?:api_key|token|key|secret|apikey)=)[^&]+",
+        r"\1[REDACTED]",
+        url,
+        flags=re.IGNORECASE,
+    )
 
 
 def is_safe_http_url(url: str) -> bool:
@@ -86,7 +97,10 @@ class ResilientHttpClient:
             req_headers.update(headers)
 
         if not full_url.startswith(("http://", "https://")):
-            logger.warning("Rejected non-HTTP(S) metadata request URL: %s", full_url)
+            logger.warning(
+                "Rejected non-HTTP(S) metadata request URL: %s",
+                _sanitize_url(full_url),
+            )
             return None
 
         attempt = 0
@@ -131,7 +145,7 @@ class ResilientHttpClient:
                             "HTTP %d for %s: %s",
                             resp.status,
                             self.provider_name,
-                            full_url,
+                            _sanitize_url(full_url),
                         )
                         return None
 
@@ -151,7 +165,7 @@ class ResilientHttpClient:
                     attempt += 1
                     continue
                 else:
-                    logger.debug("HTTPError %s for %s", err, full_url)
+                    logger.debug("HTTPError %s for %s", err, _sanitize_url(full_url))
                     return None
             except (urllib.error.URLError, TimeoutError) as err:
                 if attempt < self.max_retries:
@@ -168,10 +182,14 @@ class ResilientHttpClient:
                     attempt += 1
                     continue
                 else:
-                    logger.debug("URLError %s for %s", err, full_url)
+                    logger.debug("URLError %s for %s", err, _sanitize_url(full_url))
                     return None
             except Exception as exc:
-                logger.debug("Unexpected error during HTTP GET %s: %s", full_url, exc)
+                logger.debug(
+                    "Unexpected error during HTTP GET %s: %s",
+                    _sanitize_url(full_url),
+                    exc,
+                )
                 return None
 
         return None

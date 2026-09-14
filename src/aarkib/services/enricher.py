@@ -537,15 +537,21 @@ def enrich_all_media(
         covers_dir = Path(app.config["COVERS_DIR"])
         covers_dir.mkdir(parents=True, exist_ok=True)
 
-        stmt = select(MediaItem)
+        stmt = select(MediaItem.id)
         if media_type and media_type != "all":
             stmt = stmt.where(MediaItem.media_type == media_type)
 
-        items = db.session.scalars(stmt).all()
+        item_ids = list(db.session.scalars(stmt).all())
+        db.session.close()
         enriched_count = 0
         skipped_count = 0
 
-        for item in items:
+        for item_id in item_ids:
+            item = db.session.get(MediaItem, item_id)
+            if not item:
+                skipped_count += 1
+                db.session.close()
+                continue
             res = enrich_media_item(
                 item, covers_dir, overwrite=overwrite, provider=provider
             )
@@ -553,9 +559,10 @@ def enrich_all_media(
                 enriched_count += 1
             else:
                 skipped_count += 1
+            db.session.close()
 
         return {
-            "total": len(items),
+            "total": len(item_ids),
             "enriched": enriched_count,
             "skipped": skipped_count,
         }

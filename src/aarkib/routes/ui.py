@@ -191,21 +191,49 @@ def media_detail(item_id: int):
 @ui_bp.route("/authors")
 @require_auth
 def authors():
-    author_list = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
+    from sqlalchemy import func
+
+    from aarkib.models.creator import media_creators
+
+    rows = db.session.execute(
+        select(Author, func.count(media_creators.c.media_item_id).label("book_count"))
+        .outerjoin(media_creators, media_creators.c.creator_id == Author.id)
+        .group_by(Author.id)
+        .order_by(Author.name.asc())
+    ).all()
+    author_list = [(row[0], row[1]) for row in rows]
     return render_template("authors.html", authors=author_list)
 
 
 @ui_bp.route("/series")
 @require_auth
 def series():
-    series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
+    from sqlalchemy import func
+
+    rows = db.session.execute(
+        select(Series, func.count(MediaItem.id).label("book_count"))
+        .outerjoin(MediaItem, MediaItem.collection_id == Series.id)
+        .group_by(Series.id)
+        .order_by(Series.name.asc())
+    ).all()
+    series_list = [(row[0], row[1]) for row in rows]
     return render_template("series.html", series_list=series_list)
 
 
 @ui_bp.route("/tags")
 @require_auth
 def tags():
-    tag_list = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
+    from sqlalchemy import func
+
+    from aarkib.models.tag import media_tags
+
+    rows = db.session.execute(
+        select(Tag, func.count(media_tags.c.media_item_id).label("book_count"))
+        .outerjoin(media_tags, media_tags.c.tag_id == Tag.id)
+        .group_by(Tag.id)
+        .order_by(Tag.name.asc())
+    ).all()
+    tag_list = [(row[0], row[1]) for row in rows]
     return render_template("tags.html", tags=tag_list)
 
 

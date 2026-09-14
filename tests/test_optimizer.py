@@ -238,3 +238,50 @@ def test_opds_preset_feeds(client, app, sample_epub):
     )
     assert "/api/media/" in acq_link["href"]
     assert "/download/optimized/x4" in acq_link["href"]
+
+
+def test_optimizer_path_traversal_rejection(client, app, sample_epub, tmp_path):
+    import pytest
+
+    from aarkib.models import User
+    from aarkib.services.optimizer import get_or_create_optimized_epub
+
+    with app.app_context():
+        covers_dir = Path(app.config["COVERS_DIR"])
+        book = index_single_book(sample_epub, covers_dir)
+        book_id = book.id
+
+        admin = User(username="opt_sec_admin", is_admin=True)
+        admin.set_password("adminpass")
+        from aarkib.extensions import db
+
+        db.session.add(admin)
+        db.session.commit()
+
+    client.post(
+        "/auth/login",
+        data={"username": "opt_sec_admin", "password": "adminpass"},
+        follow_redirects=True,
+    )
+
+    # 1. Direct function call with path traversal preset raises ValueError
+    with pytest.raises(ValueError, match="Invalid optimizer preset"):
+        get_or_create_optimized_epub(
+            item_id=book_id,
+            file_path=sample_epub,
+            file_hash="testhash123",
+            preset_key="../../etc/passwd",
+            optimized_dir=tmp_path / "opt",
+        )
+
+    # 2. API download with path traversal preset returns 400
+    res_bad_dl = client.get(f"/api/media/{book_id}/download?preset=../../etc/passwd")
+    assert res_bad_dl.status_code == 400
+    assert "Invalid optimizer preset" in res_bad_dl.get_json()["error"]
+
+    # 3. API precompute optimize with path traversal preset returns 400
+    res_bad_opt = client.post(
+        f"/api/media/{book_id}/optimize", json={"preset": "../../etc/shadow"}
+    )
+    assert res_bad_opt.status_code == 400
+    assert "Invalid optimizer preset" in res_bad_opt.get_json()["error"]

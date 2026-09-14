@@ -471,6 +471,11 @@ def stream_remux_pipe(
     except Exception as e:
         logger.debug("Remux stream error: %s", e)
     finally:
+        if proc and proc.stdout:
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
         if proc and proc.poll() is None:
             try:
                 if hasattr(os, "killpg") and hasattr(os, "getpgid"):
