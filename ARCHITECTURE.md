@@ -336,7 +336,7 @@ Aarkib features an automated streaming and transcoding supervisor inspired by Pl
    - **Full Transcode / HLS**: Incompatible video codec (e.g. HEVC/H.265 on older devices, MPEG-2) or explicit quality downscaling (1080p, 720p, 480p). Transcoded into fragmented HLS playlists (`.m3u8` with `.ts`/`.m4s` segments).
 
 2. **Hardware Acceleration (VA-API)**:
-   - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using `vainfo` and safe argument lists.
+   - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using lightweight FFmpeg test probes (`-hwaccel vaapi -c:v h264_vaapi`) with safe argument lists.
    - Enables hardware-accelerated decoding and scaling for Intel QuickSync and AMD Radeon GPUs (`-hwaccel vaapi -vaapi_device ...`), drastically reducing CPU consumption in Docker and bare-metal environments.
 
 3. **Transcode Supervisor & Session Lifecycle**:
@@ -581,11 +581,11 @@ erDiagram
 
 ### Packaging & Environment
 - **Python Version & Runtime Rationale (`>=3.14`)**:
-  - **Container-First Strategy**: Official production distribution is container-first via multi-arch Docker images (`ghcr.io/astral-sh/uv:python3.14-bookworm-slim`), isolating end-users from host Linux distribution package managers.
+  - **Container-First Strategy**: Official production distribution is container-first via multi-arch Docker images, isolating end-users from host Linux distribution package managers.
   - **Hermetic Host Installs**: Outside Docker, `uv` enables hermetic local runtime management via `uv python install 3.14` and `uv sync` without altering system packages.
   - **Modern Language Features**: Leveraging PEP 649 (deferred evaluation of annotations) for accelerated import times and cleaner typing, enhanced standard library performance, and forward readiness for free-threading / per-interpreter GIL concurrency.
 - **Dependency Management**: `uv` using pinned `uv.lock`.
-- **Container Strategy**: Multi-stage `Dockerfile` using `ghcr.io/astral-sh/uv:python3.14-bookworm-slim` for minimal attack surface and lightweight image footprints. Runs as an unprivileged user (`USER aarkib`) with a standard container `HEALTHCHECK` querying `/api/health`.
+- **Container Strategy**: Hardened multi-stage `Dockerfile` using `ghcr.io/astral-sh/uv:python3.14-bookworm-slim` for the builder stage (with BuildKit cache mounts and non-editable wheel installation) and `python:3.14-slim-bookworm` for the minimal runtime stage, completely excluding `uv` and compilers from production. Runs as an unprivileged user (`USER aarkib`), keeps application virtual environment immutable (root-owned), mounts host GPU devices with dynamic GID supplemental groups (`${VIDEO_GID}`, `${RENDER_GID}`), and runs a native container `HEALTHCHECK` querying `/api/health`.
 - **Persistent Volumes**:
   - `/app/data`: Houses `aarkib.db`, `covers/`, `optimized/`, and runtime caches.
   - `/media` (or individual category mounts like `/media/books`, `/media/comics`, `/media/videos`): Primary external media storage.

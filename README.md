@@ -61,12 +61,17 @@ services:
       # - /path/to/media/audiobooks:/media/audiobooks:ro
       # - /path/to/media/music:/media/music:ro
       # - /path/to/media/podcasts:/media/podcasts:ro
+    # Hardware acceleration for Intel & AMD video transcoding
+    # Set VIDEO_GID and RENDER_GID in .env to match host device permissions:
     devices:
-      - /dev/dri:/dev/dri # Hardware acceleration for Intel & AMD video transcoding
+      - /dev/dri:/dev/dri
     group_add:
-      - video
-      - render
+      - "${VIDEO_GID:-video}"
+      - "${RENDER_GID:-render}"
 ```
+
+> [!TIP]
+> **Hardware Transcoding**: To enable Intel QuickSync or AMD VA-API hardware acceleration, pass `/dev/dri` and configure your host's numeric video and render group IDs in `.env` (e.g., `VIDEO_GID=44`, `RENDER_GID=990`, found via `getent group video render | cut -d: -f3`). On systems without GPU hardware, comment out `devices` and `group_add`.
 
 ---
 

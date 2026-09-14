@@ -12,6 +12,7 @@ tests
 .env
 .env.*
 !.env.example
+dockerfile-improvement.txt
 data/
 instance/
 storage/
