@@ -141,9 +141,11 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
     data_dir = Path(app.config.get("DATA_DIR", "data"))
     covers_dir = Path(app.config.get("COVERS_DIR", data_dir / "covers"))
     optimized_dir = Path(app.config.get("OPTIMIZED_DIR", data_dir / "optimized"))
+    backup_dir = Path(app.config.get("BACKUP_DIR", data_dir / "backups"))
     data_dir.mkdir(parents=True, exist_ok=True)
     covers_dir.mkdir(parents=True, exist_ok=True)
     optimized_dir.mkdir(parents=True, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
 
     from aarkib.services.scanner import get_library_dirs
 

@@ -115,6 +115,67 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="new_password" id="reset-new-password">
 </form>
+
+<!-- API & Device Tokens Management Section -->
+<div style="margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 2rem;">
+  <div style="margin-bottom: 1.25rem;">
+    <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+      <span>🔑</span> API &amp; Device Tokens
+    </h3>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+      Create and revoke dedicated Bearer tokens for hardware e-readers (KOReader), mobile apps, or custom automations without sharing your account password.
+    </p>
+  </div>
+
+  <!-- Token Display Banner (shown after generation) -->
+  <div id="token-generated-alert" style="display: none; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; color: #4ade80; font-weight: 600; margin-bottom: 0.5rem;">
+      <span>✓</span> Token Generated Successfully
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0 0 0.5rem 0;">
+      Copy this token now. For your security, <strong>it will never be displayed again</strong>:
+    </p>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <input type="text" id="raw-token-display" readonly style="font-family: monospace; font-size: 0.9rem; padding: 0.5rem; width: 100%; max-width: 500px; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+      <button type="button" class="btn btn-secondary" onclick="copyGeneratedToken()">Copy</button>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+    <!-- Active Tokens Table -->
+    <div style="background-color: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden;">
+      <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; font-weight: 600;">
+        Active Device Tokens
+      </div>
+      <div id="tokens-table-container" style="overflow-x: auto; padding: 0.5rem 1rem;">
+        <p style="color: var(--text-secondary); font-size: 0.85rem;" id="loading-tokens-msg">Loading tokens...</p>
+      </div>
+    </div>
+
+    <!-- Generate Token Form -->
+    <div style="background-color: var(--bg-secondary); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+      <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">Generate Device Token</h4>
+      <form id="create-token-form" onsubmit="handleCreateToken(event)" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div>
+          <label for="token-name" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Device Name</label>
+          <input type="text" id="token-name" name="name" class="input-text" required placeholder="e.g. KOReader E-Ink, Living Room TV" style="width: 100%;">
+        </div>
+        <div>
+          <label for="token-expiry" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Expiration</label>
+          <select id="token-expiry" name="expires_in_days" class="input-select" style="width: 100%; padding: 0.4rem; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+            <option value="">Never Expires</option>
+            <option value="30">30 Days</option>
+            <option value="90">90 Days</option>
+            <option value="365">1 Year</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-submit-token" style="margin-top: 0.5rem;">
+          Generate Token
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
 {% else %}
 <div class="alert alert-error">
   Administrator privileges required to manage users.
@@ -158,5 +219,118 @@ function promptResetPassword(userId, username, isAdmin) {
   document.getElementById("reset-new-password").value = newPass;
   form.submit();
 }
+
+async function loadDeviceTokens() {
+  const container = document.getElementById('tokens-table-container');
+  try {
+    const res = await fetch('/api/tokens');
+    const data = await res.json();
+    if (!res.ok) {
+      container.innerHTML = `<p style="color: var(--danger); font-size: 0.85rem;">Failed to load tokens: ${data.error || 'Unknown error'}</p>`;
+      return;
+    }
+
+    if (!data.tokens || data.tokens.length === 0) {
+      container.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.85rem; padding: 0.5rem 0;">No active device tokens found.</p>';
+      return;
+    }
+
+    let html = '<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">';
+    html += '<thead><tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary);">';
+    html += '<th style="padding: 0.5rem;">Name</th>';
+    html += '<th style="padding: 0.5rem;">Prefix</th>';
+    html += '<th style="padding: 0.5rem;">Created</th>';
+    html += '<th style="padding: 0.5rem;">Last Used</th>';
+    html += '<th style="padding: 0.5rem; text-align: right;">Action</th>';
+    html += '</tr></thead><tbody>';
+
+    for (const t of data.tokens) {
+      html += '<tr style="border-bottom: 1px solid var(--border);">';
+      html += `<td style="padding: 0.5rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(t.name)}</td>`;
+      html += `<td style="padding: 0.5rem; font-family: monospace; color: var(--text-secondary);">${escapeHtml(t.token_prefix)}</td>`;
+      html += `<td style="padding: 0.5rem; color: var(--text-secondary);">${t.created_at ? t.created_at.substring(0, 10) : '-'}</td>`;
+      html += `<td style="padding: 0.5rem; color: var(--text-secondary);">${t.last_used_at ? t.last_used_at.substring(0, 10) : 'Never'}</td>`;
+      html += `<td style="padding: 0.5rem; text-align: right;"><button type="button" class="btn btn-sm btn-danger" onclick="revokeToken(${t.id}, '${escapeHtml(t.name)}')">Revoke</button></td>`;
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<p style="color: var(--danger); font-size: 0.85rem;">Error: ${err.message}</p>`;
+  }
+}
+
+async function handleCreateToken(e) {
+  e.preventDefault();
+  const nameInput = document.getElementById('token-name');
+  const expiryInput = document.getElementById('token-expiry');
+  const btn = document.getElementById('btn-submit-token');
+
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+
+  try {
+    const res = await fetch('/api/tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: nameInput.value,
+        expires_in_days: expiryInput.value ? parseInt(expiryInput.value, 10) : null
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('raw-token-display').value = data.token;
+      document.getElementById('token-generated-alert').style.display = 'block';
+      nameInput.value = '';
+      loadDeviceTokens();
+    } else {
+      alert('Error creating token: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Token';
+  }
+}
+
+async function revokeToken(tokenId, tokenName) {
+  if (!confirm(`Revoke device token "${tokenName}"? Any client using this token will be disconnected.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/tokens/${tokenId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      loadDeviceTokens();
+    } else {
+      alert('Error revoking token: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+function copyGeneratedToken() {
+  const input = document.getElementById('raw-token-display');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    alert('Token copied to clipboard!');
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[tag] || tag));
+}
+
+document.addEventListener('DOMContentLoaded', loadDeviceTokens);
 </script>
 {% endblock %}

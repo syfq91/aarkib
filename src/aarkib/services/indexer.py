@@ -76,12 +76,53 @@ def compute_sort_title(title: str) -> str:
     return title
 
 
-def compute_sha256(file_path: Path, chunk_size: int = 65536) -> str:
+def compute_sha256(file_path: Path, chunk_size: int = 1048576) -> str:
+    """Computes full SHA-256 hash using 1MB read chunks for high I/O throughput."""
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
         while chunk := f.read(chunk_size):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+FAST_FINGERPRINT_THRESHOLD = 32 * 1024 * 1024  # 32 MB
+SAMPLE_CHUNK_SIZE = 65536  # 64 KB header and footer
+
+
+def compute_fast_fingerprint(
+    file_path: Path,
+    threshold: int = FAST_FINGERPRINT_THRESHOLD,
+    sample_size: int = SAMPLE_CHUNK_SIZE,
+) -> str:
+    """Computes a deterministic, fast identity fingerprint for media files.
+
+    - For files <= threshold (e.g. EPUB, CBZ, images, small audio tracks <= 32MB):
+        Returns full SHA-256 hash.
+    - For files > threshold (e.g. 5GB–50GB video files):
+        Hashes file_size (8 bytes) + first 64KB + last 64KB.
+        Prefixed with "fp_" and fits within 64 chars.
+    """
+    stat_info = file_path.stat()
+    file_size = stat_info.st_size
+
+    if file_size <= threshold:
+        return compute_sha256(file_path)
+
+    hasher = hashlib.sha256()
+    hasher.update(file_size.to_bytes(8, "big"))
+
+    with open(file_path, "rb") as f:
+        # Read header
+        header = f.read(sample_size)
+        hasher.update(header)
+
+        # Read footer
+        if file_size > sample_size:
+            f.seek(max(0, file_size - sample_size))
+            footer = f.read(sample_size)
+            hasher.update(footer)
+
+    return f"fp_{hasher.hexdigest()[:60]}"
 
 
 def _extract_and_generate_cover(
@@ -275,7 +316,7 @@ def index_media_file(
                     db.session.commit()
             return existing_book
 
-        file_hash = compute_sha256(file_path)
+        file_hash = compute_fast_fingerprint(file_path)
 
         plugin = None
         if library_media_type and library_media_type != "all":

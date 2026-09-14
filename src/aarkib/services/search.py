@@ -110,35 +110,94 @@ def init_search_fts(conn_or_session: Any = None) -> bool:
         return False
 
 
-def parse_fts_query(raw_query: str) -> str:
-    """Defensively parse, sanitize, and format user input for SQLite FTS5.
+QUALIFIER_PATTERN = re.compile(
+    r'\b(author|creator|narrator|series|collection|album|tag|genre|title|desc|description|type):(?:"([^"]+)"|(\S+))',
+    re.IGNORECASE,
+)
 
-    - Handles unbalanced quotes, special syntax chars (: ^ * ( ) { } [ ] - +).
-    - Preserves exact double-quoted phrases when balanced.
-    - Adds prefix matching wildcard (*) to word tokens for instant typeahead search.
-    - Double-quotes each token to treat boolean operators (AND, OR, NOT) as literal words.
+FIELD_COLUMN_MAP = {
+    "author": "creators",
+    "creator": "creators",
+    "narrator": "creators",
+    "series": "collection",
+    "collection": "collection",
+    "album": "collection",
+    "tag": "tags",
+    "genre": "tags",
+    "title": "title",
+    "desc": "description",
+    "description": "description",
+}
+
+
+def parse_fts_query_with_filters(raw_query: str) -> tuple[str, str | None]:
+    """Parse raw query for SQLite FTS5, supporting field qualifiers.
+
+    Recognizes qualifiers such as:
+    - author:"Frank Herbert" or creator:Herbert -> creators : "Frank Herbert"
+    - series:"The Expanse" or collection:Expanse -> collection : "The Expanse"
+    - tag:scifi or genre:scifi -> tags : ("scifi"*)
+    - title:"Dune" -> title : "Dune"
+    - desc:"spice" -> description : ("spice"*)
+    - type:book -> extracted media_type filter
+
+    Returns (clean_fts_query, extracted_media_type).
     """
     if not raw_query:
-        return ""
+        return "", None
 
     q = raw_query.strip()
     if not q:
-        return ""
+        return "", None
 
-    # Check for balanced explicit phrase search: e.g. "The Matrix"
+    # Check for balanced explicit phrase search: e.g. "The Matrix" (without field qualifier)
     if q.startswith('"') and q.endswith('"') and len(q) > 1 and q.count('"') % 2 == 0:
         phrase = q.strip('"').replace('"', " ").strip()
         if phrase:
-            return f'"{phrase}"'
+            return f'"{phrase}"', None
 
-    # Extract alphanumeric tokens (including unicode / non-ASCII words)
-    tokens = re.findall(r"[\w]+", q, re.UNICODE)
-    if not tokens:
-        return ""
+    extracted_media_type = None
+    column_clauses: list[str] = []
 
-    # Quote each token and append wildcard suffix for prefix typeahead matching
-    cleaned = [f'"{tok}"*' for tok in tokens]
-    return " ".join(cleaned)
+    def _replace_qualifier(match: re.Match[str]) -> str:
+        nonlocal extracted_media_type
+        field_name = match.group(1).lower()
+        quoted_val = match.group(2)
+        unquoted_val = match.group(3)
+        val = (quoted_val if quoted_val is not None else unquoted_val).strip()
+
+        if field_name == "type":
+            extracted_media_type = val.lower()
+            return " "
+
+        target_col = FIELD_COLUMN_MAP.get(field_name)
+        if target_col and val:
+            if quoted_val is not None:
+                clean_val = val.replace('"', " ").strip()
+                column_clauses.append(f'{target_col} : "{clean_val}"')
+            else:
+                sub_tokens = re.findall(r"[\w]+", val, re.UNICODE)
+                if sub_tokens:
+                    tok_str = " ".join(f'"{t}"*' for t in sub_tokens)
+                    column_clauses.append(f"{target_col} : ({tok_str})")
+        return " "
+
+    remaining_text = QUALIFIER_PATTERN.sub(_replace_qualifier, q).strip()
+
+    # Extract general words from remaining text
+    general_tokens = re.findall(r"[\w]+", remaining_text, re.UNICODE)
+    general_clauses = [f'"{tok}"*' for tok in general_tokens]
+
+    all_clauses = column_clauses + general_clauses
+    if not all_clauses:
+        return "", extracted_media_type
+
+    return " ".join(all_clauses), extracted_media_type
+
+
+def parse_fts_query(raw_query: str) -> str:
+    """Defensively parse, sanitize, and format user input for SQLite FTS5."""
+    return parse_fts_query_with_filters(raw_query)[0]
 
 
 def sync_media_item_fts(item_id: int, session: Session | None = None) -> None:
@@ -263,17 +322,18 @@ def search_media_ids(
 
     Falls back to SQL ILIKE search on any FTS5 syntax or database exception.
     """
-    clean_query = parse_fts_query(q)
+    clean_query, extracted_type = parse_fts_query_with_filters(q)
     if not clean_query:
         return []
 
+    effective_media_type = media_type or extracted_type
     sess = session or db.session
     try:
         rows = sess.execute(
             FTS_SEARCH_SQL,
             {
                 "match_query": clean_query,
-                "media_type": media_type if media_type else None,
+                "media_type": effective_media_type if effective_media_type else None,
                 "library_id": library_id if library_id else None,
                 "limit": limit,
             },
@@ -284,7 +344,11 @@ def search_media_ids(
             "FTS5 query '%s' failed, falling back to ILIKE: %s", clean_query, exc
         )
         return _search_media_ids_fallback_ilike(
-            q, media_type=media_type, library_id=library_id, limit=limit, session=sess
+            q,
+            media_type=effective_media_type,
+            library_id=library_id,
+            limit=limit,
+            session=sess,
         )
 
 

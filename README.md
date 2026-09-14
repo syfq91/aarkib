@@ -128,7 +128,6 @@ All server management is handled directly through the web interface under **Sett
 - [**`ARCHITECTURE.md`**](ARCHITECTURE.md): System architecture, core subsystems, data models, ER diagrams, and technical design.
 - [**`DESIGN.md`**](DESIGN.md): Visual identity, design tokens, and UI/UX design system (Cinematic Obsidian).
 - [**`AGENTS.md`**](AGENTS.md): Engineering standards, safety invariants, and developer guidelines for AI agents and human contributors.
-- [**`AUDITS.md`**](AUDITS.md): Best practices audit report, security hardening status, and remediation tracking.
 
 ---
 

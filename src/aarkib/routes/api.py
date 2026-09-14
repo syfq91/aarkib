@@ -128,6 +128,7 @@ def is_safe_media_path(file_path: Path | str) -> bool:
         "COVERS_DIR",
         "OPTIMIZED_DIR",
         "TRANSCODE_DIR",
+        "BACKUP_DIR",
     ):
         val = current_app.config.get(key)
         if isinstance(val, (list, tuple, set)):
@@ -205,10 +206,44 @@ def api_admin_required(view):
 
 @api_bp.before_request
 def enforce_api_auth():
-    """Authenticate the API request (HTTP Basic or session) and enforce auth settings."""
+    """Authenticate the API request (Bearer token, HTTP Basic, or session) and enforce auth settings."""
     # Endpoints exempt from authentication
     if request.endpoint in ("api.get_media_cover", "api.health"):
         return None
+
+    # Authenticate via Bearer token (DeviceToken) if provided
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        raw_token = auth_header[7:].strip()
+        from aarkib.models.token import DeviceToken
+
+        token_hash = DeviceToken.hash_token(raw_token)
+        token_record = db.session.scalar(
+            select(DeviceToken).where(DeviceToken.token_hash == token_hash)
+        )
+        if token_record:
+            # Check expiration
+            if token_record.expires_at:
+                now_utc = datetime.now(UTC)
+                exp_utc = (
+                    token_record.expires_at.replace(tzinfo=UTC)
+                    if token_record.expires_at.tzinfo is None
+                    else token_record.expires_at
+                )
+                if exp_utc < now_utc:
+                    return (
+                        jsonify({"error": "Device token has expired"}),
+                        HTTPStatus.UNAUTHORIZED,
+                    )
+
+            token_record.last_used_at = datetime.now(UTC)
+            db.session.commit()
+            login_user(token_record.user)
+        else:
+            return (
+                jsonify({"error": "Invalid API token"}),
+                HTTPStatus.UNAUTHORIZED,
+            )
 
     # Authenticate via HTTP Basic auth if credentials are provided
     auth = request.authorization
@@ -2314,3 +2349,197 @@ def reset_system_settings() -> ResponseReturnValue:
     except Exception as err:
         current_app.logger.error("Failed to reset settings: %s", err, exc_info=True)
         return jsonify({"error": "Failed to reset settings"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Backup & Disaster Recovery Endpoints
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/backup", methods=["GET"])
+@api_admin_required
+def list_backups_endpoint() -> ResponseReturnValue:
+    """List all available backup archives with manifest metadata."""
+    from aarkib.services.backup import list_backups
+
+    backups = list_backups(current_app)
+    return jsonify({"status": "success", "backups": backups, "count": len(backups)})
+
+
+@api_bp.route("/backup", methods=["POST"])
+@api_admin_required
+def create_backup_endpoint() -> ResponseReturnValue:
+    """Create a new hot backup snapshot of the database and covers."""
+    from aarkib.services.backup import create_backup
+
+    include_covers = request.args.get("include_covers", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    try:
+        archive_path = create_backup(current_app, include_covers=include_covers)
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "message": f"Backup created successfully: {archive_path.name}",
+                    "filename": archive_path.name,
+                }
+            ),
+            201,
+        )
+    except Exception as exc:
+        current_app.logger.error("Failed to create backup: %s", exc, exc_info=True)
+        return jsonify({"error": f"Failed to create backup: {exc}"}), 500
+
+
+@api_bp.route("/backup/download/<filename>", methods=["GET"])
+@api_admin_required
+def download_backup_endpoint(filename: str) -> ResponseReturnValue:
+    """Download a backup archive file."""
+    from aarkib.services.backup import get_backup_dir
+
+    backup_dir = get_backup_dir(current_app)
+    file_path = (backup_dir / filename).resolve()
+    if not is_safe_media_path(file_path) or not file_path.is_file():
+        abort(404, description="Backup file not found")
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip",
+    )
+
+
+@api_bp.route("/backup/restore", methods=["POST"])
+@api_admin_required
+def restore_backup_endpoint() -> ResponseReturnValue:
+    """Restore from an existing backup file in BACKUP_DIR or an uploaded archive."""
+    from aarkib.services.backup import get_backup_dir, restore_backup
+
+    # Check if a file was uploaded in request.files
+    if "backup_file" in request.files:
+        upload = request.files["backup_file"]
+        if not upload or not upload.filename:
+            return jsonify({"error": "No backup file selected"}), 400
+
+        backup_dir = get_backup_dir(current_app)
+        safe_filename = Path(upload.filename).name
+        target_path = backup_dir / f"uploaded_{safe_filename}"
+        upload.save(target_path)
+    else:
+        # Check JSON payload for existing filename
+        payload = request.get_json(silent=True) or {}
+        filename = payload.get("filename") or request.form.get("filename")
+        if not filename:
+            return jsonify({"error": "No backup filename provided"}), 400
+
+        backup_dir = get_backup_dir(current_app)
+        target_path = (backup_dir / Path(filename).name).resolve()
+
+    if not is_safe_media_path(target_path) or not target_path.is_file():
+        return jsonify({"error": "Backup file not found"}), 404
+
+    success, msg = restore_backup(current_app, target_path)
+    if not success:
+        return jsonify({"status": "error", "error": msg}), 400
+
+    return jsonify({"status": "success", "message": msg})
+
+
+@api_bp.route("/backup/<filename>", methods=["DELETE"])
+@api_admin_required
+def delete_backup_endpoint(filename: str) -> ResponseReturnValue:
+    """Delete a backup archive."""
+    from aarkib.services.backup import delete_backup
+
+    if delete_backup(current_app, filename):
+        return jsonify({"status": "success", "message": f"Deleted {filename}"})
+    return jsonify({"error": "Failed to delete backup file"}), 404
+
+
+# ---------------------------------------------------------------------------
+# API / Device Token Endpoints
+# ---------------------------------------------------------------------------
+
+
+@api_bp.route("/tokens", methods=["GET"])
+@login_required
+def list_device_tokens() -> ResponseReturnValue:
+    """List active API and device tokens for the authenticated user."""
+    from aarkib.models.token import DeviceToken
+
+    tokens = db.session.scalars(
+        select(DeviceToken)
+        .where(DeviceToken.user_id == current_user.id)
+        .order_by(DeviceToken.created_at.desc())
+    ).all()
+    return jsonify({"tokens": [t.to_dict() for t in tokens], "count": len(tokens)})
+
+
+@api_bp.route("/tokens", methods=["POST"])
+@login_required
+def create_device_token() -> ResponseReturnValue:
+    """Generate a new API or device token for the current user."""
+    from aarkib.models.token import DeviceToken
+
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Token name is required"}), 400
+
+    scopes = payload.get("scopes") or ["read", "stream"]
+    expires_in_days = payload.get("expires_in_days")
+    if expires_in_days is not None:
+        try:
+            expires_in_days = int(expires_in_days)
+        except ValueError, TypeError:
+            expires_in_days = None
+
+    token_obj, raw_token = DeviceToken.create_token(
+        user_id=current_user.id,
+        name=name,
+        scopes=scopes,
+        expires_in_days=expires_in_days,
+    )
+    db.session.add(token_obj)
+    db.session.commit()
+
+    return (
+        jsonify(
+            {
+                "status": "success",
+                "message": (
+                    "Device token created successfully. Store this token "
+                    "securely as it will not be shown again."
+                ),
+                "token": raw_token,
+                "token_id": token_obj.id,
+                "name": token_obj.name,
+                "token_prefix": token_obj.token_prefix,
+            }
+        ),
+        201,
+    )
+
+
+@api_bp.route("/tokens/<int:token_id>", methods=["DELETE"])
+@login_required
+def revoke_device_token(token_id: int) -> ResponseReturnValue:
+    """Revoke and delete a device token."""
+    from aarkib.models.token import DeviceToken
+
+    token_obj = db.session.get(DeviceToken, token_id)
+    if not token_obj:
+        return jsonify({"error": "Token not found"}), 404
+
+    # Authorization: Must be owner or admin
+    if token_obj.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    name = token_obj.name
+    db.session.delete(token_obj)
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Revoked token '{name}'"})

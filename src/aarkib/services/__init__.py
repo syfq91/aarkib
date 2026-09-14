@@ -5,6 +5,7 @@ from aarkib.services.parsers.base import (
     extract_metadata_from_file,
 )
 from aarkib.services.scanner import (
+    compute_fast_fingerprint,
     compute_sha256,
     index_media_file,
     index_single_book,
@@ -18,6 +19,7 @@ __all__ = [
     "ParsedBookMetadata",
     "ParsedVideoMetadata",
     "extract_metadata_from_file",
+    "compute_fast_fingerprint",
     "compute_sha256",
     "index_media_file",
     "index_single_book",

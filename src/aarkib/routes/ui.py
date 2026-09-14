@@ -243,8 +243,9 @@ VALID_SETTINGS_CATEGORIES = {
     "plugins": "Plugin Registry & Extensions",
     "users": "User Management",
     "integrations": "Integrations & OPDS Feeds",
+    "backup": "Backup & Disaster Recovery",
 }
-ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users"}
+ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users", "backup"}
 
 
 @ui_bp.route("/settings")
@@ -308,6 +309,91 @@ def settings(category: str | None = None) -> ResponseReturnValue:
         else []
     )
 
+    backups = []
+    if is_admin and category == "backup":
+        from aarkib.services.backup import list_backups
+
+        backups = list_backups(current_app)
+
+    system_health = None
+    if is_admin and category == "system":
+        import sqlite3
+
+        from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
+
+        db_path_str = current_app.config.get("SQLALCHEMY_DATABASE_URI", "").replace(
+            "sqlite:///", ""
+        )
+        db_file = (
+            Path(db_path_str) if db_path_str and db_path_str != ":memory:" else None
+        )
+        db_size_mb = (
+            round(db_file.stat().st_size / (1024 * 1024), 2)
+            if db_file and db_file.is_file()
+            else 0.0
+        )
+
+        wal_file = Path(f"{db_path_str}-wal") if db_file else None
+        wal_size_mb = (
+            round(wal_file.stat().st_size / (1024 * 1024), 2)
+            if wal_file and wal_file.is_file()
+            else 0.0
+        )
+
+        journal_mode = "WAL"
+        try:
+            from sqlalchemy import text
+
+            journal_mode = (
+                db.session.execute(text("PRAGMA journal_mode;")).scalar() or "WAL"
+            )
+        except Exception:
+            pass
+
+        fts_count = 0
+        try:
+            from sqlalchemy import text
+
+            fts_count = (
+                db.session.scalar(text("SELECT count(*) FROM media_items_fts;")) or 0
+            )
+        except Exception:
+            fts_count = 0
+
+        watcher = (
+            current_app.extensions.get("library_watcher")
+            if hasattr(current_app, "extensions")
+            else None
+        )
+        watcher_running = bool(watcher and watcher.is_alive())
+
+        ffmpeg_bin = get_ffmpeg_binary(current_app.config)
+        ffprobe_bin = get_ffprobe_binary(current_app.config)
+
+        data_dir = Path(current_app.config.get("DATA_DIR", "data"))
+        covers_dir = Path(current_app.config.get("COVERS_DIR", data_dir / "covers"))
+        backups_dir = Path(current_app.config.get("BACKUP_DIR", data_dir / "backups"))
+
+        covers_count = len(list(covers_dir.glob("*"))) if covers_dir.is_dir() else 0
+        backups_count = (
+            len(list(backups_dir.glob("*.zip"))) if backups_dir.is_dir() else 0
+        )
+
+        system_health = {
+            "sqlite_version": sqlite3.sqlite_version,
+            "journal_mode": str(journal_mode).upper(),
+            "db_size_mb": db_size_mb,
+            "wal_size_mb": wal_size_mb,
+            "fts_indexed_items": fts_count,
+            "watcher_running": watcher_running,
+            "ffmpeg_available": bool(ffmpeg_bin),
+            "ffmpeg_path": ffmpeg_bin or "Not Found",
+            "ffprobe_available": bool(ffprobe_bin),
+            "ffprobe_path": ffprobe_bin or "Not Found",
+            "covers_count": covers_count,
+            "backups_count": backups_count,
+        }
+
     category_title = VALID_SETTINGS_CATEGORIES[category]
 
     return render_template(
@@ -327,6 +413,8 @@ def settings(category: str | None = None) -> ResponseReturnValue:
         system_settings=system_settings,
         plugins_info=plugins_info,
         enabled_plugins=enabled_plugins,
+        backups=backups,
+        system_health=system_health,
     )
 
 

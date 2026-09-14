@@ -118,7 +118,7 @@ aarkib/
 │   ├── config.py             # Config dataclass, defaults, binary resolvers (ffmpeg/ffprobe), and directory discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
-│   │   ├── __init__.py       # Model exports (MediaItem, Creator, Collection, Tag, User, Library, SystemSetting)
+│   │   ├── __init__.py       # Model exports (MediaItem, Creator, Collection, Tag, User, Library, SystemSetting, DeviceToken)
 │   │   ├── media_item.py     # Canonical MediaItem model unifying books, comics, video, and audio
 │   │   ├── creator.py        # Creator model and media_creators association table
 │   │   ├── collection.py     # Collection model for series, shows, albums
@@ -126,6 +126,7 @@ aarkib/
 │   │   ├── library.py        # Library model with per-folder JSON settings overrides (auto_enrich, metadata_provider)
 │   │   ├── setting.py        # SystemSetting model for persistent dynamic WebUI preferences
 │   │   ├── playlist.py       # Playlist and PlaylistItem models
+│   │   ├── token.py          # DeviceToken model for hardware e-readers and API Bearer tokens
 │   │   ├── job.py            # BackgroundJob persistent model for asynchronous tasks
 │   │   ├── metadata_cache.py # Online metadata response cache
 │   │   ├── media.py          # MediaItemMixin, PlayableItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum
@@ -148,10 +149,12 @@ aarkib/
 │   │   └── reader.py         # In-browser reader/player views (EPUB, CBZ, PDF, Video, Audio, Podcasts)
 │   ├── services/
 │   │   ├── __init__.py
+│   │   ├── backup.py         # Hot SQLite snapshot, ZIP packaging, validation, atomic database restore
+│   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting
 │   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
 │   │   ├── job_manager.py    # Asynchronous background job manager and ThreadPoolExecutor queue
 │   │   ├── scanner.py        # Recursive crawler, watchdog watcher, SHA-256 deduplication, cover caching (.webp)
-│   │   ├── search.py         # SQLite FTS5 full-text search engine and query builder
+│   │   ├── search.py         # SQLite FTS5 full-text search engine, query builder, and field-qualified filters
 │   │   ├── transcoder.py     # On-demand video/audio remuxing, HLS adaptive streaming supervisor, VAAPI detection
 │   │   ├── optimizer.py      # E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── enricher.py       # Multi-source metadata enrichment client
@@ -169,7 +172,7 @@ aarkib/
 │   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/               # Obsidian design tokens, modern CSS, PWA Service Worker, offline vendor bundles
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (209+ tests covering all features)
+├── tests/                    # Deterministic Pytest suite (253+ tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition

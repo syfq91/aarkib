@@ -56,6 +56,35 @@ def test_parse_fts_query_sanitization():
     assert '"not"*' in res_bool
 
 
+def test_field_qualified_fts_query():
+    """Verify that author:, series:, tag:, title:, and type: are parsed into column filters."""
+    from aarkib.services.search import parse_fts_query_with_filters
+
+    # 1. Author qualifier
+    q_author, mtype = parse_fts_query_with_filters('author:"Frank Herbert"')
+    assert q_author == 'creators : "Frank Herbert"'
+    assert mtype is None
+
+    # 2. Tag qualifier with prefix matching
+    q_tag, _ = parse_fts_query_with_filters("tag:scifi")
+    assert 'tags : ("scifi"*)' in q_tag
+
+    # 3. Series and title qualifiers
+    q_multi, _ = parse_fts_query_with_filters(
+        'series:"The Expanse" title:"Leviathan Wakes"'
+    )
+    assert 'collection : "The Expanse"' in q_multi
+    assert 'title : "Leviathan Wakes"' in q_multi
+
+    # 4. Type qualifier extracts media_type
+    q_typed, mtype = parse_fts_query_with_filters(
+        'type:book author:"Asimov" Foundation'
+    )
+    assert mtype == "book"
+    assert 'creators : "Asimov"' in q_typed
+    assert '"Foundation"*' in q_typed
+
+
 def test_rebuild_and_search_by_dimensions(app):
     """Verify search across title, creators, collections, tags, and descriptions."""
     with app.app_context():

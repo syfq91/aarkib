@@ -381,3 +381,27 @@ def test_tags_view_direct(client, app, sample_epub):
     res = client.get("/tags")
     assert res.status_code == 200
     assert b"Tags" in res.data
+
+
+def test_settings_system_health_view(client):
+    """Verify /settings/system renders the System Health & Diagnostics card."""
+    res = client.get("/settings/system")
+    assert res.status_code == 200
+    assert (
+        b"System Health &amp; Diagnostics" in res.data
+        or b"System Health & Diagnostics" in res.data
+    )
+    assert b"SQLite" in res.data
+    assert b"FTS5 Search Engine" in res.data
+
+
+def test_settings_backup_view(client):
+    """Verify /settings/backup renders the Backup & Disaster Recovery panel."""
+    res = client.get("/settings/backup")
+    assert res.status_code == 200
+    assert (
+        b"Backup &amp; Disaster Recovery" in res.data
+        or b"Backup & Disaster Recovery" in res.data
+    )
+    assert b"Create Backup" in res.data
+    assert b"Upload &amp; Restore" in res.data or b"Upload & Restore" in res.data

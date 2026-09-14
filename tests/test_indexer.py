@@ -89,3 +89,22 @@ def test_assign_authors_tags_series(app):
         assert book.series_index == 1.0
         assert len(book.tags) == 2
         assert {t.name for t in book.tags} == {"Mystery", "Classic"}
+
+
+def test_compute_fast_fingerprint(tmp_path):
+    from aarkib.services.indexer import compute_fast_fingerprint
+
+    # 1. Small file (<= threshold) produces standard 64-char sha256
+    small_file = tmp_path / "small.txt"
+    small_file.write_bytes(b"small content")
+    small_hash = compute_fast_fingerprint(small_file, threshold=100)
+    assert len(small_hash) == 64
+    assert not small_hash.startswith("fp_")
+
+    # 2. Large file (> threshold) produces fast fingerprint prefixed with fp_
+    large_file = tmp_path / "large.bin"
+    # Write 200 bytes with threshold=50, sample_size=20
+    large_file.write_bytes(b"A" * 200)
+    large_hash = compute_fast_fingerprint(large_file, threshold=50, sample_size=20)
+    assert len(large_hash) <= 64
+    assert large_hash.startswith("fp_")

@@ -1,0 +1,225 @@
+{% extends "settings/layout.html" %}
+
+{% block settings_content %}
+{% if is_admin %}
+<div style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <span>💾</span> Backup &amp; Disaster Recovery
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+        Create hot crash-consistent snapshots of your database and cover art, verify archive integrity, or restore from a previous backup.
+      </p>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;">
+        <input type="checkbox" id="include-covers-chk" checked> Include covers
+      </label>
+      <button type="button" class="btn btn-primary" id="btn-create-backup" onclick="handleCreateBackup()">
+        <span>➕</span> Create Backup
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Archive Card -->
+<div class="settings-card" style="margin-bottom: 2rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem;">
+  <h4 style="margin: 0 0 0.5rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+    <span>📤</span> Upload &amp; Restore External Archive
+  </h4>
+  <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Upload a previously exported <code>aarkib-backup-*.zip</code> file to validate and restore your server state.
+  </p>
+  <form id="upload-backup-form" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;" onsubmit="handleUploadBackup(event)">
+    <input type="file" id="backup-file-input" name="backup_file" accept=".zip" required style="font-size: 0.85rem; color: var(--text-primary);">
+    <button type="submit" class="btn btn-secondary" id="btn-upload-backup">Upload &amp; Restore</button>
+  </form>
+</div>
+
+<!-- Existing Backups List -->
+<div class="settings-card" style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem;">
+  <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+    <span>📦</span> Available Backup Snapshots
+    <span class="badge" style="background: var(--bg-canvas-elevated); color: var(--text-secondary);">{{ backups|length }}</span>
+  </h4>
+
+  {% if backups %}
+  <div style="overflow-x: auto;">
+    <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); text-align: left; color: var(--text-secondary);">
+          <th style="padding: 0.5rem;">Filename</th>
+          <th style="padding: 0.5rem;">Created</th>
+          <th style="padding: 0.5rem;">Size</th>
+          <th style="padding: 0.5rem;">Catalog Items</th>
+          <th style="padding: 0.5rem;">Covers</th>
+          <th style="padding: 0.5rem;">Status</th>
+          <th style="padding: 0.5rem; text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in backups %}
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 0.6rem 0.5rem; font-family: monospace; font-size: 0.8rem; color: var(--text-primary);">
+            {{ b.filename }}
+          </td>
+          <td style="padding: 0.6rem 0.5rem; color: var(--text-secondary);">
+            {{ b.manifest.created_at[:19] if b.manifest and b.manifest.created_at else b.modified_at[:19] }}
+          </td>
+          <td style="padding: 0.6rem 0.5rem; color: var(--text-secondary);">
+            {{ (b.size_bytes / (1024 * 1024))|round(2) }} MB
+          </td>
+          <td style="padding: 0.6rem 0.5rem; color: var(--text-secondary);">
+            {{ b.manifest.media_count if b.manifest else '-' }}
+          </td>
+          <td style="padding: 0.6rem 0.5rem; color: var(--text-secondary);">
+            {{ b.manifest.covers_count if b.manifest else '-' }}
+          </td>
+          <td style="padding: 0.6rem 0.5rem;">
+            {% if b.is_valid %}
+            <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3);">
+              ✓ Verified
+            </span>
+            {% else %}
+            <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">
+              ⚠ Corrupted
+            </span>
+            {% endif %}
+          </td>
+          <td style="padding: 0.6rem 0.5rem; text-align: right; white-space: nowrap;">
+            <a href="/api/backup/download/{{ b.filename }}" class="btn btn-sm btn-secondary" title="Download ZIP Archive" download>
+              ⬇️ Download
+            </a>
+            {% if b.is_valid %}
+            <button type="button" class="btn btn-sm btn-secondary" onclick="handleRestoreBackup('{{ b.filename }}')" title="Restore this backup" style="margin-left: 0.25rem;">
+              🔄 Restore
+            </button>
+            {% endif %}
+            <button type="button" class="btn btn-sm btn-danger" onclick="handleDeleteBackup('{{ b.filename }}')" title="Delete backup" style="margin-left: 0.25rem;">
+              🗑️
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary);">
+    <div style="font-size: 2rem; margin-bottom: 0.5rem;">💾</div>
+    <p style="margin: 0; font-size: 0.9rem;">No backup archives available yet.</p>
+    <p style="margin: 0.25rem 0 0 0; font-size: 0.8rem;">Click <strong>Create Backup</strong> above to snapshot your media catalog.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+async function handleCreateBackup() {
+  const btn = document.getElementById('btn-create-backup');
+  const includeCovers = document.getElementById('include-covers-chk').checked;
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> Creating...';
+
+  try {
+    const res = await fetch(`/api/backup?include_covers=${includeCovers}`, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.message || 'Backup created successfully!');
+      window.location.reload();
+    } else {
+      alert('Error creating backup: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.innerHTML = '<span>➕</span> Create Backup';
+    }
+  } catch (err) {
+    alert('Failed to connect to server: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<span>➕</span> Create Backup';
+  }
+}
+
+async function handleRestoreBackup(filename) {
+  if (!confirm(`Are you sure you want to restore "${filename}"?\n\nThis will replace the current active catalog with the backup snapshot. A safety rollback copy of the current database will be saved.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/backup/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.message || 'Backup restored successfully!');
+      window.location.reload();
+    } else {
+      alert('Restore failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Restore failed: ' + err.message);
+  }
+}
+
+async function handleUploadBackup(e) {
+  e.preventDefault();
+  const fileInput = document.getElementById('backup-file-input');
+  if (!fileInput.files.length) return;
+
+  if (!confirm('Restore from uploaded archive?\n\nThis will overwrite the current database with the uploaded backup.')) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('backup_file', fileInput.files[0]);
+
+  const btn = document.getElementById('btn-upload-backup');
+  btn.disabled = true;
+  btn.textContent = 'Restoring...';
+
+  try {
+    const res = await fetch('/api/backup/restore', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.message || 'Uploaded backup restored successfully!');
+      window.location.reload();
+    } else {
+      alert('Restore failed: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.textContent = 'Upload & Restore';
+    }
+  } catch (err) {
+    alert('Error uploading backup: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Upload & Restore';
+  }
+}
+
+async function handleDeleteBackup(filename) {
+  if (!confirm(`Delete backup file "${filename}"?`)) return;
+
+  try {
+    const res = await fetch(`/api/backup/${encodeURIComponent(filename)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      alert('Delete failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error deleting backup: ' + err.message);
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

@@ -349,6 +349,36 @@ Aarkib features an automated streaming and transcoding supervisor inspired by Pl
 
 ---
 
+### 3.10 Backup & Disaster Recovery Subsystem (`services/backup.py`)
+
+Aarkib includes a zero-downtime, crash-consistent backup and restore pipeline:
+
+1. **Hot SQLite Snapshotting**:
+   - Uses SQLite's native `sqlite3.Connection.backup()` API (`driver_connection.backup()`) to capture a point-in-time snapshot of the database while in WAL mode without acquiring exclusive writer locks or interrupting active readers/writers.
+2. **Deterministic Archive Packaging**:
+   - Archives are compressed ZIP files (`aarkib-backup-YYYYMMDD-HHMMSS.zip`) stored in `BACKUP_DIR` (`./data/backups`).
+   - Each archive contains:
+     - `database.sqlite3`: The hot-snapshotted database file.
+     - `covers/`: Extracted WebP cover images and thumbnails.
+     - `manifest.json`: Metadata including backup format version, server timestamp, Aarkib version, item counts, and SHA-256 integrity hash of the database snapshot.
+3. **Archive Validation & Atomic Restore**:
+   - `validate_backup()` inspects the archive structure, validates `manifest.json`, and verifies the database SHA-256 hash.
+   - `restore_backup()` implements transactional safety: before restoring, it takes a pre-restore rollback backup of current state. Database and cover assets are atomically replaced.
+
+---
+
+### 3.11 Full-Text Search & Fast Indexing (`services/search.py`, `services/indexer.py`)
+
+1. **Field-Qualified SQLite FTS5 Search**:
+   - Aarkib integrates SQLite FTS5 with column-qualified search prefixes: `author:`, `creator:`, `series:`, `collection:`, `tag:`, `genre:`, `title:`, `desc:`, and `type:`.
+   - The query parser (`parse_fts_query_with_filters()`) extracts field qualifiers and formats targeted column queries (`creators : "..."`, `collections : "..."`, `tags : ("..."*)`), combined with generic un-prefixed terms via `AND` conjunctions.
+2. **Fast Large-File Fingerprinting**:
+   - To avoid excessive disk I/O when crawling multi-gigabyte video or audiobook files (e.g. 10GB+ MKVs), Aarkib utilizes a fast partial fingerprint (`compute_fast_fingerprint()`) for files over 32 MB.
+   - Computes SHA-256 over: `file_size (8 bytes) + first 64 KB + last 64 KB`.
+   - Streaming hash computations (`compute_sha256()`) utilize an optimized 1 MB buffer chunk size.
+
+---
+
 ## 4. Data Models & Entity Relationship
 
 ```mermaid
@@ -357,6 +387,7 @@ erDiagram
     User ||--o{ Bookmark : "creates"
     User ||--o{ UserFavorite : "stars"
     User ||--o{ Playlist : "owns"
+    User ||--o{ DeviceToken : "owns"
     Playlist ||--o{ PlaylistItem : "contains"
     MediaItem ||--o{ PlaylistItem : "referenced_in"
     MediaItem ||--o{ UserProgress : "has"
@@ -467,11 +498,24 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+
+    DeviceToken {
+        int id PK
+        int user_id FK
+        string name
+        string token_hash UK
+        string token_prefix
+        text scopes_json
+        datetime expires_at
+        datetime last_used_at
+        datetime created_at
+    }
 ```
 
 ### Multi-Media Schema Mixins & Models (`models/`)
 - **`Library` (`models/library.py`)**: Persistent media library directory configuration (`slug`, `name`, `path`, `media_type`, `settings_json`).
 - **`SystemSetting` (`models/setting.py`)**: Key-value application configuration store (`key`, `value`, `updated_at`) supporting runtime WebUI overrides with dynamic in-memory hot-reloading into Flask's `app.config`.
+- **`DeviceToken` (`models/token.py`)**: Hardware device and automation Bearer token store (`name`, `token_hash`, `token_prefix`, `scopes_json`, `expires_at`, `last_used_at`) linked to `User`.
 - **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus relational `library_id` FK.
 - **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
 - **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and `chapters_json`.
@@ -514,6 +558,10 @@ erDiagram
    - All file downloads, streams, and page reads validate paths using `is_safe_media_path()` to ensure files strictly resolve inside registered `Library.path` roots or configured system cache directories.
 8. **Authentication Rate Limiting**:
    - An in-memory, thread-safe sliding-window rate limiter (`AuthRateLimiter`) guards `/auth/login`, API, and Basic Auth endpoints against brute-force and credential stuffing attacks. Repeated authentication failures trigger HTTP 429 Too Many Requests with standard `Retry-After` headers.
+9. **Device & API Bearer Tokens (`models/token.py`, `enforce_api_auth`)**:
+   - Hardware e-readers (KOReader), mobile streaming apps, and third-party automations authenticate via persistent Bearer tokens (`Authorization: Bearer ark_...`).
+   - Tokens are cryptographically hashed using SHA-256 with optional expiration dates and access scopes.
+   - Raw tokens are only visible once upon initial generation. Revocation is instantaneous via REST API or the Web UI.
 
 ---
 
@@ -538,10 +586,12 @@ erDiagram
   - Running a single multi-threaded process preserves Aarkib's in-process singleton guarantees (`JobManager`, `watchdog.Observer`, in-memory transcode session locks, SQLite WAL writer), preventing race conditions that occur with multi-worker process models.
   - When `FLASK_DEBUG=1` or `AARKIB_DEBUG=1` is set, Aarkib automatically falls back to Werkzeug's development server for live reloading.
 - **Administrative Operations**: Managed exclusively via the modern Web UI:
-  - Account setup & user management: First-run setup wizard (`/auth/setup`) and `/settings/users`.
+  - Account setup & user management: First-run setup wizard (`/auth/setup`) and `/settings/users` (including API token issuance).
   - Content discovery: Background filesystem watchers and on-demand rescan via `/settings/libraries`.
   - Full-Text Search: Automatic startup synchronization and manual reindexing via `/settings/jobs`.
   - Metadata enrichment: Background enricher jobs triggered via `/settings/jobs` or per-media detail views.
+  - Backup & Disaster Recovery: Hot SQLite snapshots, archive downloads, and safe rollback restores via `/settings/backup`.
+  - System Health Diagnostics: Deep SQLite, WAL, FTS5, Watchdog, FFmpeg, and disk metrics via `/settings/system`.
 
 ### Schema Evolution & Migration Architecture
 - **Current Additive Auto-Migrations**:

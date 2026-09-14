@@ -13,6 +13,7 @@ from aarkib.extensions import db
 if TYPE_CHECKING:
     from aarkib.models.playlist import Playlist, UserFavorite
     from aarkib.models.progress import Bookmark, UserProgress
+    from aarkib.models.token import DeviceToken
 
 
 class User(UserMixin, db.Model):
@@ -40,6 +41,9 @@ class User(UserMixin, db.Model):
     )
     playlists: Mapped[list[Playlist]] = relationship(
         "Playlist", back_populates="user", cascade="all, delete-orphan"
+    )
+    tokens: Mapped[list[DeviceToken]] = relationship(
+        "DeviceToken", back_populates="user", cascade="all, delete-orphan"
     )
 
     @property
