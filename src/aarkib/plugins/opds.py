@@ -603,7 +603,11 @@ def recent_feed(preset: str | None = None):
 @opds_auth_required
 def authors_index(preset: str | None = None):
     """Serve an OPDS 1.2 navigation feed of all authors."""
-    authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
+    authors = db.session.scalars(
+        select(Author)
+        .options(selectinload(Author.media_items))
+        .order_by(Author.name.asc())
+    ).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
@@ -663,7 +667,11 @@ def author_books(author_id: int, preset: str | None = None):
 @opds_auth_required
 def series_index(preset: str | None = None):
     """Serve an OPDS 1.2 navigation feed of all series/collections."""
-    series_list = db.session.scalars(select(Series).order_by(Series.name.asc())).all()
+    series_list = db.session.scalars(
+        select(Series)
+        .options(selectinload(Series.media_items))
+        .order_by(Series.name.asc())
+    ).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (
@@ -723,7 +731,9 @@ def series_books(series_id: int, preset: str | None = None):
 @opds_auth_required
 def tags_index(preset: str | None = None):
     """Serve an OPDS 1.2 navigation feed of all tags/categories."""
-    tags = db.session.scalars(select(Tag).order_by(Tag.name.asc())).all()
+    tags = db.session.scalars(
+        select(Tag).options(selectinload(Tag.media_items)).order_by(Tag.name.asc())
+    ).all()
     now_iso = datetime.now(UTC).isoformat()
     opds_prefix = f"/opds/{preset}" if preset else "/opds"
     return (

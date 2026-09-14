@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -548,10 +550,19 @@ def enrich_all_books(
     app: Flask,
     overwrite: bool = False,
     provider: str = "all",
+    progress_callback: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    **kwargs: Any,
 ) -> dict[str, int]:
     """Batch enriches all books in the database using enrich_all_media."""
     return enrich_all_media(
-        app, overwrite=overwrite, provider=provider, media_type="book"
+        app,
+        overwrite=overwrite,
+        provider=provider,
+        media_type="book",
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        **kwargs,
     )
 
 
@@ -560,6 +571,9 @@ def enrich_all_media(
     overwrite: bool = False,
     provider: str = "all",
     media_type: str = "all",
+    progress_callback: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    **kwargs: Any,
 ) -> dict[str, int]:
     """Batch enriches media items in the database matching media_type."""
     with app.app_context():
@@ -574,8 +588,22 @@ def enrich_all_media(
         db.session.close()
         enriched_count = 0
         skipped_count = 0
+        total = len(item_ids)
 
-        for item_id in item_ids:
+        for idx, item_id in enumerate(item_ids):
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("enrich_all_media cancelled by user request.")
+                return {
+                    "total": total,
+                    "enriched": enriched_count,
+                    "skipped": skipped_count,
+                    "cancelled": 1,
+                }
+
+            if progress_callback:
+                pct = (idx / max(total, 1)) * 100.0
+                progress_callback(pct, f"Enriching item {idx + 1}/{total}...")
+
             item = db.session.get(MediaItem, item_id)
             if not item:
                 skipped_count += 1
@@ -589,6 +617,12 @@ def enrich_all_media(
             else:
                 skipped_count += 1
             db.session.close()
+
+        if progress_callback:
+            progress_callback(
+                100.0,
+                f"Enrichment complete: {enriched_count} enriched, {skipped_count} skipped",
+            )
 
         return {
             "total": len(item_ids),

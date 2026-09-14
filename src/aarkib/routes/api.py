@@ -13,7 +13,7 @@ from flask_login import current_user, login_required, login_user
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import selectinload
 
-from aarkib.extensions import db
+from aarkib.extensions import db, safe_commit
 from aarkib.models import (
     Author,
     Bookmark,
@@ -214,6 +214,18 @@ def get_job(job_id: str):
     if not job:
         return api_error("Job not found", 404)
     return jsonify(job.to_dict())
+
+
+@api_bp.route("/jobs/<job_id>/cancel", methods=["POST"])
+@api_admin_required
+def cancel_job(job_id: str):
+    """Cancel a queued or running background job."""
+    res = job_manager.cancel_job(job_id, app=current_app._get_current_object())
+    if not res:
+        return api_error("Job not found", 404)
+    if not res.get("cancelled"):
+        return api_error(res.get("message", "Job could not be cancelled"), 400)
+    return jsonify({"status": "success", "job": res})
 
 
 @api_bp.route("/media", methods=["GET"])
@@ -614,7 +626,13 @@ def add_library():
         settings_json=settings_json,
     )
     db.session.add(new_lib)
-    db.session.commit()
+    try:
+        safe_commit()
+    except Exception as e:
+        current_app.logger.error("Failed to create library %s: %s", slug, e)
+        return api_error(
+            "Failed to create library: slug or path may already exist", 409
+        )
 
     # Automatically scan the newly added library folder
     scan_res = scan_library(
@@ -702,7 +720,7 @@ def update_library(identifier: str):
                         b.media_type = "book"
 
     lib.updated_at = datetime.now(UTC)
-    db.session.commit()
+    safe_commit()
 
     return jsonify(
         {
@@ -734,7 +752,7 @@ def delete_library(identifier: str):
         db.session.delete(b)
 
     db.session.delete(lib)
-    db.session.commit()
+    safe_commit()
 
     from aarkib.services.search import remove_media_item_fts
 
@@ -1640,7 +1658,7 @@ def media_progress(item_id: int):
         record.is_completed = is_completed
         record.last_read_at = datetime.now(UTC)
         db.session.add(record)
-        db.session.commit()
+        safe_commit()
 
         return jsonify(
             {
@@ -1711,7 +1729,7 @@ def bookmarks(item_id: int):
             snippet=snippet,
         )
         db.session.add(bm)
-        db.session.commit()
+        safe_commit()
         return jsonify(
             {
                 "id": bm.id,
@@ -1749,7 +1767,7 @@ def delete_bookmark(bookmark_id: int):
     if bm.user_id and bm.user_id != user_id:
         return api_error("Forbidden", 403)
     db.session.delete(bm)
-    db.session.commit()
+    safe_commit()
     return jsonify({"status": "deleted"})
 
 
@@ -1887,7 +1905,7 @@ def apply_metadata_candidate(item_id: int):
             item.set_locked_fields(
                 [f.strip() for f in lock_fields.split(",") if f.strip()]
             )
-        db.session.commit()
+        safe_commit()
 
     return jsonify(
         {
@@ -1932,7 +1950,7 @@ def manage_locked_fields(item_id: int):
         item.set_locked_fields(raw_locks)
     elif isinstance(raw_locks, str):
         item.set_locked_fields([f.strip() for f in raw_locks.split(",") if f.strip()])
-    db.session.commit()
+    safe_commit()
 
     return jsonify(
         {
@@ -1974,6 +1992,8 @@ def enrich_library():
             overwrite=kwargs.get("overwrite", False),
             provider=kwargs.get("provider", "all"),
             media_type=kwargs.get("media_type", "all"),
+            progress_callback=kwargs.get("progress_callback"),
+            cancel_event=kwargs.get("cancel_event"),
         )
 
     job = job_manager.submit_job(
@@ -2010,7 +2030,7 @@ def edit_media_metadata(item_id: int):
 
     data = request.get_json(silent=True) or request.form
     apply_edits(item, data)
-    db.session.commit()
+    safe_commit()
 
     from aarkib.services.search import sync_media_item_fts
 
@@ -2070,14 +2090,14 @@ def toggle_favorite(item_id: int):
         if not fav:
             fav = UserFavorite(user_id=user_id, media_item_id=item_id)
             db.session.add(fav)
-            db.session.commit()
+            safe_commit()
         return jsonify(
             {"status": "success", "favorited": True, "media_item_id": item_id}
         )
     elif explicit_state is False:
         if fav:
             db.session.delete(fav)
-            db.session.commit()
+            safe_commit()
         return jsonify(
             {"status": "success", "favorited": False, "media_item_id": item_id}
         )
@@ -2085,14 +2105,14 @@ def toggle_favorite(item_id: int):
         # Toggle
         if fav:
             db.session.delete(fav)
-            db.session.commit()
+            safe_commit()
             return jsonify(
                 {"status": "success", "favorited": False, "media_item_id": item_id}
             )
         else:
             fav = UserFavorite(user_id=user_id, media_item_id=item_id)
             db.session.add(fav)
-            db.session.commit()
+            safe_commit()
             return jsonify(
                 {"status": "success", "favorited": True, "media_item_id": item_id}
             )
@@ -2167,7 +2187,7 @@ def create_playlist():
         is_public=bool(data.get("is_public", False)),
     )
     db.session.add(playlist)
-    db.session.commit()
+    safe_commit()
     return (
         jsonify(
             {"status": "success", "playlist": playlist.to_dict(include_items=True)}
@@ -2218,7 +2238,7 @@ def add_playlist_item(playlist_id: int):
     )
     db.session.add(playlist_item)
     playlist.updated_at = datetime.now(UTC)
-    db.session.commit()
+    safe_commit()
 
     return jsonify({"status": "success", "item": playlist_item.to_dict()}), 201
 
@@ -2244,7 +2264,7 @@ def remove_playlist_item(playlist_id: int, item_id: int):
 
     db.session.delete(target_entry)
     playlist.updated_at = datetime.now(UTC)
-    db.session.commit()
+    safe_commit()
     return jsonify({"status": "success", "message": "Item removed from playlist"})
 
 
@@ -2274,7 +2294,7 @@ def reorder_playlist_items(playlist_id: int):
         )
 
     playlist.updated_at = datetime.now(UTC)
-    db.session.commit()
+    safe_commit()
     return jsonify({"status": "success", "message": "Playlist reordered"})
 
 
@@ -2289,7 +2309,7 @@ def delete_playlist(playlist_id: int):
         return api_error("Only the playlist owner can delete this playlist", 403)
 
     db.session.delete(playlist)
-    db.session.commit()
+    safe_commit()
     return jsonify({"status": "success", "message": "Playlist deleted"})
 
 

@@ -20,6 +20,7 @@ from flask import (
 )
 from flask_login import current_user
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
@@ -291,7 +292,13 @@ def get_music_folders(user: User | None = None):
 @subsonic_bp.route("/getIndexes.view", methods=["GET", "POST"])
 @subsonic_auth
 def get_artists(user: User | None = None):
-    authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
+    authors = db.session.scalars(
+        select(Author)
+        .options(
+            selectinload(Author.media_items).selectinload(MediaItem.collection),
+        )
+        .order_by(Author.name.asc())
+    ).all()
     index_map: dict[str, list[dict[str, Any]]] = {}
 
     for auth in authors:
@@ -329,7 +336,13 @@ def get_artist(user: User | None = None):
     if not artist_id:
         return subsonic_response(error_code=10, error_msg="Missing artist id")
 
-    auth = db.session.get(Author, int(artist_id))
+    auth = db.session.scalar(
+        select(Author)
+        .options(
+            selectinload(Author.media_items).selectinload(MediaItem.collection),
+        )
+        .where(Author.id == int(artist_id))
+    )
     if not auth:
         return subsonic_response(error_code=70, error_msg="Artist not found")
 
@@ -342,7 +355,12 @@ def get_artist(user: User | None = None):
     albums = []
     if col_ids:
         cols = db.session.scalars(
-            select(Collection).where(Collection.id.in_(col_ids))
+            select(Collection)
+            .options(
+                selectinload(Collection.media_items).selectinload(MediaItem.creators),
+                selectinload(Collection.media_items).selectinload(MediaItem.tags),
+            )
+            .where(Collection.id.in_(col_ids))
         ).all()
         albums = [_format_album(c) for c in cols]
 
@@ -363,7 +381,14 @@ def get_album(user: User | None = None):
     if not album_id:
         return subsonic_response(error_code=10, error_msg="Missing album id")
 
-    col = db.session.get(Collection, int(album_id))
+    col = db.session.scalar(
+        select(Collection)
+        .options(
+            selectinload(Collection.media_items).selectinload(MediaItem.creators),
+            selectinload(Collection.media_items).selectinload(MediaItem.tags),
+        )
+        .where(Collection.id == int(album_id))
+    )
     if not col:
         return subsonic_response(error_code=70, error_msg="Album not found")
 
@@ -468,6 +493,11 @@ def search3(user: User | None = None):
     # Songs matching title
     matching_songs = db.session.scalars(
         select(MediaItem)
+        .options(
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.tags),
+            selectinload(MediaItem.collection),
+        )
         .where(
             MediaItem.title.ilike(f"%{query}%"),
             or_(
@@ -480,7 +510,13 @@ def search3(user: User | None = None):
 
     # Albums matching name
     matching_albums = db.session.scalars(
-        select(Collection).where(Collection.name.ilike(f"%{query}%")).limit(10)
+        select(Collection)
+        .options(
+            selectinload(Collection.media_items).selectinload(MediaItem.creators),
+            selectinload(Collection.media_items).selectinload(MediaItem.tags),
+        )
+        .where(Collection.name.ilike(f"%{query}%"))
+        .limit(10)
     ).all()
 
     # Artists matching name

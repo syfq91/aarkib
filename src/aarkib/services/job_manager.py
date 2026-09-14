@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import threading
@@ -49,6 +50,11 @@ class Job:
     result: dict[str, Any] | None = None
     error: str | None = None
     _future: Future | None = None
+    _cancel_event: threading.Event = field(default_factory=threading.Event)
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self.status == JobStatus.CANCELLED or self._cancel_event.is_set()
 
     @property
     def completed_at(self) -> datetime | None:
@@ -195,6 +201,29 @@ class JobManager:
         except Exception as e:
             logger.debug("Failed to persist job failure for %s: %s", job.id, e)
 
+    def _persist_job_cancelled(self, job: Job, app: Flask | None) -> None:
+        target_app = app
+        if target_app is None:
+            try:
+                from flask import current_app, has_app_context
+
+                if has_app_context():
+                    target_app = current_app
+            except Exception:
+                target_app = None
+        if target_app is None:
+            return
+        try:
+            with target_app.app_context():
+                rec = db.session.get(JobRecord, job.id)
+                if rec:
+                    rec.status = JobStatus.CANCELLED.value
+                    rec.finished_at = job.finished_at or datetime.now(UTC)
+                    rec.progress_message = job.progress_message
+                    db.session.commit()
+        except Exception as e:
+            logger.debug("Failed to persist job cancellation for %s: %s", job.id, e)
+
     def submit_job(
         self,
         job_type: str,
@@ -251,8 +280,43 @@ class JobManager:
 
         kwargs["progress_callback"] = progress_callback
 
+        accepts_cancel = False
+        try:
+            sig = inspect.signature(fn)
+            for param in sig.parameters.values():
+                if (
+                    param.kind == inspect.Parameter.VAR_KEYWORD
+                    or param.name == "cancel_event"
+                ):
+                    accepts_cancel = True
+                    break
+        except ValueError, TypeError:
+            accepts_cancel = True
+
+        if accepts_cancel:
+            kwargs["cancel_event"] = job._cancel_event
+
+        pass_app = False
+        if app is not None:
+            try:
+                sig = inspect.signature(fn)
+                params = list(sig.parameters.values())
+                if params and (
+                    params[0].name in ("app", "flask_app")
+                    or params[0].kind == inspect.Parameter.VAR_POSITIONAL
+                ):
+                    pass_app = True
+            except ValueError, TypeError:
+                pass_app = True
+
         def _worker():
             with self._lock:
+                if job._cancel_event.is_set():
+                    job.status = JobStatus.CANCELLED
+                    job.finished_at = datetime.now(UTC)
+                    job.progress_message = "Job cancelled before execution"
+                    self._persist_job_cancelled(job, app)
+                    return
                 job.status = JobStatus.RUNNING
                 job.started_at = datetime.now(UTC)
                 job.progress = 0.0
@@ -262,10 +326,20 @@ class JobManager:
             try:
                 if app is not None:
                     with app.app_context():
-                        res = fn(app, *args, **kwargs)
+                        if pass_app:
+                            res = fn(app, *args, **kwargs)
+                        else:
+                            res = fn(*args, **kwargs)
                 else:
                     res = fn(*args, **kwargs)
                 with self._lock:
+                    if job._cancel_event.is_set():
+                        job.status = JobStatus.CANCELLED
+                        job.finished_at = datetime.now(UTC)
+                        job.progress_message = "Job cancelled by user"
+                        job.result = res if isinstance(res, dict) else {"result": res}
+                        self._persist_job_cancelled(job, app)
+                        return
                     job.status = JobStatus.COMPLETED
                     job.progress = 100.0
                     job.finished_at = datetime.now(UTC)
@@ -273,6 +347,13 @@ class JobManager:
                     job.result = res if isinstance(res, dict) else {"result": res}
                 self._persist_job_completed(job, app)
             except Exception as e:
+                with self._lock:
+                    if job._cancel_event.is_set():
+                        job.status = JobStatus.CANCELLED
+                        job.finished_at = datetime.now(UTC)
+                        job.progress_message = "Job cancelled"
+                        self._persist_job_cancelled(job, app)
+                        return
                 logger.error(
                     "Job %s (%s) failed: %s", job.id, job.job_type, e, exc_info=True
                 )
@@ -347,6 +428,81 @@ class JobManager:
                 logger.debug("Database get_job lookup error for %s: %s", job_id, e)
 
         return None
+
+    def cancel_job(
+        self, job_id: str, app: Flask | None = None
+    ) -> dict[str, Any] | None:
+        """Signals cancellation for a job if it is queued or running."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                target_app = app
+                if target_app is None:
+                    try:
+                        from flask import current_app, has_app_context
+
+                        if has_app_context():
+                            target_app = current_app
+                    except Exception:
+                        target_app = None
+                if target_app is not None:
+                    try:
+                        with target_app.app_context():
+                            rec = db.session.get(JobRecord, job_id)
+                            if rec:
+                                if rec.status in (
+                                    JobStatus.COMPLETED.value,
+                                    JobStatus.FAILED.value,
+                                    JobStatus.CANCELLED.value,
+                                    JobStatus.INTERRUPTED.value,
+                                ):
+                                    return {
+                                        "id": rec.id,
+                                        "status": rec.status,
+                                        "cancelled": False,
+                                        "message": f"Job is already {rec.status}",
+                                    }
+                                rec.status = JobStatus.CANCELLED.value
+                                rec.finished_at = datetime.now(UTC)
+                                rec.progress_message = "Job cancelled"
+                                db.session.commit()
+                                return {
+                                    "id": rec.id,
+                                    "status": JobStatus.CANCELLED.value,
+                                    "cancelled": True,
+                                    "message": "Job cancelled successfully",
+                                }
+                    except Exception as e:
+                        logger.debug("Database cancel_job error: %s", e)
+                return None
+
+            if job.status in (
+                JobStatus.COMPLETED,
+                JobStatus.FAILED,
+                JobStatus.CANCELLED,
+                JobStatus.INTERRUPTED,
+            ):
+                return {
+                    "id": job.id,
+                    "status": job.status.value,
+                    "cancelled": False,
+                    "message": f"Job is already {job.status.value}",
+                }
+
+            job._cancel_event.set()
+            if job._future and not job._future.running():
+                job._future.cancel()
+            job.status = JobStatus.CANCELLED
+            job.finished_at = datetime.now(UTC)
+            job.progress_message = "Cancellation requested"
+
+        self._persist_job_cancelled(job, app)
+        return {
+            "id": job.id,
+            "status": JobStatus.CANCELLED.value,
+            "cancelled": True,
+            "message": "Job cancelled successfully",
+        }
 
     def list_jobs(self, limit: int = 20, app: Flask | None = None) -> list[Job]:
         """Returns the most recent jobs ordered newest first, overlaying in-memory state on persisted history."""

@@ -16,7 +16,7 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func, select
 
-from aarkib.extensions import db, login_manager
+from aarkib.extensions import db, login_manager, safe_commit
 from aarkib.models import Bookmark, User, UserProgress
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -144,7 +144,7 @@ def setup():
             user = User(username=username, is_admin=True)
             user.set_password(password)
             db.session.add(user)
-            db.session.commit()
+            safe_commit()
             login_user(user)
             flash("Admin account created! Welcome to Aarkib.", "success")
             return redirect(url_for("ui.index"))
@@ -185,7 +185,7 @@ def profile():
             else:
                 current_user.set_password(None)
                 flash("Password removed. Account is now passwordless.", "info")
-            db.session.commit()
+            safe_commit()
             return redirect(url_for("auth.profile"))
 
     # Compute reading stats
@@ -249,7 +249,7 @@ def manage_users():
             else:
                 new_user.set_password(None)
             db.session.add(new_user)
-            db.session.commit()
+            safe_commit()
             flash(f"User '{username}' created successfully.", "success")
             referrer = request.referrer or ""
             if "/settings" in referrer:
@@ -292,7 +292,7 @@ def toggle_admin(user_id: int):
         return redirect(dest)
 
     target_user.is_admin = not target_user.is_admin
-    db.session.commit()
+    safe_commit()
     flash(
         f"Updated admin status for '{target_user.username}' to {target_user.is_admin}.",
         "success",
@@ -320,7 +320,7 @@ def reset_password(user_id: int):
             flash("Administrators cannot have a blank password.", "error")
             return redirect(dest)
         target_user.set_password(None)
-        db.session.commit()
+        safe_commit()
         flash(
             f"Removed password for '{target_user.username}'. User is now passwordless.",
             "success",
@@ -329,7 +329,7 @@ def reset_password(user_id: int):
         flash("Password must be at least 4 characters long.", "error")
     else:
         target_user.set_password(new_password)
-        db.session.commit()
+        safe_commit()
         flash(f"Reset password for '{target_user.username}'.", "success")
 
     return redirect(dest)
@@ -355,6 +355,6 @@ def delete_user(user_id: int):
 
     username = target_user.username
     db.session.delete(target_user)
-    db.session.commit()
+    safe_commit()
     flash(f"User '{username}' and their reading progress deleted.", "success")
     return redirect(dest)

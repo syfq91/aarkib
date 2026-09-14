@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -738,6 +739,8 @@ def scan_library(
     app: Flask,
     library_id: str | int | None = None,
     progress_callback: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    **kwargs: Any,
 ) -> dict[str, int]:
     """Scans configured library directories for changes. Supports scanning a specific library."""
     with app.app_context():
@@ -802,6 +805,16 @@ def scan_library(
         new_item_ids: list[int] = []
 
         for idx, (lib, file_path) in enumerate(candidate_files):
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("scan_library cancelled during file indexing")
+                db.session.commit()
+                return {
+                    "scanned": len(existing_files),
+                    "added_or_updated": added,
+                    "deleted": 0,
+                    "cancelled": 1,
+                }
+
             existing_files.add(str(file_path.resolve()))
             lib_auto_enrich = (
                 lib.auto_enrich
@@ -837,6 +850,15 @@ def scan_library(
         db.session.commit()
 
         # Clean up deleted files from DB
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("scan_library cancelled before pruning")
+            return {
+                "scanned": len(existing_files),
+                "added_or_updated": added,
+                "deleted": 0,
+                "cancelled": 1,
+            }
+
         if progress_callback:
             progress_callback(92.0, "Pruning removed records...")
 

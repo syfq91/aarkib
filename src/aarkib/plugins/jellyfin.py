@@ -23,6 +23,7 @@ from flask import (
 )
 from flask_login import current_user
 from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db
 from aarkib.models import Author, Collection, Library, MediaItem, User, UserProgress
@@ -761,7 +762,16 @@ def get_items(user_id: str | None = None, user: User | None = None):
 
     # Paginate
     items = db.session.scalars(
-        query.order_by(order_col).offset(start_index).limit(limit)
+        query.options(
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.tags),
+            selectinload(MediaItem.collection),
+            selectinload(MediaItem.progress_records),
+            selectinload(MediaItem.favorited_by),
+        )
+        .order_by(order_col)
+        .offset(start_index)
+        .limit(limit)
     ).all()
 
     formatted_items = [_format_item(m, user_id=uid) for m in items]
@@ -785,6 +795,15 @@ def get_resume_items(user_id: str, user: User | None = None):
 
     progress_records = db.session.scalars(
         select(UserProgress)
+        .options(
+            selectinload(UserProgress.media_item).selectinload(MediaItem.creators),
+            selectinload(UserProgress.media_item).selectinload(MediaItem.tags),
+            selectinload(UserProgress.media_item).selectinload(MediaItem.collection),
+            selectinload(UserProgress.media_item).selectinload(
+                MediaItem.progress_records
+            ),
+            selectinload(UserProgress.media_item).selectinload(MediaItem.favorited_by),
+        )
         .where(
             UserProgress.user_id == uid,
             UserProgress.is_completed.is_(False),
@@ -820,7 +839,15 @@ def get_latest_items(user_id: str, user: User | None = None):
             )
 
     items = db.session.scalars(
-        query.order_by(MediaItem.created_at.desc()).limit(limit)
+        query.options(
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.tags),
+            selectinload(MediaItem.collection),
+            selectinload(MediaItem.progress_records),
+            selectinload(MediaItem.favorited_by),
+        )
+        .order_by(MediaItem.created_at.desc())
+        .limit(limit)
     ).all()
     return jsonify([_format_item(m, user_id=uid) for m in items])
 
@@ -844,16 +871,7 @@ def get_item_detail(item_id: str, user_id: str | None = None, user: User | None 
             return jsonify(_format_view(lib))
         col = db.session.get(Collection, db_id)
         if col:
-            server_id = get_server_id()
-            return jsonify(
-                {
-                    "Name": col.name,
-                    "ServerId": server_id,
-                    "Id": to_jellyfin_id(col.id),
-                    "Type": "Series",
-                    "IsFolder": True,
-                }
-            )
+            return jsonify(_format_view(col))
         abort(404, description="Item not found")
 
     uid = user.id if user else (from_jellyfin_id(user_id) if user_id else None)
@@ -912,7 +930,13 @@ def get_episodes(series_id: str, user: User | None = None):
             pass
 
     episodes = db.session.scalars(
-        query.order_by(MediaItem.season.asc(), MediaItem.episode.asc())
+        query.options(
+            selectinload(MediaItem.creators),
+            selectinload(MediaItem.tags),
+            selectinload(MediaItem.collection),
+            selectinload(MediaItem.progress_records),
+            selectinload(MediaItem.favorited_by),
+        ).order_by(MediaItem.season.asc(), MediaItem.episode.asc())
     ).all()
     uid = user.id if user else None
     return jsonify(
@@ -931,7 +955,11 @@ def get_episodes(series_id: str, user: User | None = None):
 def get_artists(user: User | None = None):
     """Returns music artists."""
     server_id = get_server_id()
-    authors = db.session.scalars(select(Author).order_by(Author.name.asc())).all()
+    authors = db.session.scalars(
+        select(Author)
+        .options(selectinload(Author.media_items))
+        .order_by(Author.name.asc())
+    ).all()
     artists = []
     for auth in authors:
         audio_items = [

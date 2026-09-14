@@ -185,17 +185,22 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 ### H4. N+1 Query Storms Across All Client Protocols
 
 > [!NOTE]
-> **Status: ⚠️ IN PROGRESS (Partially Resolved)**  
-> **Fix**: Web UI counts on `/authors`, `/series`, and `/tags` migrated from template `.books|length` lazy-loads to optimized SQL `GROUP BY` counts with outer joins in `src/aarkib/routes/ui.py`. Protocol eager-loading (`selectinload` for Subsonic/Jellyfin/OPDS) scheduled for Tier 2.
+> **Status: ✅ RESOLVED (2026-09-14)**  
+> **Fix**: Web UI counts on `/authors`, `/series`, and `/tags` migrated to optimized SQL `GROUP BY` counts with outer joins in `src/aarkib/routes/ui.py`. Protocol eager-loading implemented across Subsonic (`get_artists`, `get_artist`, `get_album`, `search3`), Jellyfin (`get_items`, `get_resume_items`, `get_latest_items`, `get_episodes`, `get_artists`), and OPDS (`authors_index`, `series_index`, `tags_index`) using SQLAlchemy `selectinload` for associated creators, tags, and collections.
 
-- **Files**: `src/aarkib/routes/ui.py`, `src/aarkib/templates/authors.html`, `src/aarkib/templates/series.html`, `src/aarkib/templates/tags.html`
+- **Files**: `src/aarkib/routes/ui.py`, `src/aarkib/plugins/subsonic.py`, `src/aarkib/plugins/jellyfin.py`, `src/aarkib/plugins/opds.py`
+- **Impact**: N+1 queries eliminated on UI indexes and Subsonic/Jellyfin/OPDS client requests.
 
 ---
 
 ### H5. Unchecked `db.session.commit()` Without Rollback
-- **File**: `src/aarkib/routes/api.py` (lines 617, 705, 737, 1551, 1622, 1660+)
-- **Impact**: If `commit()` raises `IntegrityError` or `OperationalError`, the session enters an invalid state.
-- **Fix**: Wrap commits in `try/except` with `db.session.rollback()`.
+
+> [!NOTE]
+> **Status: ✅ RESOLVED (2026-09-14)**  
+> **Fix**: Implemented canonical `safe_commit()` helper in `src/aarkib/extensions.py` providing automatic `db.session.rollback()` on exceptions. Registered `@app.teardown_request` rollback handler in `src/aarkib/__init__.py` for unhandled request errors. Replaced all raw `db.session.commit()` calls in data mutation endpoints across `routes/api.py` and `routes/auth.py`.
+
+- **Files**: `src/aarkib/extensions.py`, `src/aarkib/__init__.py`, `src/aarkib/routes/api.py`, `src/aarkib/routes/auth.py`
+- **Impact**: Database sessions automatically recover on integrity/operational errors without session poisoning.
 
 ---
 
@@ -207,9 +212,13 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 ---
 
 ### H7. No Job Cancellation Mechanism
-- **File**: `src/aarkib/services/job_manager.py`
-- **Impact**: Background tasks cannot be aborted once queued.
-- **Fix**: Add `threading.Event()` cancellation tokens and `POST /api/jobs/<id>/cancel`.
+
+> [!NOTE]
+> **Status: ✅ RESOLVED (2026-09-14)**  
+> **Fix**: Added `_cancel_event: threading.Event` and `is_cancelled` property to `Job` dataclass in `src/aarkib/services/job_manager.py`. Injected `cancel_event` into worker execution kwargs. Updated `scanner.py` and `enricher.py` to cooperatively check cancellation tokens between batches. Implemented `JobManager.cancel_job()` and exposed admin endpoint `POST /api/jobs/<job_id>/cancel`.
+
+- **Files**: `src/aarkib/services/job_manager.py`, `src/aarkib/services/scanner.py`, `src/aarkib/services/enricher.py`, `src/aarkib/routes/api.py`
+- **Impact**: Background jobs can be aborted safely via API or internal token without thread corruption or orphaned locks.
 
 ---
 
@@ -438,7 +447,7 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 - [x] **8. M8**: Fix dead endpoint exemption `"api.get_book_cover"` → `"api.get_media_cover"`.
 - [x] **9. M9**: Fix malformed `except ValueError, AttributeError:` → `except (ValueError, AttributeError):`.
 
-### Tier 2 — High Priority (Performance & Reliability) — **60% RESOLVED**
+### Tier 2 — High Priority (Performance & Reliability) — **100% RESOLVED**
 
 - [x] **1. C5**: Scanner fast-path — compare `st_mtime` and `st_size` before computing SHA-256.
 - [x] **2. C6**: Batch database commits in scanner (every 100 items).
@@ -446,9 +455,9 @@ An in-depth audit identified **73 findings** across security, architecture, perf
 - [x] **4. C3**: Close DB sessions between external HTTP calls during enrichment.
 - [x] **5. C4**: Complete session detachment across remaining streaming/subprocess routes.
 - [x] **6. H4 (Partial)**: Web UI author/series/tag counts migrated to SQL `GROUP BY` counts.
-- [ ] **7. H4 (Remaining)**: Add `selectinload` for Subsonic/Jellyfin/OPDS protocols.
-- [ ] **8. H5**: Wrap `db.session.commit()` calls with try/except rollback.
-- [ ] **9. H7**: Implement job cancellation tokens and `POST /api/jobs/<id>/cancel`.
+- [x] **7. H4 (Remaining)**: Add `selectinload` for Subsonic/Jellyfin/OPDS protocols.
+- [x] **8. H5**: Wrap `db.session.commit()` calls with try/except rollback (`safe_commit` & `@app.teardown_request`).
+- [x] **9. H7**: Implement job cancellation tokens and `POST /api/jobs/<id>/cancel`.
 - [x] **10. H11**: Close `proc.stdout` in `stream_remux_pipe` finally block.
 
 ### Tier 3 — Architecture & Maintainability (Next Phase)

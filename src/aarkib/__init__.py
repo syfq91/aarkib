@@ -185,6 +185,15 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         )
         return response
 
+    @app.teardown_request
+    def teardown_request_cleanup(exception: BaseException | None = None) -> None:
+        """Rollback active transaction on unhandled exception to prevent session poisoning."""
+        if exception is not None:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
     with app.app_context():
         migrate_database()
         from aarkib.services.settings_service import load_settings_into_config
