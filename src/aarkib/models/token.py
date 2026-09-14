@@ -45,6 +45,14 @@ class DeviceToken(db.Model):
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="tokens")
 
+    STANDARD_SCOPES = [
+        "*",
+        "media:read",
+        "media:stream",
+        "progress:write",
+        "admin",
+    ]
+
     @property
     def scopes(self) -> list[str]:
         """Returns decoded scopes as a list of strings."""
@@ -58,6 +66,13 @@ class DeviceToken(db.Model):
     def scopes(self, value: list[str]) -> None:
         """Serializes list of scopes to JSON string."""
         self.scopes_json = json.dumps(value or [])
+
+    def has_scope(self, required_scope: str) -> bool:
+        """Returns True if this token grants the required scope (or '*' wildcard)."""
+        token_scopes = self.scopes
+        if not token_scopes or "*" in token_scopes:
+            return True
+        return required_scope in token_scopes
 
     @classmethod
     def hash_token(cls, raw_token: str) -> str:

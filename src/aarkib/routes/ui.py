@@ -394,6 +394,14 @@ def settings(category: str | None = None) -> ResponseReturnValue:
             "backups_count": backups_count,
         }
 
+        from aarkib.models.job import JobRecord
+
+        recent_jobs = db.session.scalars(
+            select(JobRecord).order_by(JobRecord.created_at.desc()).limit(5)
+        ).all()
+    else:
+        recent_jobs = []
+
     category_title = VALID_SETTINGS_CATEGORIES[category]
 
     return render_template(
@@ -415,6 +423,7 @@ def settings(category: str | None = None) -> ResponseReturnValue:
         enabled_plugins=enabled_plugins,
         backups=backups,
         system_health=system_health,
+        recent_jobs=recent_jobs,
     )
 
 

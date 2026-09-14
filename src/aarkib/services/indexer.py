@@ -238,6 +238,13 @@ def _assign_authors_tags_series(book: Book, metadata: Any) -> None:
                 db.session.add(author)
             author_objs.append(author)
         book.authors = author_objs
+        if (
+            hasattr(book, "set_field_provenance")
+            and book.authors
+            and not book.get_provenance_for_field("authors")
+        ):
+            book.set_field_provenance("authors", "file_metadata")
+            book.set_field_provenance("creators", "file_metadata")
 
     if not is_locked("series") and not is_locked("collection"):
         if metadata.series:
@@ -250,6 +257,11 @@ def _assign_authors_tags_series(book: Book, metadata: Any) -> None:
                 db.session.add(series_obj)
             book.series = series_obj
             book.series_index = metadata.series_index
+            if hasattr(
+                book, "set_field_provenance"
+            ) and not book.get_provenance_for_field("series"):
+                book.set_field_provenance("series", "file_metadata")
+                book.set_field_provenance("collection", "file_metadata")
         else:
             book.series = None
             book.series_index = None
@@ -266,6 +278,12 @@ def _assign_authors_tags_series(book: Book, metadata: Any) -> None:
                 db.session.add(tag_obj)
             tag_objs.append(tag_obj)
         book.tags = tag_objs
+        if (
+            hasattr(book, "set_field_provenance")
+            and book.tags
+            and not book.get_provenance_for_field("tags")
+        ):
+            book.set_field_provenance("tags", "file_metadata")
 
 
 def index_media_file(
@@ -347,6 +365,10 @@ def index_media_file(
         if not is_locked("title"):
             book.title = metadata.title or file_path.stem
             book.sort_title = compute_sort_title(book.title)
+            if hasattr(
+                book, "set_field_provenance"
+            ) and not book.get_provenance_for_field("title"):
+                book.set_field_provenance("title", "file_metadata")
         book.file_format = metadata.file_format
         book.file_size = file_size
         book.file_hash = file_hash
@@ -354,14 +376,44 @@ def index_media_file(
 
         if not is_locked("description"):
             book.description = metadata.description
+            if (
+                metadata.description
+                and hasattr(book, "set_field_provenance")
+                and not book.get_provenance_for_field("description")
+            ):
+                book.set_field_provenance("description", "file_metadata")
         if not is_locked("publisher"):
             book.publisher = metadata.publisher
+            if (
+                metadata.publisher
+                and hasattr(book, "set_field_provenance")
+                and not book.get_provenance_for_field("publisher")
+            ):
+                book.set_field_provenance("publisher", "file_metadata")
         if not is_locked("language"):
             book.language = metadata.language or "en"
+            if (
+                metadata.language
+                and hasattr(book, "set_field_provenance")
+                and not book.get_provenance_for_field("language")
+            ):
+                book.set_field_provenance("language", "file_metadata")
         if not is_locked("isbn"):
             book.isbn = getattr(metadata, "isbn", None)
+            if (
+                book.isbn
+                and hasattr(book, "set_field_provenance")
+                and not book.get_provenance_for_field("isbn")
+            ):
+                book.set_field_provenance("isbn", "file_metadata")
         if not is_locked("publication_date"):
             book.publication_date = metadata.publication_date
+            if (
+                metadata.publication_date
+                and hasattr(book, "set_field_provenance")
+                and not book.get_provenance_for_field("publication_date")
+            ):
+                book.set_field_provenance("publication_date", "file_metadata")
         if not is_locked("page_count"):
             book.page_count = getattr(metadata, "page_count", None)
 
@@ -371,6 +423,10 @@ def index_media_file(
         )
         if cover_rel_path and not is_locked("cover_image"):
             book.cover_image_path = cover_rel_path
+            if hasattr(
+                book, "set_field_provenance"
+            ) and not book.get_provenance_for_field("cover_image"):
+                book.set_field_provenance("cover_image", "file_metadata")
 
         # Technical playback, video & audio metadata attributes
         if hasattr(book, "duration") and not is_locked("duration"):

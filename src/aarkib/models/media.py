@@ -62,6 +62,7 @@ class MediaItemMixin:
         String(255), nullable=True, index=True
     )
     locked_fields: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_provenance: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -200,6 +201,26 @@ class MediaItemMixin:
         current = set(self.get_locked_fields())
         current.discard(field_name)
         self.set_locked_fields(list(current))
+
+    def get_field_provenance(self) -> dict[str, str]:
+        """Returns mapping of field names to their source provenance (e.g. 'user', 'file_metadata', 'googlebooks')."""
+        if not self.metadata_provenance:
+            return {}
+        try:
+            val = json.loads(self.metadata_provenance)
+            return val if isinstance(val, dict) else {}
+        except json.JSONDecodeError, TypeError:
+            return {}
+
+    def set_field_provenance(self, field_name: str, source: str) -> None:
+        """Sets the source provenance for a specific field name."""
+        curr = self.get_field_provenance()
+        curr[field_name] = str(source).strip()
+        self.metadata_provenance = json.dumps(curr)
+
+    def get_provenance_for_field(self, field_name: str) -> str | None:
+        """Returns the source provenance for a specific field, or None if untracked."""
+        return self.get_field_provenance().get(field_name)
 
 
 class PlayableItemMixin:

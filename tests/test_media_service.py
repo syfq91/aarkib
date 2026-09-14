@@ -112,6 +112,15 @@ def test_edit_media_metadata(app: Flask) -> None:
         assert "title" in updated.get_locked_fields()
         assert "description" in updated.get_locked_fields()
 
+        # Check field provenance tracking
+        prov = updated.get_field_provenance()
+        assert prov.get("title") == "user"
+        assert prov.get("description") == "user"
+        assert prov.get("publisher") == "user"
+        assert prov.get("season") == "user"
+        assert prov.get("album") == "user"
+        assert updated.get_provenance_for_field("title") == "user"
+
         # Test clearing series
         clear_data = {"series": ""}
         cleared = edit_media_metadata(item, clear_data)

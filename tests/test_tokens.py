@@ -174,3 +174,118 @@ def test_token_crud_api(app_with_tokens: Flask) -> None:
         headers={"Authorization": f"Bearer {created['token']}"},
     )
     assert verify_res.status_code == 401
+
+
+def test_token_scope_enforcement(app_with_tokens: Flask, tmp_path: Path) -> None:
+    """Verify that device tokens strictly enforce declared scopes."""
+    with app_with_tokens.app_context():
+        user = db.session.scalar(db.select(User).where(User.username == "reader"))
+        admin = db.session.scalar(db.select(User).where(User.username == "admin"))
+        book = db.session.scalar(db.select(Book).where(Book.title == "Dune"))
+        assert user is not None and admin is not None and book is not None
+
+        # Create dummy file so file access doesn't 404 before scope check
+        file_path = Path(book.original_file_path)
+        file_path.write_bytes(b"PK0304dummyepubdata")
+
+        # 1. Read-only token (only media:read)
+        t_readonly, secret_readonly = DeviceToken.create_token(
+            user_id=user.id, name="Read Only", scopes=["media:read"]
+        )
+        # 2. Streamer token (media:read, media:stream)
+        t_streamer, secret_streamer = DeviceToken.create_token(
+            user_id=user.id,
+            name="Streamer",
+            scopes=["media:read", "media:stream"],
+        )
+        # 3. E-reader token (media:read, progress:write)
+        t_ereader, secret_ereader = DeviceToken.create_token(
+            user_id=user.id,
+            name="E-Reader",
+            scopes=["media:read", "progress:write"],
+        )
+        # 4. Admin token for admin user
+        t_admin, secret_admin = DeviceToken.create_token(
+            user_id=admin.id, name="Admin Tool", scopes=["admin"]
+        )
+        # 5. Wildcard token
+        t_wildcard, secret_wildcard = DeviceToken.create_token(
+            user_id=admin.id, name="Full Admin", scopes=["*"]
+        )
+        db.session.add_all([t_readonly, t_streamer, t_ereader, t_admin, t_wildcard])
+        db.session.commit()
+        book_id = book.id
+
+    client = app_with_tokens.test_client()
+
+    # Read-only token tests:
+    # Allowed: GET /api/media, GET /api/media/<id>, GET /api/media/<id>/progress
+    r1 = client.get(
+        "/api/media", headers={"Authorization": f"Bearer {secret_readonly}"}
+    )
+    assert r1.status_code == 200
+
+    r2 = client.get(
+        f"/api/media/{book_id}",
+        headers={"Authorization": f"Bearer {secret_readonly}"},
+    )
+    assert r2.status_code == 200
+
+    r3 = client.get(
+        f"/api/media/{book_id}/progress",
+        headers={"Authorization": f"Bearer {secret_readonly}"},
+    )
+    assert r3.status_code == 200
+
+    # Denied: GET /api/media/<id>/file (needs media:stream) -> 403
+    r4 = client.get(
+        f"/api/media/{book_id}/file",
+        headers={"Authorization": f"Bearer {secret_readonly}"},
+    )
+    assert r4.status_code == 403
+    assert "media:stream" in r4.get_json()["error"]
+
+    # Denied: POST /api/media/<id>/progress (needs progress:write) -> 403
+    r5 = client.post(
+        f"/api/media/{book_id}/progress",
+        headers={"Authorization": f"Bearer {secret_readonly}"},
+        json={"progress": 0.5},
+    )
+    assert r5.status_code == 403
+    assert "progress:write" in r5.get_json()["error"]
+
+    # Streamer token: Can stream file, but cannot write progress
+    r6 = client.get(
+        f"/api/media/{book_id}/file",
+        headers={"Authorization": f"Bearer {secret_streamer}"},
+    )
+    assert r6.status_code in (200, 206)
+
+    r7 = client.post(
+        f"/api/media/{book_id}/progress",
+        headers={"Authorization": f"Bearer {secret_streamer}"},
+        json={"progress": 0.5},
+    )
+    assert r7.status_code == 403
+
+    # E-reader token: Can write progress, but cannot stream original binary
+    r8 = client.post(
+        f"/api/media/{book_id}/progress",
+        headers={"Authorization": f"Bearer {secret_ereader}"},
+        json={"progress": 0.5},
+    )
+    assert r8.status_code == 200
+
+    # Admin scope check: Reader with non-admin token cannot access admin routes
+    r9 = client.post(
+        "/api/backup",
+        headers={"Authorization": f"Bearer {secret_readonly}"},
+    )
+    assert r9.status_code == 403
+
+    # Wildcard token has access to admin
+    r10 = client.get(
+        "/api/backup",
+        headers={"Authorization": f"Bearer {secret_wildcard}"},
+    )
+    assert r10.status_code == 200

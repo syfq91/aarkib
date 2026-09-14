@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sqlite3
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
@@ -15,6 +17,66 @@ from sqlalchemy.sql import sqltypes as sa_types
 from aarkib.config import Config, ProductionConfig, TestConfig
 from aarkib.extensions import db, login_manager
 from aarkib.routes import api_bp, auth_bp, reader_bp, ui_bp
+
+
+class JsonLogFormatter(logging.Formatter):
+    """Formats log records as single-line JSON objects."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_obj: dict[str, Any] = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        standard_attrs = {
+            "args",
+            "asctime",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "module",
+            "msecs",
+            "message",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+        }
+        for key, val in record.__dict__.items():
+            if key not in standard_attrs:
+                try:
+                    json.dumps(val)
+                    log_obj[key] = val
+                except TypeError, OverflowError:
+                    log_obj[key] = str(val)
+        return json.dumps(log_obj)
+
+
+def configure_logging(log_format: str = "text") -> None:
+    """Configures root logging format (either 'text' or 'json')."""
+    root_logger = logging.getLogger()
+    if log_format == "json":
+        formatter = JsonLogFormatter()
+    else:
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        )
+    for handler in root_logger.handlers:
+        handler.setFormatter(formatter)
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,6 +198,13 @@ def create_app(config_class: type[Config] | None = None) -> Flask:
         static_folder="static",
     )
     app.config.from_object(config_class)
+
+    # Configure logging format
+    log_format = (
+        app.config.get("LOG_FORMAT") or os.getenv("AARKIB_LOG_FORMAT", "text")
+    ).lower()
+    if log_format == "json":
+        configure_logging("json")
 
     # Ensure required data directories exist
     data_dir = Path(app.config.get("DATA_DIR", "data"))

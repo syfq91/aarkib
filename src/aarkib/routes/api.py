@@ -9,7 +9,16 @@ from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
 
-from flask import Blueprint, Response, abort, current_app, jsonify, request, send_file
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    g,
+    jsonify,
+    request,
+    send_file,
+)
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user
 from sqlalchemy import or_, select, update
@@ -194,6 +203,12 @@ def api_admin_required(view):
     @login_required
     def wrapped(*args, **kwargs):
         """Reject non-admin requests with a JSON 403 before calling the view."""
+        token = getattr(g, "device_token", None)
+        if token is not None and not token.has_scope("admin"):
+            return (
+                jsonify({"error": "Device token missing required 'admin' scope"}),
+                HTTPStatus.FORBIDDEN,
+            )
         if not current_user.is_admin:
             return (
                 jsonify({"error": "Administrator privileges required"}),
@@ -202,6 +217,29 @@ def api_admin_required(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def require_token_scope(required_scope: str):
+    """Enforce that if the request was authenticated via a DeviceToken, it holds required_scope."""
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            token = getattr(g, "device_token", None)
+            if token is not None and not token.has_scope(required_scope):
+                return (
+                    jsonify(
+                        {
+                            "error": f"Device token missing required scope: '{required_scope}'"
+                        }
+                    ),
+                    HTTPStatus.FORBIDDEN,
+                )
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 @api_bp.before_request
@@ -238,6 +276,7 @@ def enforce_api_auth():
 
             token_record.last_used_at = datetime.now(UTC)
             db.session.commit()
+            g.device_token = token_record
             login_user(token_record.user)
         else:
             return (
@@ -338,6 +377,7 @@ def cancel_job(job_id: str) -> ResponseReturnValue:
 
 
 @api_bp.route("/media", methods=["GET"])
+@require_token_scope("media:read")
 def list_media() -> ResponseReturnValue:
     """List catalog items with filtering (q, media_type, library), pagination, and progress."""
     q = request.args.get("q", "").strip()
@@ -923,6 +963,7 @@ def scan_single_library(identifier: str) -> ResponseReturnValue:
 
 
 @api_bp.route("/media/<int:item_id>", methods=["GET"])
+@require_token_scope("media:read")
 def get_media_item(item_id: int) -> ResponseReturnValue:
     """Return full item details, including user progress, for a single catalog item."""
     item = db.session.scalar(
@@ -997,6 +1038,8 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
             "file_url": f"/api/media/{item.id}/file",
             "player_url": item.player_url,
             "progress": prog,
+            "locked_fields": item.get_locked_fields(),
+            "provenance": item.get_field_provenance(),
             "created_at": item.created_at.isoformat() if item.created_at else None,
         }
     )
@@ -1070,6 +1113,7 @@ def get_media_cover(item_id: int) -> ResponseReturnValue:
 @api_bp.route("/media/<int:item_id>/file", methods=["GET"])
 @api_bp.route("/media/<int:item_id>/file/<path:filename>", methods=["GET"])
 @api_bp.route("/media/<int:item_id>/stream", methods=["GET"])
+@require_token_scope("media:stream")
 def get_media_file(item_id: int, filename: str | None = None) -> ResponseReturnValue:
     """Stream the original media file with HTTP 206 byte-range support."""
     item = db.session.get(MediaItem, item_id)
@@ -1119,6 +1163,7 @@ def get_media_file(item_id: int, filename: str | None = None) -> ResponseReturnV
 
 
 @api_bp.route("/media/<int:item_id>/playback", methods=["GET"])
+@require_token_scope("media:read")
 def get_media_playback(item_id: int) -> ResponseReturnValue:
     """Retrieve format-agnostic playback or reading descriptor for any media item."""
     item = db.session.get(MediaItem, item_id)
@@ -1155,6 +1200,7 @@ def get_media_playback(item_id: int) -> ResponseReturnValue:
 
 @api_bp.route("/media/<int:item_id>/stream/info", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/info", methods=["GET"])
+@require_token_scope("media:read")
 def get_stream_info(item_id: int) -> ResponseReturnValue:
     """Returns technical stream metadata, codecs, tracks, and recommended playback strategy."""
     item = db.session.get(MediaItem, item_id)
@@ -1199,6 +1245,7 @@ def get_stream_info(item_id: int) -> ResponseReturnValue:
 
 @api_bp.route("/media/<int:item_id>/stream/remux", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/remux", methods=["GET"])
+@require_token_scope("media:stream")
 def stream_remux_video(item_id: int) -> ResponseReturnValue:
     """Progressive on-the-fly container remux (e.g. MKV -> fragmented MP4) via FFmpeg pipe."""
     item = db.session.get(MediaItem, item_id)
@@ -1238,6 +1285,7 @@ def stream_remux_video(item_id: int) -> ResponseReturnValue:
 
 @api_bp.route("/media/<int:item_id>/stream/hls/master.m3u8", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/hls/master.m3u8", methods=["GET"])
+@require_token_scope("media:stream")
 def get_hls_master_playlist(item_id: int) -> ResponseReturnValue:
     """Spawns/attaches to an HLS transcode session and returns the master playlist."""
     item = db.session.get(MediaItem, item_id)
@@ -1301,6 +1349,7 @@ def get_hls_master_playlist(item_id: int) -> ResponseReturnValue:
     "/media/<int:item_id>/stream/hls/<session_id>/playlist.m3u8", methods=["GET"]
 )
 @api_bp.route("/stream/<int:item_id>/hls/<session_id>/playlist.m3u8", methods=["GET"])
+@require_token_scope("media:stream")
 def get_hls_session_playlist(item_id: int, session_id: str) -> ResponseReturnValue:
     """Serves the HLS playlist generated by an active transcode session."""
     from aarkib.services.transcoder import transcode_supervisor
@@ -1324,6 +1373,7 @@ def get_hls_session_playlist(item_id: int, session_id: str) -> ResponseReturnVal
 @api_bp.route(
     "/stream/<int:item_id>/hls/<session_id>/<path:segment_name>", methods=["GET"]
 )
+@require_token_scope("media:stream")
 def get_hls_segment(
     item_id: int, session_id: str, segment_name: str
 ) -> ResponseReturnValue:
@@ -1379,6 +1429,7 @@ def stop_hls_session(item_id: int, session_id: str) -> ResponseReturnValue:
 
 @api_bp.route("/media/<int:item_id>/stream/subtitles", methods=["GET"])
 @api_bp.route("/stream/<int:item_id>/subtitles", methods=["GET"])
+@require_token_scope("media:read")
 def list_subtitles(item_id: int) -> ResponseReturnValue:
     """Returns list of embedded subtitle tracks for a media item."""
     item = db.session.get(MediaItem, item_id)
@@ -1411,6 +1462,7 @@ def list_subtitles(item_id: int) -> ResponseReturnValue:
     "/media/<int:item_id>/stream/subtitles/<int:track_index>.vtt", methods=["GET"]
 )
 @api_bp.route("/stream/<int:item_id>/subtitles/<int:track_index>.vtt", methods=["GET"])
+@require_token_scope("media:read")
 def get_subtitle_vtt(item_id: int, track_index: int) -> ResponseReturnValue:
     """Extracts and converts the requested embedded subtitle track to WebVTT."""
     item = db.session.get(MediaItem, item_id)
@@ -1442,6 +1494,7 @@ def get_subtitle_vtt(item_id: int, track_index: int) -> ResponseReturnValue:
     "/media/<int:item_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",
     methods=["GET"],
 )
+@require_token_scope("media:stream")
 def download_media_file(item_id: int, preset: str | None = None) -> ResponseReturnValue:
     """Download a media file, optionally served from a precomputed e-ink optimized EPUB."""
     item = db.session.get(MediaItem, item_id)
@@ -1710,8 +1763,16 @@ def media_progress(item_id: int) -> ResponseReturnValue:
         return api_error("Media item not found", 404)
 
     user_id = current_user.id if current_user.is_authenticated else None
+    token = getattr(g, "device_token", None)
 
     if request.method == "POST":
+        if token is not None and not token.has_scope("progress:write"):
+            return (
+                jsonify(
+                    {"error": "Device token missing required scope: 'progress:write'"}
+                ),
+                HTTPStatus.FORBIDDEN,
+            )
         data = request.get_json(silent=True) or {}
         record = update_progress_service(user_id, item, data)
         return jsonify(
@@ -1727,6 +1788,11 @@ def media_progress(item_id: int) -> ResponseReturnValue:
         )
 
     # GET request
+    if token is not None and not token.has_scope("media:read"):
+        return (
+            jsonify({"error": "Device token missing required scope: 'media:read'"}),
+            HTTPStatus.FORBIDDEN,
+        )
     return jsonify(get_progress_service(user_id, item))
 
 
@@ -2069,6 +2135,7 @@ def edit_media_metadata(item_id: int) -> ResponseReturnValue:
         "authors": [a.name for a in item.authors],
         "tags": [t.name for t in item.tags],
         "locked_fields": item.get_locked_fields(),
+        "provenance": item.get_field_provenance(),
     }
 
     return jsonify(
@@ -2490,7 +2557,7 @@ def create_device_token() -> ResponseReturnValue:
     if not name:
         return jsonify({"error": "Token name is required"}), 400
 
-    scopes = payload.get("scopes") or ["read", "stream"]
+    scopes = payload.get("scopes") or ["*"]
     expires_in_days = payload.get("expires_in_days")
     if expires_in_days is not None:
         try:

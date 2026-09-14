@@ -101,6 +101,8 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
     title = data.get("title")
     if title:
         item.title = str(title).strip()[:MAX_TITLE_LENGTH]
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("title", "user")
 
     # Authors / Creators
     authors_input = data.get("authors") or data.get("creators")
@@ -112,6 +114,9 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         resolved_authors = resolve_or_create_authors(author_names)
         if resolved_authors:
             item.authors = resolved_authors
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("authors", "user")
+                item.set_field_provenance("creators", "user")
 
     # Series / Collection
     series_name = data.get("series") or data.get("collection")
@@ -126,9 +131,15 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
                 pass
         else:
             item.series_index = None
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("series", "user")
+            item.set_field_provenance("collection", "user")
     elif "series" in data or "collection" in data:
         item.series = None
         item.series_index = None
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("series", "user")
+            item.set_field_provenance("collection", "user")
 
     # Tags / Categories
     tags_input = data.get("tags")
@@ -140,6 +151,8 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         resolved_tags = resolve_or_create_tags(tag_names)
         if resolved_tags:
             item.tags = resolved_tags
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("tags", "user")
 
     # Optional descriptive fields
     if "description" in data:
@@ -147,33 +160,47 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         if description:
             description = str(description)[:MAX_DESCRIPTION_LENGTH]
         item.description = description
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("description", "user")
     if "publisher" in data:
         publisher = data.get("publisher") or None
         if publisher:
             publisher = str(publisher).strip()[:MAX_PUBLISHER_LENGTH]
         item.publisher = publisher
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("publisher", "user")
     if "publication_date" in data:
         item.publication_date = data.get("publication_date") or None
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("publication_date", "user")
     if "isbn" in data:
         isbn = data.get("isbn") or None
         if isbn:
             isbn = str(isbn).strip()[:MAX_ISBN_LENGTH]
         item.isbn = isbn
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("isbn", "user")
     if "language" in data:
         language = data.get("language")
         if language:
             language = str(language).strip()[:MAX_LANGUAGE_LENGTH]
         item.language = language or "en"
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("language", "user")
 
     # Video-specific metadata
     if "season" in data:
         try:
             item.season = int(data["season"]) if data["season"] is not None else None
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("season", "user")
         except ValueError, TypeError:
             pass
     if "episode" in data:
         try:
             item.episode = int(data["episode"]) if data["episode"] is not None else None
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("episode", "user")
         except ValueError, TypeError:
             pass
 
@@ -183,11 +210,15 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         if album:
             album = str(album).strip()[:MAX_PUBLISHER_LENGTH]
         item.album = album
+        if hasattr(item, "set_field_provenance"):
+            item.set_field_provenance("album", "user")
     if "track_number" in data:
         try:
             item.track_number = (
                 int(data["track_number"]) if data["track_number"] is not None else None
             )
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("track_number", "user")
         except ValueError, TypeError:
             pass
     if "disc_number" in data:
@@ -195,6 +226,8 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
             item.disc_number = (
                 int(data["disc_number"]) if data["disc_number"] is not None else None
             )
+            if hasattr(item, "set_field_provenance"):
+                item.set_field_provenance("disc_number", "user")
         except ValueError, TypeError:
             pass
 

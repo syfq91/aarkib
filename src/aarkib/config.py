@@ -287,6 +287,9 @@ class Config:
     # Maximum request payload limit (16 MB)
     MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024
 
+    # Logging Format ('text' or 'json')
+    LOG_FORMAT: str = os.getenv("AARKIB_LOG_FORMAT", "text").lower()
+
 
 class TestConfig(Config):
     """Test configuration."""

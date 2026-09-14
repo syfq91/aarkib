@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -92,6 +93,7 @@ def scan_library(
     **kwargs: Any,
 ) -> dict[str, int]:
     """Scans configured library directories for changes. Supports scanning a specific library."""
+    start_time = time.time()
     with app.app_context():
         covers_dir = Path(app.config["COVERS_DIR"])
         auto_enrich = app.config.get("AUTO_ENRICH", False)
@@ -254,9 +256,26 @@ def scan_library(
                 100.0, f"Scan complete: {len(existing_files)} files processed"
             )
 
-        logger.info("Library scan complete: %d indexed, %d deleted.", added, deleted)
+        duration_seconds = round(time.time() - start_time, 2)
+        total_scanned = len(existing_files)
+        logger.info(
+            "Library scan complete: %d indexed, %d deleted in %.2fs (%d files scanned).",
+            added,
+            deleted,
+            duration_seconds,
+            total_scanned,
+            extra={
+                "event": "library_scan_complete",
+                "indexed": added,
+                "deleted": deleted,
+                "total_files": total_scanned,
+                "duration_seconds": duration_seconds,
+                "library_id": library_id,
+            },
+        )
         return {
-            "scanned": len(existing_files),
+            "scanned": total_scanned,
             "added_or_updated": added,
             "deleted": deleted,
+            "duration_seconds": duration_seconds,
         }

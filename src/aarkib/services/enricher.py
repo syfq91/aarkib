@@ -394,6 +394,7 @@ def enrich_media_item(
         return {"status": "not_found", "media_id": item_id, "changes": []}
 
     changes: list[str] = []
+    provider_src = details.provider or "external"
 
     # Title
     if (
@@ -403,6 +404,8 @@ def enrich_media_item(
     ):
         target_item.title = details.title
         changes.append("title")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("title", provider_src)
 
     # Overview / Description
     if (
@@ -412,6 +415,8 @@ def enrich_media_item(
     ):
         target_item.description = details.overview
         changes.append("description")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("description", provider_src)
 
     # Creators / Authors / Directors
     if (
@@ -422,6 +427,9 @@ def enrich_media_item(
     ):
         target_item.authors = resolve_or_create_authors(details.creators)
         changes.append("creators")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("creators", provider_src)
+            target_item.set_field_provenance("authors", provider_src)
 
     # Publisher
     if (
@@ -431,6 +439,8 @@ def enrich_media_item(
     ):
         target_item.publisher = details.publisher
         changes.append("publisher")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("publisher", provider_src)
 
     # Release / Publication date
     if (
@@ -440,6 +450,8 @@ def enrich_media_item(
     ):
         target_item.publication_date = str(details.release_date)[:10]
         changes.append("publication_date")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("publication_date", provider_src)
 
     # Language
     if (
@@ -449,6 +461,8 @@ def enrich_media_item(
     ):
         target_item.language = details.language
         changes.append("language")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("language", provider_src)
 
     # Genres / Tags
     if (
@@ -459,6 +473,8 @@ def enrich_media_item(
     ):
         target_item.tags = resolve_or_create_tags(details.genres)
         changes.append(f"tags ({len(target_item.tags)})")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("tags", provider_src)
 
     # Video specifics
     if (
@@ -468,6 +484,8 @@ def enrich_media_item(
     ):
         target_item.season = details.season
         changes.append("season")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("season", provider_src)
     if (
         hasattr(target_item, "episode")
         and not target_item.is_field_locked("episode")
@@ -475,6 +493,8 @@ def enrich_media_item(
     ):
         target_item.episode = details.episode
         changes.append("episode")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("episode", provider_src)
     if (
         hasattr(target_item, "duration")
         and not target_item.is_field_locked("duration")
@@ -483,6 +503,8 @@ def enrich_media_item(
     ):
         target_item.duration = details.duration
         changes.append("duration")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("duration", provider_src)
 
     # Music specifics
     if (
@@ -493,6 +515,8 @@ def enrich_media_item(
     ):
         target_item.album = details.album
         changes.append("album")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("album", provider_src)
 
     # Book / Comic specifics
     if (
@@ -503,6 +527,8 @@ def enrich_media_item(
     ):
         target_item.page_count = details.page_count
         changes.append("page_count")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("page_count", provider_src)
 
     if (
         hasattr(target_item, "isbn")
@@ -512,11 +538,15 @@ def enrich_media_item(
     ):
         target_item.isbn = details.isbn
         changes.append("isbn")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("isbn", provider_src)
 
     # Cover
     if cover_filename:
         target_item.cover_image_path = cover_filename
         changes.append("cover_image")
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance("cover_image", provider_src)
 
     # Stash external_id
     if details.id:

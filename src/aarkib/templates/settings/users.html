@@ -161,6 +161,15 @@
           <input type="text" id="token-name" name="name" class="input-text" required placeholder="e.g. KOReader E-Ink, Living Room TV" style="width: 100%;">
         </div>
         <div>
+          <label for="token-scope" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Access Scope</label>
+          <select id="token-scope" name="scope" class="input-select" style="width: 100%; padding: 0.4rem; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+            <option value="*">Full Access (All Permissions)</option>
+            <option value="media:read,media:stream,progress:write">Media Streamer (Read, Stream, Progress)</option>
+            <option value="media:read,progress:write">E-Reader Client (Read, Progress Sync)</option>
+            <option value="media:read">Read Only (Catalog Browsing)</option>
+          </select>
+        </div>
+        <div>
           <label for="token-expiry" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Expiration</label>
           <select id="token-expiry" name="expires_in_days" class="input-select" style="width: 100%; padding: 0.4rem; background: var(--bg-canvas); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);">
             <option value="">Never Expires</option>
@@ -239,15 +248,22 @@ async function loadDeviceTokens() {
     html += '<thead><tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary);">';
     html += '<th style="padding: 0.5rem;">Name</th>';
     html += '<th style="padding: 0.5rem;">Prefix</th>';
+    html += '<th style="padding: 0.5rem;">Scopes</th>';
     html += '<th style="padding: 0.5rem;">Created</th>';
     html += '<th style="padding: 0.5rem;">Last Used</th>';
     html += '<th style="padding: 0.5rem; text-align: right;">Action</th>';
     html += '</tr></thead><tbody>';
 
     for (const t of data.tokens) {
+      const scopes = t.scopes || [];
+      const scopeBadge = scopes.includes('*') || scopes.length === 0
+        ? '<span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">Full Access</span>'
+        : scopes.map(s => `<span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; margin-right: 0.25rem;">${escapeHtml(s)}</span>`).join('');
+
       html += '<tr style="border-bottom: 1px solid var(--border);">';
       html += `<td style="padding: 0.5rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(t.name)}</td>`;
       html += `<td style="padding: 0.5rem; font-family: monospace; color: var(--text-secondary);">${escapeHtml(t.token_prefix)}</td>`;
+      html += `<td style="padding: 0.5rem;">${scopeBadge}</td>`;
       html += `<td style="padding: 0.5rem; color: var(--text-secondary);">${t.created_at ? t.created_at.substring(0, 10) : '-'}</td>`;
       html += `<td style="padding: 0.5rem; color: var(--text-secondary);">${t.last_used_at ? t.last_used_at.substring(0, 10) : 'Never'}</td>`;
       html += `<td style="padding: 0.5rem; text-align: right;"><button type="button" class="btn btn-sm btn-danger" onclick="revokeToken(${t.id}, '${escapeHtml(t.name)}')">Revoke</button></td>`;
@@ -263,11 +279,14 @@ async function loadDeviceTokens() {
 async function handleCreateToken(e) {
   e.preventDefault();
   const nameInput = document.getElementById('token-name');
+  const scopeInput = document.getElementById('token-scope');
   const expiryInput = document.getElementById('token-expiry');
   const btn = document.getElementById('btn-submit-token');
 
   btn.disabled = true;
   btn.textContent = 'Generating...';
+
+  const scopes = scopeInput.value === '*' ? ['*'] : scopeInput.value.split(',');
 
   try {
     const res = await fetch('/api/tokens', {
@@ -275,6 +294,7 @@ async function handleCreateToken(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: nameInput.value,
+        scopes: scopes,
         expires_in_days: expiryInput.value ? parseInt(expiryInput.value, 10) : null
       })
     });

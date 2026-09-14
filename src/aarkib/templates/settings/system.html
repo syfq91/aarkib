@@ -206,6 +206,58 @@
   </div>
 </div>
 {% endif %}
+
+<!-- Recent Background Operations -->
+{% if recent_jobs %}
+<div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 2rem;">
+  <h3 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+    <span>⏱️</span> Recent Background Operations
+  </h3>
+  <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary);">
+          <th style="padding: 0.5rem;">Job Type</th>
+          <th style="padding: 0.5rem;">Status</th>
+          <th style="padding: 0.5rem;">Progress / Message</th>
+          <th style="padding: 0.5rem;">Duration</th>
+          <th style="padding: 0.5rem;">Started</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in recent_jobs %}
+        <tr style="border-bottom: 1px solid var(--border);">
+          <td style="padding: 0.5rem; font-weight: 600; font-family: monospace; color: var(--text-primary);">{{ job.job_type }}</td>
+          <td style="padding: 0.5rem;">
+            {% if job.status == 'completed' %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">Completed</span>
+            {% elif job.status == 'running' %}
+              <span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">Running</span>
+            {% elif job.status == 'failed' %}
+              <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">Failed</span>
+            {% elif job.status == 'cancelled' %}
+              <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #eab308;">Cancelled</span>
+            {% else %}
+              <span class="badge" style="background: var(--bg-tertiary); color: var(--text-secondary);">{{ job.status }}</span>
+            {% endif %}
+          </td>
+          <td style="padding: 0.5rem; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ job.progress_message or (job.progress|round|int ~ '%') }}
+          </td>
+          <td style="padding: 0.5rem; color: var(--text-secondary); font-family: monospace;">
+            {% set job_dict = job.to_dict() %}
+            {{ job_dict.elapsed_seconds ~ 's' if job_dict.elapsed_seconds is not none else '-' }}
+          </td>
+          <td style="padding: 0.5rem; color: var(--text-secondary);">
+            {{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') if job.started_at else (job.created_at.strftime('%Y-%m-%d %H:%M:%S') if job.created_at else '-') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% else %}
 <div class="alert alert-error">
   Administrator privileges required to view system preferences.

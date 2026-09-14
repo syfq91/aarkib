@@ -64,12 +64,15 @@ def test_api_books_and_progress(client, app, sample_epub):
     assert edit_data["item"]["series"] == "Sample Chronicles"
     assert edit_data["item"]["series_index"] == 1.5
     assert len(edit_data["item"]["authors"]) == 2
+    assert edit_data["item"]["provenance"]["title"] == "user"
 
     # Verify series in UI / API
     res = client.get(f"/api/media/{book_id}")
     assert res.status_code == 200
     assert res.get_json()["series"] == "Sample Chronicles"
     assert res.get_json()["media_type"] == "book"
+    assert res.get_json()["provenance"]["title"] == "user"
+    assert "locked_fields" in res.get_json()
 
     # Verify media_type filtering in list_media
     res = client.get("/api/media?media_type=book")
@@ -210,10 +213,11 @@ def test_api_media_and_legacy_routes(client, app, sample_epub):
     assert client.get("/api/books").status_code == 404
     assert client.get("/api/items").status_code == 404
 
-    # Detail endpoints
     res_med = client.get(f"/api/media/{book_id}")
     assert res_med.status_code == 200
     assert res_med.get_json()["id"] == book_id
+    assert "provenance" in res_med.get_json()
+    assert "locked_fields" in res_med.get_json()
     assert client.get(f"/api/books/{book_id}").status_code == 404
     assert client.get(f"/api/items/{book_id}").status_code == 404
 
