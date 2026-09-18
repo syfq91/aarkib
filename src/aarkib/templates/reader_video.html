@@ -324,7 +324,35 @@
     return `${remM}:${remS.toString().padStart(2, '0')}`;
   }
 
-  // Subtitle track dynamic loader
+  // JASSUB controller and subtitle track dynamic loader
+  let jassubInstance = null;
+  let JASSUBClass = null;
+
+  async function getJassubClass() {
+    if (JASSUBClass) return JASSUBClass;
+    try {
+      const mod = await import("https://cdn.jsdelivr.net/npm/jassub@2.5.16/+esm");
+      JASSUBClass = mod.default || mod;
+      return JASSUBClass;
+    } catch (e) {
+      console.warn("JASSUB library could not be loaded, using native WebVTT fallback:", e);
+      return null;
+    }
+  }
+
+  function clearSubtitles() {
+    const oldTracks = video.querySelectorAll("track");
+    oldTracks.forEach(t => t.remove());
+    if (jassubInstance) {
+      try {
+        jassubInstance.destroy();
+      } catch (e) {
+        console.debug("Error destroying JASSUB instance:", e);
+      }
+      jassubInstance = null;
+    }
+  }
+
   async function loadSubtitles() {
     try {
       const res = await fetch(`/api/media/${BOOK_ID}/stream/subtitles`);
@@ -336,26 +364,48 @@
       subs.forEach((s) => {
         const opt = document.createElement("option");
         opt.value = s.index;
-        opt.textContent = `💬 ${s.language.toUpperCase()} - ${s.title}`;
+        const codec = (s.codec || "").toLowerCase();
+        opt.dataset.codec = codec;
+        opt.textContent = `💬 ${s.language.toUpperCase()} - ${s.title}${codec ? ` [${codec.toUpperCase()}]` : ''}`;
         subtitleSelect.appendChild(opt);
       });
 
-      subtitleSelect.addEventListener("change", (e) => {
-        const oldTracks = video.querySelectorAll("track");
-        oldTracks.forEach(t => t.remove());
+      subtitleSelect.addEventListener("change", async (e) => {
+        clearSubtitles();
 
+        const selectedOpt = e.target.options[e.target.selectedIndex];
         const idx = e.target.value;
-        if (idx !== "off") {
-          const track = document.createElement("track");
-          track.kind = "subtitles";
-          track.src = `/api/media/${BOOK_ID}/stream/subtitles/${idx}.vtt`;
-          track.srclang = "en";
-          track.label = e.target.options[e.target.selectedIndex].text;
-          track.default = true;
-          video.appendChild(track);
-          if (video.textTracks && video.textTracks.length > 0) {
-            video.textTracks[0].mode = "showing";
+        if (idx === "off" || !selectedOpt) return;
+
+        const codec = (selectedOpt.dataset.codec || "").toLowerCase();
+        const isAss = codec === "ass" || codec === "ssa";
+
+        // Try JASSUB WebAssembly rendering for stylized ASS/SSA subtitles
+        if (isAss) {
+          const JASSUB = await getJassubClass();
+          if (JASSUB) {
+            try {
+              jassubInstance = new JASSUB({
+                video: video,
+                subUrl: `/api/media/${BOOK_ID}/stream/subtitles/${idx}.ass`,
+              });
+              return;
+            } catch (err) {
+              console.warn("JASSUB initialization failed, falling back to WebVTT:", err);
+            }
           }
+        }
+
+        // Standard WebVTT track (native HTML5 text track)
+        const track = document.createElement("track");
+        track.kind = "subtitles";
+        track.src = `/api/media/${BOOK_ID}/stream/subtitles/${idx}.vtt`;
+        track.srclang = "en";
+        track.label = selectedOpt.text;
+        track.default = true;
+        video.appendChild(track);
+        if (video.textTracks && video.textTracks.length > 0) {
+          video.textTracks[0].mode = "showing";
         }
       });
     } catch (e) {
@@ -515,6 +565,7 @@
   window.addEventListener("beforeunload", () => {
     saveProgress(true);
     stopHlsHeartbeat();
+    clearSubtitles();
   });
 
   // Handle Video Ended

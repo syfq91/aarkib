@@ -428,6 +428,72 @@ def generate_vtt_subtitles(file_path: Path, subtitle_index: int = 0) -> bytes:
     return b"WEBVTT\n\nNOTE Subtitle track not available as text WebVTT\n"
 
 
+def generate_ass_subtitles(file_path: Path, subtitle_index: int = 0) -> bytes:
+    """Extracts embedded subtitles in ASS/SSA format for high-fidelity client rendering (JASSUB)."""
+    file_path = Path(file_path)
+    ffmpeg_bin = get_ffmpeg_binary()
+    if not ffmpeg_bin or not file_path.exists():
+        return (
+            b"[Script Info]\nTitle: Subtitle engine unavailable\nScriptType: v4.00+\n\n"
+            b"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        )
+
+    try:
+        # 1. Attempt fast direct stream-copy if subtitle track is already ASS/SSA
+        cmd_copy = [
+            ffmpeg_bin,
+            "-v",
+            "quiet",
+            "-i",
+            str(file_path),
+            "-map",
+            f"0:s:{subtitle_index}",
+            "-c:s",
+            "copy",
+            "-f",
+            "ass",
+            "-",
+        ]
+        res = subprocess.run(
+            cmd_copy, capture_output=True, timeout=SUBTITLE_CONVERT_TIMEOUT
+        )
+        if res.returncode == 0 and b"[Script Info]" in res.stdout:
+            return res.stdout
+
+        # 2. Fallback to subtitle format conversion if source track is SRT, VTT, or mov_text
+        cmd_conv = [
+            ffmpeg_bin,
+            "-v",
+            "quiet",
+            "-i",
+            str(file_path),
+            "-map",
+            f"0:s:{subtitle_index}",
+            "-c:s",
+            "ass",
+            "-f",
+            "ass",
+            "-",
+        ]
+        res_conv = subprocess.run(
+            cmd_conv, capture_output=True, timeout=SUBTITLE_CONVERT_TIMEOUT
+        )
+        if res_conv.returncode == 0 and b"[Script Info]" in res_conv.stdout:
+            return res_conv.stdout
+    except Exception as e:
+        logger.debug(
+            "Failed extracting ASS subtitle index %d from %s: %s",
+            subtitle_index,
+            file_path,
+            e,
+        )
+
+    return (
+        b"[Script Info]\nTitle: Subtitle track not available as ASS\nScriptType: v4.00+\n\n"
+        b"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+
+
 def stream_remux_pipe(
     file_path: Path,
     seek_seconds: float = 0.0,

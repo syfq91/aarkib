@@ -1739,6 +1739,37 @@ def get_subtitle_vtt(item_id: int, track_index: int) -> ResponseReturnValue:
     )
 
 
+@api_bp.route(
+    "/media/<int:item_id>/stream/subtitles/<int:track_index>.ass", methods=["GET"]
+)
+@api_bp.route("/stream/<int:item_id>/subtitles/<int:track_index>.ass", methods=["GET"])
+@require_token_scope("media:read")
+def get_subtitle_ass(item_id: int, track_index: int) -> ResponseReturnValue:
+    """Extracts the requested embedded subtitle track in native ASS format for JASSUB."""
+    item = db.session.get(MediaItem, item_id)
+    if not item:
+        return api_error("Media item not found", 404)
+
+    file_path = Path(item.original_file_path).resolve()
+    if not is_safe_media_path(file_path):
+        return api_error(
+            "Access denied: media file resides outside configured library roots", 403
+        )
+    if not file_path.is_file():
+        return api_error("File missing from storage", 404)
+
+    db.session.close()
+
+    from aarkib.services.transcoder import generate_ass_subtitles
+
+    ass_bytes = generate_ass_subtitles(file_path, track_index)
+    return Response(
+        ass_bytes,
+        mimetype="text/x-ssa",
+        headers={"Content-Type": "text/x-ssa; charset=utf-8"},
+    )
+
+
 @api_bp.route("/media/<int:item_id>/download", methods=["GET"])
 @api_bp.route(
     "/media/<int:item_id>/download/optimized/<any(x3,x4,kindle,kobo,eink,generic):preset>",

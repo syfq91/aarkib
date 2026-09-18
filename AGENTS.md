@@ -175,7 +175,7 @@ aarkib/
 │   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/               # Obsidian design tokens, modern CSS, gamepad engine (gamepad.js), PWA SW
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (289 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (290 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
@@ -256,7 +256,7 @@ uv sync
 # 2. Run Aarkib development server
 uv run aarkib
 
-# 3. Execute Pytest suite (all 289 tests must pass 100%)
+# 3. Execute Pytest suite (all 290 tests must pass 100%)
 uv run pytest
 
 # 4. Run single test file

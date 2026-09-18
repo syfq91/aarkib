@@ -363,8 +363,9 @@ Aarkib features an automated streaming and transcoding supervisor inspired by Pl
    - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using lightweight FFmpeg test probes (`-hwaccel vaapi -c:v h264_vaapi`) with safe argument lists.
    - Enables hardware-accelerated decoding and scaling for Intel QuickSync and AMD Radeon GPUs (`-hwaccel vaapi -vaapi_device ...`), drastically reducing CPU consumption in Docker and bare-metal environments.
 
-5. **Subtitle Extraction**:
-   - Embedded SRT, ASS, or SSA subtitles are extracted on-the-fly and converted to standard WebVTT (`.vtt`) format for seamless in-browser overlay rendering.
+5. **Dual-Engine Subtitle Architecture & JASSUB WebAssembly**:
+   - **ASS/SSA High-Fidelity Rendering (JASSUB)**: Embedded Advanced SubStation Alpha (`.ass`, `.ssa`) subtitles are served in native format via `GET /api/media/<id>/stream/subtitles/<track_index>.ass` (`generate_ass_subtitles`). In the browser, JASSUB (WebAssembly + WebGL `libass` renderer) renders custom fonts, karaoke effects, dynamic positioning (`\pos`), rotations, color outlines, and signs onto a hardware-accelerated canvas overlay, preserving 100% typesetting fidelity without server-side video burning and enabling Direct Play / Remuxing.
+   - **WebVTT Engine & Fallback**: Embedded SRT, VTT, or plain text subtitles are served via `GET /api/media/<id>/stream/subtitles/<track_index>.vtt` (`generate_vtt_subtitles`) and rendered via native HTML5 `<track>` tags. If a client browser lacks WebAssembly or WebGL support, ASS subtitles automatically fall back to WebVTT.
 
 ---
 

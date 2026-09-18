@@ -9,6 +9,7 @@ from aarkib.services.transcoder import (
     TranscodeSupervisor,
     detect_vaapi_device,
     evaluate_playback_strategy,
+    generate_ass_subtitles,
     generate_vtt_subtitles,
     probe_media_streams,
     reset_vaapi_cache,
@@ -212,6 +213,12 @@ def test_generate_vtt_subtitles_fallback(tmp_path):
     assert vtt.startswith(b"WEBVTT")
 
 
+def test_generate_ass_subtitles_fallback(tmp_path):
+    missing_file = tmp_path / "missing.mkv"
+    ass = generate_ass_subtitles(missing_file, 0)
+    assert ass.startswith(b"[Script Info]")
+
+
 def test_stream_api_endpoints(client, app, tmp_path):
     video_file = tmp_path / "stream_sample.mp4"
     create_synthetic_mp4(video_file, duration_sec=60, width=1280, height=720)
@@ -254,6 +261,12 @@ def test_stream_api_endpoints(client, app, tmp_path):
     assert res_vtt.status_code == 200
     assert "text/vtt" in res_vtt.content_type
     assert res_vtt.data.startswith(b"WEBVTT")
+
+    # 3b. GET /api/stream/<id>/subtitles/0.ass
+    res_ass = client.get(f"/api/stream/{item_id}/subtitles/0.ass")
+    assert res_ass.status_code == 200
+    assert "text/x-ssa" in res_ass.content_type
+    assert res_ass.data.startswith(b"[Script Info]")
 
     # 4. GET /api/stream/<id>/hls/master.m3u8
     transcode_dir = tmp_path / "transcode_test"
