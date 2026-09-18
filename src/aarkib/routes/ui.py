@@ -262,8 +262,9 @@ VALID_SETTINGS_CATEGORIES = {
     "users": "User Management",
     "integrations": "Integrations & OPDS Feeds",
     "backup": "Backup & Disaster Recovery",
+    "notifications": "Push Notifications & Alerts",
 }
-ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users", "backup"}
+ADMIN_ONLY_CATEGORIES = {"system", "plugins", "users", "backup", "notifications"}
 
 
 @ui_bp.route("/settings")

@@ -2887,3 +2887,56 @@ def revoke_device_token(token_id: int) -> ResponseReturnValue:
     db.session.delete(token_obj)
     db.session.commit()
     return jsonify({"status": "success", "message": f"Revoked token '{name}'"})
+
+
+@api_bp.route("/notifications/test", methods=["POST"])
+@login_required
+def test_notification() -> ResponseReturnValue:
+    """Dispatches an immediate test push notification via Apprise to configured or specified URLs."""
+    if not current_user.is_admin:
+        return jsonify({"error": "Admin privileges required"}), 403
+
+    from aarkib.services.notifier import notification_service
+
+    payload = request.get_json(silent=True) or {}
+    custom_urls = payload.get("urls")
+    if isinstance(custom_urls, str):
+        custom_urls = [
+            line.strip() for line in custom_urls.splitlines() if line.strip()
+        ]
+
+    success, message, count = notification_service.send_test(custom_urls=custom_urls)
+    status_code = 200 if success else 400
+    return (
+        jsonify(
+            {
+                "success": success,
+                "message": message,
+                "servers_notified": count,
+            }
+        ),
+        status_code,
+    )
+
+
+@api_bp.route("/notifications/status", methods=["GET"])
+@login_required
+def notification_status() -> ResponseReturnValue:
+    """Returns current push notification service health, endpoints count, and delivery metrics."""
+    if not current_user.is_admin:
+        return jsonify({"error": "Admin privileges required"}), 403
+
+    from aarkib.services.notifier import APPRISE_AVAILABLE, notification_service
+
+    stats = notification_service.get_stats()
+    endpoints_count = notification_service.get_endpoints_count()
+    is_enabled = bool(current_app.config.get("ENABLE_NOTIFICATIONS", False))
+
+    return jsonify(
+        {
+            "enabled": is_enabled,
+            "apprise_installed": APPRISE_AVAILABLE,
+            "endpoints_count": endpoints_count,
+            "stats": stats,
+        }
+    )

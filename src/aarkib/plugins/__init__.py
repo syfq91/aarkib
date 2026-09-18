@@ -18,6 +18,7 @@ from aarkib.plugins.base import (
 from aarkib.plugins.book import BookMediaPlugin
 from aarkib.plugins.jellyfin import JellyfinProtocolPlugin
 from aarkib.plugins.mqtt import MqttPlugin
+from aarkib.plugins.notifier import NotificationPlugin
 from aarkib.plugins.opds import OPDSProtocolPlugin
 from aarkib.plugins.optimizer import EInkOptimizerPlugin
 from aarkib.plugins.podcast import PodcastMediaPlugin
@@ -71,6 +72,9 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
     if not plugin_registry.get_plugin("mqtt"):
         plugin_registry.register(MqttPlugin())
 
+    if not plugin_registry.get_plugin("notifications"):
+        plugin_registry.register(NotificationPlugin())
+
     # Wire blueprints, lifecycle hooks, and CSRF exemptions if app is provided
     if app is not None:
         from aarkib import csrf
@@ -80,7 +84,9 @@ def init_plugins(app: Flask | None = None) -> PluginRegistry:
             cfg_key = f"ENABLE_{plugin.name.upper()}"
             is_enabled = app.config.get(cfg_key)
             if is_enabled is None:
-                default_val = False if plugin.name == "mqtt" else True
+                default_val = (
+                    False if plugin.name in ("mqtt", "notifications") else True
+                )
                 is_enabled = app.config.get(f"AARKIB_{cfg_key}", default_val)
             if isinstance(is_enabled, str):
                 is_enabled = is_enabled.lower() not in ("0", "false", "no", "off")
@@ -121,5 +127,6 @@ __all__ = [
     "SubsonicProtocolPlugin",
     "JellyfinProtocolPlugin",
     "MqttPlugin",
+    "NotificationPlugin",
     "init_plugins",
 ]

@@ -22,6 +22,9 @@ EVENT_BACKUP_FINISHED = "backup.finished"
 EVENT_PLAYBACK_UPDATED = "playback.updated"
 EVENT_TRANSCODE_UPDATED = "transcode.updated"
 
+EVENT_SECURITY_LOCKOUT = "security.lockout"
+EVENT_JOB_FAILED = "job.failed"
+
 
 class EventDispatcher:
     """Thread-safe in-memory publish-subscribe event dispatcher."""
@@ -70,11 +73,13 @@ event_bus = EventDispatcher()
 __all__ = [
     "EVENT_BACKUP_FINISHED",
     "EVENT_BACKUP_STARTED",
+    "EVENT_JOB_FAILED",
     "EVENT_MEDIA_ADDED",
     "EVENT_PLAYBACK_UPDATED",
     "EVENT_SCAN_FINISHED",
     "EVENT_SCAN_PROGRESS",
     "EVENT_SCAN_STARTED",
+    "EVENT_SECURITY_LOCKOUT",
     "EVENT_TRANSCODE_UPDATED",
     "EventDispatcher",
     "event_bus",

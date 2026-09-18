@@ -1,0 +1,272 @@
+{% extends "settings/layout.html" %}
+
+{% block settings_content %}
+{% set s = system_settings.settings %}
+{% set is_active = s.ENABLE_NOTIFICATIONS.value if s.ENABLE_NOTIFICATIONS else False %}
+
+<div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 960px;">
+
+  <!-- Main Settings Card -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem;">
+      <div>
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🔔</span> Push Notifications (Apprise)
+          {% if is_active %}
+            <span class="badge" id="badge-notif-status" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.75rem;">🟢 Active</span>
+          {% else %}
+            <span class="badge" id="badge-notif-status" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary); font-size: 0.75rem;">⚪ Disabled</span>
+          {% endif %}
+        </h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.35rem 0 0 0;">
+          Deliver instant push notifications to Discord, Telegram, Pushover, Gotify, Ntfy, Email, and 80+ other services.
+        </p>
+      </div>
+
+      <!-- Master Enable Toggle -->
+      <label class="plugin-toggle" title="Enable / Disable Push Notifications">
+        <input type="checkbox" id="input-ENABLE_NOTIFICATIONS" {% if is_active %}checked{% endif %} onchange="updateMasterToggle(this.checked)">
+        <span class="plugin-slider"></span>
+      </label>
+    </div>
+
+    <form id="notifications-settings-form" onsubmit="saveNotificationSettings(event)">
+      <!-- Notification Service URLs -->
+      <div style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+          <label for="input-NOTIFICATION_URLS" style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">
+            Notification Service Endpoints (one per line)
+          </label>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Lines starting with <code>#</code> are ignored
+          </span>
+        </div>
+        <textarea
+          id="input-NOTIFICATION_URLS"
+          name="NOTIFICATION_URLS"
+          rows="5"
+          class="input-text"
+          style="font-family: monospace; font-size: 0.82rem; width: 100%; line-height: 1.5; resize: vertical;"
+          placeholder="discord://webhook_id/webhook_token&#10;tgram://bot_token/chat_id&#10;pover://user_key@token&#10;ntfy://your_topic"
+        >{{ s.NOTIFICATION_URLS.value if s.NOTIFICATION_URLS else '' }}</textarea>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+          🔒 Sensitive webhook tokens and passwords are encrypted in the database.
+        </div>
+      </div>
+
+      <!-- Trigger Event Checkboxes -->
+      <div style="margin-bottom: 1.25rem; background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+        <label style="font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: 0.75rem;">
+          Notification Event Triggers
+        </label>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="input-NOTIFY_ON_MEDIA_ADDED" {% if s.NOTIFY_ON_MEDIA_ADDED and s.NOTIFY_ON_MEDIA_ADDED.value %}checked{% endif %}>
+            <span>📚 New Media Added (Digest)</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="input-NOTIFY_ON_SCAN_COMPLETED" {% if s.NOTIFY_ON_SCAN_COMPLETED and s.NOTIFY_ON_SCAN_COMPLETED.value %}checked{% endif %}>
+            <span>🔍 Library Scan Summary</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="input-NOTIFY_ON_BACKUP" {% if s.NOTIFY_ON_BACKUP and s.NOTIFY_ON_BACKUP.value %}checked{% endif %}>
+            <span>💾 Backup Success &amp; Failure</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="input-NOTIFY_ON_SECURITY" {% if s.NOTIFY_ON_SECURITY and s.NOTIFY_ON_SECURITY.value %}checked{% endif %}>
+            <span>🚨 Security Alerts &amp; IP Lockouts</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Debounce Window Setting -->
+      <div style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+        <div>
+          <label for="input-NOTIFICATION_DIGEST_SECONDS" style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: block;">
+            Media Batch Digest Window (Seconds)
+          </label>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">
+            Aggregates rapid file discoveries into a single summary digest (0 for instant).
+          </span>
+        </div>
+        <input
+          type="number"
+          id="input-NOTIFICATION_DIGEST_SECONDS"
+          min="0"
+          max="3600"
+          step="5"
+          style="width: 90px; text-align: right;"
+          class="input-text"
+          value="{{ s.NOTIFICATION_DIGEST_SECONDS.value if s.NOTIFICATION_DIGEST_SECONDS else 60 }}"
+        >
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 1rem; align-items: center; border-top: 1px solid var(--border); padding-top: 1.25rem;">
+        <button type="submit" id="btn-save-notif" class="btn btn-primary">
+          💾 Save Settings
+        </button>
+        <button type="button" id="btn-test-notif" class="btn btn-secondary" onclick="sendTestNotification()">
+          🔔 Send Test Notification
+        </button>
+        <span id="notif-spinner" style="display: none; font-size: 0.85rem; color: var(--text-secondary);">
+          ⏳ Sending...
+        </span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Apprise Supported URL Syntax Cheatsheet -->
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+    <h4 style="margin: 0 0 0.75rem 0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;">
+      <span>📋</span> Common Apprise Service URL Formats
+    </h4>
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Click any example below to insert a template into your notification endpoints editor:
+    </p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; font-size: 0.8rem;">
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('discord://webhook_id/webhook_token')">
+        <strong style="color: var(--text-primary);">Discord:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">discord://webhook_id/webhook_token</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('tgram://bot_token/chat_id')">
+        <strong style="color: var(--text-primary);">Telegram:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">tgram://bot_token/chat_id</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('pover://user_key@token')">
+        <strong style="color: var(--text-primary);">Pushover:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">pover://user_key@token</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('gotify://hostname/app_token')">
+        <strong style="color: var(--text-primary);">Gotify:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">gotify://hostname/app_token</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('ntfy://topic')">
+        <strong style="color: var(--text-primary);">Ntfy:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">ntfy://topic</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('mailto://user:pass@smtp.gmail.com:587?to=you@example.com')">
+        <strong style="color: var(--text-primary);">Email (SMTP):</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">mailto://user:pass@smtp.example.com</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('slack://tokenA/tokenB/tokenC/channel')">
+        <strong style="color: var(--text-primary);">Slack:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">slack://tokenA/tokenB/tokenC/channel</code>
+      </div>
+
+      <div style="background: var(--bg-tertiary); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer;" onclick="insertUrlTemplate('json://example.com/webhook')">
+        <strong style="color: var(--text-primary);">Custom Webhook:</strong><br>
+        <code style="font-size: 0.75rem; color: var(--accent);">json://example.com/webhook</code>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function insertUrlTemplate(tmpl) {
+  const textarea = document.getElementById("input-NOTIFICATION_URLS");
+  if (!textarea) return;
+  const currentVal = textarea.value.trim();
+  textarea.value = currentVal ? currentVal + "\n" + tmpl : tmpl;
+  textarea.focus();
+  showToast("Template added to editor", "info");
+}
+
+async function updateMasterToggle(enabled) {
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ENABLE_NOTIFICATIONS: enabled }),
+    });
+    if (!res.ok) throw new Error("Failed to update status");
+    const badge = document.getElementById("badge-notif-status");
+    if (badge) {
+      if (enabled) {
+        badge.textContent = "🟢 Active";
+        badge.style.background = "rgba(34, 197, 94, 0.2)";
+        badge.style.color = "#4ade80";
+      } else {
+        badge.textContent = "⚪ Disabled";
+        badge.style.background = "rgba(156, 163, 175, 0.2)";
+        badge.style.color = "var(--text-secondary)";
+      }
+    }
+    showToast(enabled ? "Notifications enabled" : "Notifications disabled", "success");
+  } catch (err) {
+    showToast("Error updating status: " + err.message, "error");
+  }
+}
+
+async function saveNotificationSettings(e) {
+  e.preventDefault();
+  const btn = document.getElementById("btn-save-notif");
+  if (btn) btn.disabled = true;
+
+  const payload = {
+    ENABLE_NOTIFICATIONS: document.getElementById("input-ENABLE_NOTIFICATIONS").checked,
+    NOTIFICATION_URLS: document.getElementById("input-NOTIFICATION_URLS").value,
+    NOTIFY_ON_MEDIA_ADDED: document.getElementById("input-NOTIFY_ON_MEDIA_ADDED").checked,
+    NOTIFY_ON_SCAN_COMPLETED: document.getElementById("input-NOTIFY_ON_SCAN_COMPLETED").checked,
+    NOTIFY_ON_BACKUP: document.getElementById("input-NOTIFY_ON_BACKUP").checked,
+    NOTIFY_ON_SECURITY: document.getElementById("input-NOTIFY_ON_SECURITY").checked,
+    NOTIFICATION_DIGEST_SECONDS: parseInt(document.getElementById("input-NOTIFICATION_DIGEST_SECONDS").value, 10) || 60,
+  };
+
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed saving settings");
+
+    showToast("Notification settings saved successfully!", "success");
+  } catch (err) {
+    showToast("Error saving: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function sendTestNotification() {
+  const btn = document.getElementById("btn-test-notif");
+  const spinner = document.getElementById("notif-spinner");
+  const urlsText = document.getElementById("input-NOTIFICATION_URLS").value;
+
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.style.display = "inline";
+
+  try {
+    const res = await fetch("/api/notifications/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls: urlsText }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error || "Delivery failed");
+
+    showToast(data.message || "Test notification dispatched!", "success");
+  } catch (err) {
+    showToast("Test failed: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.style.display = "none";
+  }
+}
+</script>
+{% endblock %}

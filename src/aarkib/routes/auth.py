@@ -54,7 +54,7 @@ def load_user_from_request(req: Any) -> User | None:
         ):
             auth_rate_limiter.reset(client_ip)
             return user
-        auth_rate_limiter.record_failure(client_ip)
+        auth_rate_limiter.record_failure(client_ip, username=auth.username)
     return None
 
 
@@ -150,7 +150,7 @@ def login() -> ResponseReturnValue:
             flash(f"Welcome back, {user.username}!", "success")
             return redirect(redirect_target)
 
-        auth_rate_limiter.record_failure(client_ip)
+        auth_rate_limiter.record_failure(client_ip, username=username)
         if (
             user
             and not user.has_password

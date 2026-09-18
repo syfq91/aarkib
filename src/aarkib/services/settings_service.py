@@ -312,6 +312,65 @@ MANAGED_SETTINGS: dict[str, SettingDefinition] = {
         description="Enable TLS/SSL encryption when connecting to the MQTT broker.",
         category="Smart Home & Integrations",
     ),
+    "ENABLE_NOTIFICATIONS": SettingDefinition(
+        key="ENABLE_NOTIFICATIONS",
+        type=bool,
+        default=False,
+        display_name="Enable Push Notifications",
+        description="Enable multi-channel push notifications (Discord, Telegram, Pushover, Gotify, Ntfy, Email, Webhooks).",
+        category="Notifications & Alerts",
+    ),
+    "NOTIFICATION_URLS": SettingDefinition(
+        key="NOTIFICATION_URLS",
+        type=str,
+        default="",
+        display_name="Notification Service URLs",
+        description="Newline-separated list of Apprise service URLs (e.g. discord://..., tgram://..., pover://...).",
+        category="Notifications & Alerts",
+        is_secret=True,
+    ),
+    "NOTIFY_ON_MEDIA_ADDED": SettingDefinition(
+        key="NOTIFY_ON_MEDIA_ADDED",
+        type=bool,
+        default=True,
+        display_name="Notify on New Media",
+        description="Send notification digest when new books, comics, audio, or videos are added.",
+        category="Notifications & Alerts",
+    ),
+    "NOTIFY_ON_SCAN_COMPLETED": SettingDefinition(
+        key="NOTIFY_ON_SCAN_COMPLETED",
+        type=bool,
+        default=False,
+        display_name="Notify on Scan Completion",
+        description="Send a summary notification when a library crawl finishes.",
+        category="Notifications & Alerts",
+    ),
+    "NOTIFY_ON_BACKUP": SettingDefinition(
+        key="NOTIFY_ON_BACKUP",
+        type=bool,
+        default=True,
+        display_name="Notify on Backup Events",
+        description="Send alert on backup success or failure.",
+        category="Notifications & Alerts",
+    ),
+    "NOTIFY_ON_SECURITY": SettingDefinition(
+        key="NOTIFY_ON_SECURITY",
+        type=bool,
+        default=True,
+        display_name="Notify on Security Alerts",
+        description="Send critical alert on failed login lockouts.",
+        category="Notifications & Alerts",
+    ),
+    "NOTIFICATION_DIGEST_SECONDS": SettingDefinition(
+        key="NOTIFICATION_DIGEST_SECONDS",
+        type=int,
+        default=60,
+        display_name="Media Notification Digest Window (Seconds)",
+        description="Buffer window in seconds to aggregate rapid media discoveries into a single notification digest (0 for instant).",
+        category="Notifications & Alerts",
+        min_value=0,
+        max_value=3600,
+    ),
 }
 
 
@@ -392,7 +451,23 @@ def sync_plugins_state(app: Flask) -> None:
     for plugin in plugin_registry.get_all_plugins():
         cfg_key = f"ENABLE_{plugin.name.upper()}"
         if cfg_key in app.config:
-            plugin.enabled = bool(app.config[cfg_key])
+            was_enabled = bool(plugin.enabled)
+            now_enabled = bool(app.config[cfg_key])
+            plugin.enabled = now_enabled
+            if not was_enabled and now_enabled and hasattr(plugin, "start"):
+                try:
+                    plugin.start()
+                except Exception as exc:
+                    logger.debug(
+                        "Error starting plugin %s on enable: %s", plugin.name, exc
+                    )
+            elif was_enabled and not now_enabled and hasattr(plugin, "stop"):
+                try:
+                    plugin.stop()
+                except Exception as exc:
+                    logger.debug(
+                        "Error stopping plugin %s on disable: %s", plugin.name, exc
+                    )
 
 
 def get_effective_settings(app: Flask) -> dict[str, Any]:

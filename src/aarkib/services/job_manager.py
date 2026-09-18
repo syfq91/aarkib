@@ -363,6 +363,19 @@ class JobManager:
                     job.progress_message = f"Failed: {e}"
                     job.error = str(e)
                 self._persist_job_failed(job, app)
+                try:
+                    from aarkib.services.events import EVENT_JOB_FAILED, event_bus
+
+                    event_bus.emit(
+                        EVENT_JOB_FAILED,
+                        {
+                            "job_id": job.id,
+                            "job_type": job.job_type,
+                            "error": str(e),
+                        },
+                    )
+                except Exception:
+                    pass
 
         job._future = self._executor.submit(_worker)
         return job

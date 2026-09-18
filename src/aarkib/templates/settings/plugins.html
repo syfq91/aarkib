@@ -255,8 +255,8 @@
 <!-- Group 4: Smart Home & Automation Plugins -->
 <div style="margin-bottom: 2rem;" class="plugin-group-section" id="group-integration">
   <h4 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
-    <span>📡</span> Smart Home &amp; Automation
-    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">Home Assistant &amp; MQTT</span>
+    <span>📡</span> Smart Home, Automation &amp; Alerts
+    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">Home Assistant, MQTT &amp; Notifications</span>
   </h4>
 
   <div class="plugin-grid">
@@ -266,7 +266,7 @@
         <div class="plugin-header">
           <div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 1.25rem;">📡</span>
+              <span style="font-size: 1.25rem;">{% if p.name == 'notifications' %}🔔{% else %}📡{% endif %}</span>
               <strong style="font-size: 1rem; color: var(--text-primary);">{{ p.display_name }}</strong>
             </div>
             <div class="plugin-meta">

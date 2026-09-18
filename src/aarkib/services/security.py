@@ -102,11 +102,40 @@ class AuthRateLimiter:
 
             return False, 0
 
-    def record_failure(self, ip: str) -> None:
+    def record_failure(self, ip: str, username: str | None = None) -> None:
         """Records a failed authentication attempt for the given IP."""
         now = time.time()
+        should_emit_lockout = False
+        attempts_count = 0
         with self._lock:
             self._attempts[ip].append(now)
+            attempts_count = len(self._attempts[ip])
+            if current_app:
+                if not current_app.config.get("AUTH_RATE_LIMIT_ENABLED", True):
+                    return
+                max_attempts = current_app.config.get(
+                    "AUTH_RATE_LIMIT_MAX_ATTEMPTS", self.max_attempts
+                )
+            else:
+                max_attempts = self.max_attempts
+            if attempts_count == max_attempts:
+                should_emit_lockout = True
+
+        if should_emit_lockout:
+            try:
+                from aarkib.services.events import EVENT_SECURITY_LOCKOUT, event_bus
+
+                event_bus.emit(
+                    EVENT_SECURITY_LOCKOUT,
+                    {
+                        "ip": ip,
+                        "attempts": attempts_count,
+                        "username": username,
+                        "timestamp": now,
+                    },
+                )
+            except Exception:
+                pass
 
     def reset(self, ip: str) -> None:
         """Clears failed attempts for an IP upon successful authentication."""

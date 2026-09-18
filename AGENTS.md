@@ -143,7 +143,8 @@ aarkib/
 │   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   │   ├── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
 │   │   ├── jellyfin.py       # Jellyfin protocol plugin
-│   │   └── mqtt.py           # MqttPlugin: Home Assistant Auto-Discovery, real-time media player, and MQTT commands
+│   │   ├── mqtt.py           # MqttPlugin: Home Assistant Auto-Discovery, real-time media player, and MQTT commands
+│   │   └── notifier.py       # NotificationPlugin: Apprise push notification integration and event hooks
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints
@@ -153,6 +154,7 @@ aarkib/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── events.py         # Internal thread-safe EventDispatcher publish-subscribe bus
+│   │   ├── notifier.py       # Apprise notification worker queue, debounced media batching, and test dispatch
 │   │   ├── backup.py         # Hot SQLite snapshot, ZIP packaging, validation, atomic database restore
 │   │   ├── scheduler.py      # Background maintenance scheduler (automated backups, library rescans, cache reaping)
 │   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting

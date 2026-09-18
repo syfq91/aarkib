@@ -100,93 +100,110 @@ def create_backup(
             {"archive_path": str(archive_path), "filename": archive_path.name},
         )
 
-        covers_dir = Path(app.config.get("COVERS_DIR", "data/covers"))
-        media_count = db.session.scalar(select(func.count(MediaItem.id))) or 0
+        try:
+            covers_dir = Path(app.config.get("COVERS_DIR", "data/covers"))
+            media_count = db.session.scalar(select(func.count(MediaItem.id))) or 0
 
-        # Create temporary working directory for the hot snapshot
-        with tempfile.TemporaryDirectory(prefix="aarkib_backup_") as tmpdir:
-            tmp_path = Path(tmpdir)
-            temp_db_path = tmp_path / DATABASE_FILENAME
+            # Create temporary working directory for the hot snapshot
+            with tempfile.TemporaryDirectory(prefix="aarkib_backup_") as tmpdir:
+                tmp_path = Path(tmpdir)
+                temp_db_path = tmp_path / DATABASE_FILENAME
 
-            # Perform atomic SQLite hot backup
-            raw_conn = db.engine.raw_connection()
-            try:
-                # Use connection.driver_connection (SQLAlchemy 2.0) or fallback to .connection
-                sqlite_source = getattr(raw_conn, "driver_connection", None)
-                if sqlite_source is None:
-                    sqlite_source = getattr(raw_conn, "connection", None)
-
-                dest_conn = sqlite3.connect(str(temp_db_path))
+                # Perform atomic SQLite hot backup
+                raw_conn = db.engine.raw_connection()
                 try:
-                    if hasattr(sqlite_source, "backup"):
-                        sqlite_source.backup(dest_conn)
-                    else:
-                        # Fallback for file-based DB if raw driver connection doesn't expose backup
-                        src_db_path = _get_sqlite_db_path(app)
-                        if src_db_path and src_db_path.is_file():
-                            shutil.copy2(src_db_path, temp_db_path)
+                    # Use connection.driver_connection (SQLAlchemy 2.0) or fallback to .connection
+                    sqlite_source = getattr(raw_conn, "driver_connection", None)
+                    if sqlite_source is None:
+                        sqlite_source = getattr(raw_conn, "connection", None)
+
+                    dest_conn = sqlite3.connect(str(temp_db_path))
+                    try:
+                        if hasattr(sqlite_source, "backup"):
+                            sqlite_source.backup(dest_conn)
                         else:
-                            raise RuntimeError(
-                                "Unable to snapshot database: backup API unavailable"
-                            )
+                            # Fallback for file-based DB if raw driver connection doesn't expose backup
+                            src_db_path = _get_sqlite_db_path(app)
+                            if src_db_path and src_db_path.is_file():
+                                shutil.copy2(src_db_path, temp_db_path)
+                            else:
+                                raise RuntimeError(
+                                    "Unable to snapshot database: backup API unavailable"
+                                )
+                    finally:
+                        dest_conn.close()
                 finally:
-                    dest_conn.close()
-            finally:
-                raw_conn.close()
+                    raw_conn.close()
 
-            db_checksum = _compute_sha256(temp_db_path)
-            covers_count = 0
+                db_checksum = _compute_sha256(temp_db_path)
+                covers_count = 0
 
-            # Write archive
-            with zipfile.ZipFile(
-                archive_path, "w", compression=zipfile.ZIP_DEFLATED
-            ) as zf:
-                # 1. Add snapshot database
-                zf.write(temp_db_path, arcname=DATABASE_FILENAME)
+                # Write archive
+                with zipfile.ZipFile(
+                    archive_path, "w", compression=zipfile.ZIP_DEFLATED
+                ) as zf:
+                    # 1. Add database
+                    zf.write(temp_db_path, arcname=DATABASE_FILENAME)
 
-                # 2. Add covers if requested and directory exists
-                if include_covers and covers_dir.is_dir():
-                    for cover_file in covers_dir.iterdir():
-                        if cover_file.is_file() and not cover_file.name.startswith("."):
-                            zf.write(cover_file, arcname=f"covers/{cover_file.name}")
-                            covers_count += 1
+                    # 2. Add covers if requested and directory exists
+                    if include_covers and covers_dir.is_dir():
+                        for cover_file in covers_dir.iterdir():
+                            if cover_file.is_file() and not cover_file.name.startswith(
+                                "."
+                            ):
+                                zf.write(
+                                    cover_file, arcname=f"covers/{cover_file.name}"
+                                )
+                                covers_count += 1
 
-                # 3. Create manifest
-                manifest = {
-                    "app_name": "Aarkib",
-                    "app_version": "0.1.0",
-                    "backup_format_version": 1,
-                    "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
-                    "database_checksum": f"sha256:{db_checksum}",
-                    "media_count": int(media_count),
-                    "covers_count": covers_count,
-                    "includes_covers": include_covers,
-                }
-                manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
-                zf.writestr(MANIFEST_FILENAME, manifest_bytes)
+                    # 3. Create manifest
+                    manifest = {
+                        "app_name": "Aarkib",
+                        "app_version": "0.1.0",
+                        "backup_format_version": 1,
+                        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                        "database_checksum": f"sha256:{db_checksum}",
+                        "media_count": int(media_count),
+                        "covers_count": covers_count,
+                        "includes_covers": include_covers,
+                    }
+                    manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
+                    zf.writestr(MANIFEST_FILENAME, manifest_bytes)
 
-        logger.info(
-            "Created Aarkib backup '%s' (items: %d, covers: %d)",
-            archive_path.name,
-            media_count,
-            covers_count,
-        )
-        prune_backups(app)
-        size_mb = (
-            round(archive_path.stat().st_size / (1024 * 1024), 2)
-            if archive_path.exists()
-            else 0.0
-        )
-        event_bus.emit(
-            EVENT_BACKUP_FINISHED,
-            {
-                "archive_path": str(archive_path),
-                "filename": archive_path.name,
-                "size_mb": size_mb,
-                "media_count": media_count,
-            },
-        )
-        return archive_path
+            logger.info(
+                "Created Aarkib backup '%s' (items: %d, covers: %d)",
+                archive_path.name,
+                media_count,
+                covers_count,
+            )
+            prune_backups(app)
+            size_mb = (
+                round(archive_path.stat().st_size / (1024 * 1024), 2)
+                if archive_path.exists()
+                else 0.0
+            )
+            event_bus.emit(
+                EVENT_BACKUP_FINISHED,
+                {
+                    "success": True,
+                    "archive_path": str(archive_path),
+                    "filename": archive_path.name,
+                    "size_mb": size_mb,
+                    "media_count": media_count,
+                },
+            )
+            return archive_path
+        except Exception as exc:
+            event_bus.emit(
+                EVENT_BACKUP_FINISHED,
+                {
+                    "success": False,
+                    "archive_path": str(archive_path),
+                    "filename": archive_path.name,
+                    "error": str(exc),
+                },
+            )
+            raise
 
 
 def validate_backup(archive_path: Path | str) -> tuple[bool, str, dict[str, Any]]:
