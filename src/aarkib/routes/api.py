@@ -1314,6 +1314,7 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
             "progress": prog,
             "locked_fields": item.get_locked_fields(),
             "provenance": item.get_field_provenance(),
+            "detailed_provenance": item.get_all_detailed_provenance(),
             "created_at": item.created_at.isoformat() if item.created_at else None,
         }
     )
@@ -2293,16 +2294,21 @@ def search_metadata_candidates(item_id: int) -> ResponseReturnValue:
     provider_name = request.args.get("provider")
     media_type = item.media_type or "all"
     item_id_val = item.id
+    creators = [c.name for c in item.creators] if item.creators else []
+    isbn = getattr(item, "isbn", None)
 
     # C3 fix: Detach DB session before performing external provider search
     db.session.close()
 
-    from aarkib.services.metadata import metadata_registry
+    from aarkib.services.metadata.matcher import MetadataMatcher
 
-    candidates = metadata_registry.search(
+    matcher = MetadataMatcher()
+    candidates = matcher.find_candidates(
+        item_or_query=query,
         media_type=media_type,
-        query=query,
         year=str(year)[:4] if year else None,
+        creators=creators,
+        isbn=isbn,
         provider_name=provider_name,
     )
 
@@ -2502,6 +2508,7 @@ def edit_media_metadata(item_id: int) -> ResponseReturnValue:
         "tags": [t.name for t in item.tags],
         "locked_fields": item.get_locked_fields(),
         "provenance": item.get_field_provenance(),
+        "detailed_provenance": item.get_all_detailed_provenance(),
     }
 
     return jsonify(

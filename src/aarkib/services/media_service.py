@@ -18,6 +18,7 @@ from aarkib.models import (
     Creator,
     Library,
     MediaItem,
+    MetadataSource,
     Tag,
     UserFavorite,
     UserProgress,
@@ -105,11 +106,20 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
     video episode codes, and audio track attributes.
     Returns the updated item; caller is responsible for committing.
     """
+    modified_fields: list[str] = []
+
     title = data.get("title")
     if title:
         item.title = str(title).strip()[:MAX_TITLE_LENGTH]
+        modified_fields.append("title")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("title", "user")
+            item.set_field_provenance(
+                "title",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=item.title,
+            )
 
     # Creators
     creators_input = data.get("creators") or data.get("authors")
@@ -121,8 +131,15 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         resolved_creators = resolve_or_create_creators(creator_names)
         if resolved_creators:
             item.creators = resolved_creators
+            modified_fields.append("creators")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("creators", "user")
+                item.set_field_provenance(
+                    "creators",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=creator_names,
+                )
 
     # Collection
     collection_name = data.get("collection") or data.get("series")
@@ -137,13 +154,27 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
                 pass
         else:
             item.series_index = None
+        modified_fields.append("collection")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("collection", "user")
+            item.set_field_provenance(
+                "collection",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=str(collection_name),
+            )
     elif "series" in data or "collection" in data:
         item.collection = None
         item.series_index = None
+        modified_fields.append("collection")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("collection", "user")
+            item.set_field_provenance(
+                "collection",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=None,
+            )
 
     # Tags / Categories
     tags_input = data.get("tags")
@@ -155,8 +186,15 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         resolved_tags = resolve_or_create_tags(tag_names)
         if resolved_tags:
             item.tags = resolved_tags
+            modified_fields.append("tags")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("tags", "user")
+                item.set_field_provenance(
+                    "tags",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=tag_names,
+                )
 
     # Optional descriptive fields
     if "description" in data:
@@ -164,47 +202,96 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         if description:
             description = str(description)[:MAX_DESCRIPTION_LENGTH]
         item.description = description
+        modified_fields.append("description")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("description", "user")
+            item.set_field_provenance(
+                "description",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=description,
+            )
     if "publisher" in data:
         publisher = data.get("publisher") or None
         if publisher:
             publisher = str(publisher).strip()[:MAX_PUBLISHER_LENGTH]
         item.publisher = publisher
+        modified_fields.append("publisher")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("publisher", "user")
+            item.set_field_provenance(
+                "publisher",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=publisher,
+            )
     if "publication_date" in data:
         item.publication_date = data.get("publication_date") or None
+        modified_fields.append("publication_date")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("publication_date", "user")
+            item.set_field_provenance(
+                "publication_date",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=item.publication_date,
+            )
     if "isbn" in data:
         isbn = data.get("isbn") or None
         if isbn:
             isbn = str(isbn).strip()[:MAX_ISBN_LENGTH]
         item.isbn = isbn
+        modified_fields.append("isbn")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("isbn", "user")
+            item.set_field_provenance(
+                "isbn",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=isbn,
+            )
     if "language" in data:
         language = data.get("language")
         if language:
             language = str(language).strip()[:MAX_LANGUAGE_LENGTH]
         item.language = language or "en"
+        modified_fields.append("language")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("language", "user")
+            item.set_field_provenance(
+                "language",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=item.language,
+            )
 
     # Video-specific metadata
     if "season" in data:
         try:
             item.season = int(data["season"]) if data["season"] is not None else None
+            modified_fields.append("season")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("season", "user")
+                item.set_field_provenance(
+                    "season",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=item.season,
+                )
         except ValueError, TypeError:
             pass
     if "episode" in data:
         try:
             item.episode = int(data["episode"]) if data["episode"] is not None else None
+            modified_fields.append("episode")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("episode", "user")
+                item.set_field_provenance(
+                    "episode",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=item.episode,
+                )
         except ValueError, TypeError:
             pass
 
@@ -214,15 +301,29 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
         if album:
             album = str(album).strip()[:MAX_PUBLISHER_LENGTH]
         item.album = album
+        modified_fields.append("album")
         if hasattr(item, "set_field_provenance"):
-            item.set_field_provenance("album", "user")
+            item.set_field_provenance(
+                "album",
+                "user",
+                source_type=MetadataSource.MANUAL,
+                confidence=1.0,
+                value=album,
+            )
     if "track_number" in data:
         try:
             item.track_number = (
                 int(data["track_number"]) if data["track_number"] is not None else None
             )
+            modified_fields.append("track_number")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("track_number", "user")
+                item.set_field_provenance(
+                    "track_number",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=item.track_number,
+                )
         except ValueError, TypeError:
             pass
     if "disc_number" in data:
@@ -230,12 +331,21 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
             item.disc_number = (
                 int(data["disc_number"]) if data["disc_number"] is not None else None
             )
+            modified_fields.append("disc_number")
             if hasattr(item, "set_field_provenance"):
-                item.set_field_provenance("disc_number", "user")
+                item.set_field_provenance(
+                    "disc_number",
+                    "user",
+                    source_type=MetadataSource.MANUAL,
+                    confidence=1.0,
+                    value=item.disc_number,
+                )
         except ValueError, TypeError:
             pass
 
-    # Field locking
+    # Field locking & Protection Invariant:
+    # If the user explicitly provided locked_fields, apply that list.
+    # Otherwise, automatically lock all fields that were modified by the user.
     if "locked_fields" in data:
         raw_locks = data["locked_fields"]
         if isinstance(raw_locks, list):
@@ -244,6 +354,9 @@ def edit_media_metadata(item: MediaItem, data: dict) -> MediaItem:
             item.set_locked_fields(
                 [x.strip() for x in raw_locks.split(",") if x.strip()]
             )
+    else:
+        for f in modified_fields:
+            item.lock_field(f)
 
     return item
 

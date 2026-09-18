@@ -15,8 +15,10 @@ from aarkib.models.media import (
     AudioTrackMixin,
     MediaItemMixin,
     MediaType,
+    MetadataSource,
     PlayableItemMixin,
     VideoItemMixin,
+    resolve_metadata_source_type,
 )
 from aarkib.models.media_item import MediaItem
 from aarkib.models.metadata_cache import MetadataCacheEntry
@@ -48,6 +50,8 @@ __all__ = [
     "Bookmark",
     "JobRecord",
     "MediaType",
+    "MetadataSource",
+    "resolve_metadata_source_type",
     "MediaItemMixin",
     "PlayableItemMixin",
     "AudiobookItemMixin",

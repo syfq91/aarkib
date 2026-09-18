@@ -14,6 +14,11 @@ from aarkib.services.metadata.limiter import (
     musicbrainz_limiter,
     tmdb_limiter,
 )
+from aarkib.services.metadata.matcher import (
+    CandidateMatch,
+    MetadataMatcher,
+    calculate_match_confidence,
+)
 from aarkib.services.metadata.providers.google_books import GoogleBooksProvider
 from aarkib.services.metadata.providers.musicbrainz import MusicBrainzProvider
 from aarkib.services.metadata.providers.open_library import OpenLibraryProvider
@@ -24,6 +29,9 @@ from aarkib.services.metadata.registry import (
 )
 
 __all__ = [
+    "CandidateMatch",
+    "MetadataMatcher",
+    "calculate_match_confidence",
     "MetadataProvider",
     "MetadataSearchResult",
     "MediaMetadataDetails",

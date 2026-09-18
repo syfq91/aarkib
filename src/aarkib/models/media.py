@@ -23,6 +23,36 @@ class MediaType(StrEnum):
     PODCAST = "podcast"
 
 
+class MetadataSource(StrEnum):
+    """Classification of metadata provenance sources."""
+
+    AUTOMATIC = "automatic"
+    DERIVED = "derived"
+    MANUAL = "manual"
+
+
+def resolve_metadata_source_type(source: str) -> MetadataSource:
+    """Classifies a source string into AUTOMATIC, DERIVED, or MANUAL."""
+    s = (source or "").lower().strip()
+    if s in ("user", "manual", "manual_user", "webui", "api"):
+        return MetadataSource.MANUAL
+    if s in (
+        "file_metadata",
+        "file_tags",
+        "embedded",
+        "derived",
+        "scanner",
+        "id3",
+        "exif",
+        "ffprobe",
+        "epub",
+        "comic_info",
+        "pdf",
+    ):
+        return MetadataSource.DERIVED
+    return MetadataSource.AUTOMATIC
+
+
 class MediaItemMixin:
     """Declarative mixin defining standard attributes shared by all media items.
 
@@ -202,8 +232,8 @@ class MediaItemMixin:
         current.discard(field_name)
         self.set_locked_fields(list(current))
 
-    def get_field_provenance(self) -> dict[str, str]:
-        """Returns mapping of field names to their source provenance (e.g. 'user', 'file_metadata', 'googlebooks')."""
+    def _get_raw_provenance(self) -> dict[str, Any]:
+        """Returns the raw provenance dictionary stored in JSON."""
         if not self.metadata_provenance:
             return {}
         try:
@@ -212,10 +242,102 @@ class MediaItemMixin:
         except json.JSONDecodeError, TypeError:
             return {}
 
-    def set_field_provenance(self, field_name: str, source: str) -> None:
-        """Sets the source provenance for a specific field name."""
-        curr = self.get_field_provenance()
-        curr[field_name] = str(source).strip()
+    def get_field_provenance(self) -> dict[str, str]:
+        """Returns mapping of field names to their source provenance name (e.g. 'user', 'file_metadata', 'googlebooks')."""
+        raw = self._get_raw_provenance()
+        result: dict[str, str] = {}
+        for k, v in raw.items():
+            if isinstance(v, dict):
+                result[k] = str(v.get("source") or v.get("source_type") or "unknown")
+            else:
+                result[k] = str(v)
+        return result
+
+    def get_detailed_field_provenance(self, field_name: str) -> dict[str, Any] | None:
+        """Returns the rich provenance record for a specific field, or None if untracked."""
+        raw = self._get_raw_provenance()
+        entry = raw.get(field_name)
+        if entry is None:
+            return None
+        if isinstance(entry, dict):
+            return entry
+        source_str = str(entry)
+        source_type = resolve_metadata_source_type(source_str)
+        return {
+            "source": source_str,
+            "source_type": source_type.value,
+            "source_id": source_str,
+            "confidence": 1.0,
+            "updated_at": None,
+            "value": getattr(self, field_name, None),
+        }
+
+    def get_all_detailed_provenance(self) -> dict[str, dict[str, Any]]:
+        """Returns all field provenance entries in rich structured format."""
+        raw = self._get_raw_provenance()
+        result: dict[str, dict[str, Any]] = {}
+        for k in raw:
+            entry = self.get_detailed_field_provenance(k)
+            if entry is not None:
+                result[k] = entry
+        return result
+
+    def get_provenance_type_for_field(self, field_name: str) -> MetadataSource | None:
+        """Returns the MetadataSource type (MANUAL, DERIVED, AUTOMATIC) for a field."""
+        detailed = self.get_detailed_field_provenance(field_name)
+        if not detailed:
+            return None
+        st = detailed.get("source_type")
+        if st:
+            try:
+                return MetadataSource(st)
+            except ValueError:
+                pass
+        return resolve_metadata_source_type(str(detailed.get("source", "")))
+
+    def set_field_provenance(
+        self,
+        field_name: str,
+        source: str,
+        source_type: MetadataSource | str | None = None,
+        source_id: str | None = None,
+        confidence: float | None = None,
+        value: Any = None,
+        updated_at: str | None = None,
+    ) -> None:
+        """Sets rich source provenance for a specific field name."""
+        resolved_type = (
+            MetadataSource(source_type)
+            if isinstance(source_type, str)
+            else (source_type or resolve_metadata_source_type(source))
+        )
+        conf = (
+            confidence
+            if confidence is not None
+            else (1.0 if resolved_type == MetadataSource.MANUAL else 0.8)
+        )
+        timestamp = updated_at or datetime.now(UTC).isoformat()
+
+        val = value if value is not None else getattr(self, field_name, None)
+        if isinstance(val, (list, set)):
+            val_repr = [
+                getattr(x, "name", str(x)) if hasattr(x, "name") else str(x)
+                for x in val
+            ]
+        elif hasattr(val, "name"):
+            val_repr = val.name
+        else:
+            val_repr = val
+
+        curr = self._get_raw_provenance()
+        curr[field_name] = {
+            "source": str(source).strip(),
+            "source_type": resolved_type.value,
+            "source_id": str(source_id or source).strip(),
+            "confidence": round(float(conf), 2),
+            "updated_at": timestamp,
+            "value": val_repr,
+        }
         self.metadata_provenance = json.dumps(curr)
 
     def get_provenance_for_field(self, field_name: str) -> str | None:

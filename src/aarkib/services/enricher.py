@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from aarkib.extensions import db
-from aarkib.models import MediaItem
+from aarkib.models import MediaItem, MetadataSource
 from aarkib.services.thumbnail import generate_cover_webp
 
 if TYPE_CHECKING:
@@ -36,9 +36,7 @@ def enrich_media_item(
     # 1. Detach search parameters before external network I/O
     item_id = item.id
     media_type = item.media_type or "all"
-    is_book = getattr(item, "is_book", False)
     item_isbn = getattr(item, "isbn", None)
-    item_title = item.title
     first_author = item.creators[0].name if getattr(item, "creators", None) else None
     item_year = getattr(item, "publication_date", None) or getattr(
         item, "release_year", None
@@ -53,39 +51,46 @@ def enrich_media_item(
     db.session.close()
 
     details = None
+    confidence_val = 1.0
+    source_id_val = None
+
     if candidate_external_id and candidate_provider:
         details = metadata_registry.fetch_details(
             candidate_provider,
             candidate_external_id,
             media_type=media_type,
         )
+        source_id_val = f"{candidate_provider}:{candidate_external_id}"
+        confidence_val = 1.0
     else:
-        search_query = ""
-        if is_book and item_isbn:
-            search_query = f"isbn:{item_isbn}"
-        else:
-            search_query = item_title
-            if is_book and first_author and first_author != "Unknown Author":
-                search_query += f" {first_author}"
+        from aarkib.services.metadata.matcher import MetadataMatcher
 
-        candidates = metadata_registry.search(
+        matcher = MetadataMatcher()
+        candidate_matches = matcher.find_candidates(
+            item_or_query=item,
             media_type=media_type,
-            query=search_query,
             year=item_year,
+            creators=[first_author] if first_author else None,
+            isbn=item_isbn,
             provider_name=provider if provider != "all" else None,
         )
-        if candidates and candidates[0].score >= 0.5:
-            top = candidates[0]
+        best = matcher.select_best_match(candidate_matches, min_confidence=0.5)
+        if best:
             details = metadata_registry.fetch_details(
-                top.provider, top.id, media_type=media_type
+                best.provider, best.id, media_type=media_type
             )
+            confidence_val = best.confidence_score
+            source_id_val = f"{best.provider}:{best.id}"
 
     if not details:
         return {"status": "not_found", "media_id": item_id, "changes": []}
 
     # 2. Download and prepare cover art while session is closed
     cover_filename = None
-    if "cover_image" not in locked_fields and (not has_cover or overwrite):
+    can_download_cover = (("cover_image" not in locked_fields) or overwrite) and (
+        not has_cover or overwrite
+    )
+    if can_download_cover:
         cover_bytes = details.poster_bytes
         if not cover_bytes and details.poster_url:
             from aarkib.services.metadata.client import ResilientHttpClient
@@ -107,156 +112,139 @@ def enrich_media_item(
 
     changes: list[str] = []
     provider_src = details.provider or "external"
+    final_source_id = source_id_val or f"{provider_src}:{details.id}"
+
+    def can_update(field_name: str, has_val: bool) -> bool:
+        if target_item.is_field_locked(field_name):
+            return overwrite
+        return (not has_val) or overwrite
+
+    def record_prov(field_name: str, val: Any) -> None:
+        if hasattr(target_item, "set_field_provenance"):
+            target_item.set_field_provenance(
+                field_name,
+                provider_src,
+                source_type=MetadataSource.AUTOMATIC,
+                source_id=final_source_id,
+                confidence=confidence_val,
+                value=val,
+            )
 
     # Title
-    if (
-        not target_item.is_field_locked("title")
-        and (not target_item.title or overwrite)
-        and details.title
-    ):
+    if can_update("title", bool(target_item.title)) and details.title:
         target_item.title = details.title
         changes.append("title")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("title", provider_src)
+        record_prov("title", details.title)
 
     # Overview / Description
-    if (
-        not target_item.is_field_locked("description")
-        and (not target_item.description or overwrite)
-        and details.overview
-    ):
+    if can_update("description", bool(target_item.description)) and details.overview:
         target_item.description = details.overview
         changes.append("description")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("description", provider_src)
+        record_prov("description", details.overview)
 
     # Creators
-    if (
-        not target_item.is_field_locked("creators")
-        and (not target_item.creators or overwrite)
-        and details.creators
-    ):
+    if can_update("creators", bool(target_item.creators)) and details.creators:
         target_item.creators = resolve_or_create_creators(details.creators)
         changes.append("creators")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("creators", provider_src)
+        record_prov("creators", details.creators)
 
     # Publisher
-    if (
-        not target_item.is_field_locked("publisher")
-        and (not target_item.publisher or overwrite)
-        and details.publisher
-    ):
+    if can_update("publisher", bool(target_item.publisher)) and details.publisher:
         target_item.publisher = details.publisher
         changes.append("publisher")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("publisher", provider_src)
+        record_prov("publisher", details.publisher)
 
     # Release / Publication date
     if (
-        not target_item.is_field_locked("publication_date")
-        and (not target_item.publication_date or overwrite)
+        can_update("publication_date", bool(target_item.publication_date))
         and details.release_date
     ):
         target_item.publication_date = str(details.release_date)[:10]
         changes.append("publication_date")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("publication_date", provider_src)
+        record_prov("publication_date", target_item.publication_date)
 
     # Language
     if (
-        not target_item.is_field_locked("language")
-        and (not target_item.language or overwrite)
+        can_update(
+            "language",
+            bool(target_item.language and target_item.language != "en"),
+        )
         and details.language
     ):
         target_item.language = details.language
         changes.append("language")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("language", provider_src)
+        record_prov("language", details.language)
 
     # Genres / Tags
     if (
-        not target_item.is_field_locked("tags")
+        can_update("tags", bool(target_item.tags))
         and not target_item.is_field_locked("genres")
-        and (not target_item.tags or overwrite)
         and details.genres
     ):
         target_item.tags = resolve_or_create_tags(details.genres)
         changes.append(f"tags ({len(target_item.tags)})")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("tags", provider_src)
+        record_prov("tags", [t.name for t in target_item.tags])
 
     # Video specifics
     if (
         hasattr(target_item, "season")
-        and not target_item.is_field_locked("season")
+        and can_update("season", target_item.season is not None)
         and details.season is not None
     ):
         target_item.season = details.season
         changes.append("season")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("season", provider_src)
+        record_prov("season", details.season)
     if (
         hasattr(target_item, "episode")
-        and not target_item.is_field_locked("episode")
+        and can_update("episode", target_item.episode is not None)
         and details.episode is not None
     ):
         target_item.episode = details.episode
         changes.append("episode")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("episode", provider_src)
+        record_prov("episode", details.episode)
     if (
         hasattr(target_item, "duration")
-        and not target_item.is_field_locked("duration")
+        and can_update("duration", bool(target_item.duration))
         and details.duration
-        and not target_item.duration
     ):
         target_item.duration = details.duration
         changes.append("duration")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("duration", provider_src)
+        record_prov("duration", details.duration)
 
     # Music specifics
     if (
         hasattr(target_item, "album")
-        and not target_item.is_field_locked("album")
+        and can_update("album", bool(target_item.album))
         and details.album
-        and (not target_item.album or overwrite)
     ):
         target_item.album = details.album
         changes.append("album")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("album", provider_src)
+        record_prov("album", details.album)
 
     # Book / Comic specifics
     if (
         hasattr(target_item, "page_count")
-        and not target_item.is_field_locked("page_count")
-        and (not target_item.page_count or overwrite)
+        and can_update("page_count", bool(target_item.page_count))
         and details.page_count
     ):
         target_item.page_count = details.page_count
         changes.append("page_count")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("page_count", provider_src)
+        record_prov("page_count", details.page_count)
 
     if (
         hasattr(target_item, "isbn")
-        and not target_item.is_field_locked("isbn")
-        and (not target_item.isbn or overwrite)
+        and can_update("isbn", bool(target_item.isbn))
         and details.isbn
     ):
         target_item.isbn = details.isbn
         changes.append("isbn")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("isbn", provider_src)
+        record_prov("isbn", details.isbn)
 
     # Cover
-    if cover_filename:
+    if cover_filename and can_update("cover_image", bool(target_item.cover_image_path)):
         target_item.cover_image_path = cover_filename
         changes.append("cover_image")
-        if hasattr(target_item, "set_field_provenance"):
-            target_item.set_field_provenance("cover_image", provider_src)
+        record_prov("cover_image", cover_filename)
 
     # Stash external_id
     if details.id:
