@@ -18,6 +18,9 @@
 4. **Non-Destructive Storage**: Original media archives (`.epub`, `.cbz`, `.mp3`, `.mp4`, `.pdf`) are strictly read-only and never modified. Extracted covers, thumbnails, and optimized device variants are cached separately.
 5. **Zero-Friction Web Reading & Media Access**: Built-in, responsive web readers for EPUB, PDF, and CBZ, an HTML5 video player with client-side progress tracking, and a persistent audio player for audiobooks and music with offline asset caching via PWA Service Workers.
 6. **Extensible Multi-Media Plugin Architecture**: Core data models and scanner pipeline decoupled from file types through abstract `MediaPlugin` handlers, protocol providers, and declarative mixins.
+7. **Single-Instance Design & Explicit Non-Goals**:
+   - **Single-Node Architecture**: Aarkib is deliberately engineered as an integrated, single-instance media server. Compute, disk I/O, SQLite database coordination, background task execution, and media storage reside on a single machine, NAS appliance, or container host.
+   - **Horizontal Multi-Replica Clustering is an Explicit Non-Goal**: Deploying multiple concurrent Aarkib server replicas against a shared network database behind a load balancer is explicitly out-of-scope. SQLite in WAL mode requires POSIX shared-memory coordination (`-shm`) incompatible with multi-server network filesystem writers, and the in-process `ThreadPoolExecutor` manages task concurrency in local host memory. Single-instance deployment eliminates external broker overhead (Redis, RabbitMQ, PostgreSQL) and preserves ultra-low resource utilization (<50 MB RAM at idle).
 
 ---
 
@@ -298,6 +301,10 @@ Aarkib isolates heavy operations from the Flask HTTP request/response cycle usin
   - **Zero Broker Footprint**: Aarkib intentionally avoids external distributed message brokers (such as Celery, Redis, RabbitMQ, or PostgreSQL). This keeps server startup instant and total RAM consumption under 50 MB at idle, making Aarkib ideal for single-node homelabs, Raspberry Pis, and NAS appliances.
   - **SQLite Job Persistence**: Completed and running jobs are persisted directly to the SQLite `background_jobs` table, ensuring auditability and history across server restarts.
   - **Explicit Scaling Boundary**: The single-node in-process queue is a deliberate architectural choice. In homelab and personal cloud contexts, compute and disk I/O reside on a single machine; external queuing distributed across multiple worker nodes would add operational complexity with zero performance benefit.
+- **Startup Crash Reconciliation & Durability (`reconcile_on_startup`)**:
+  - If the server process terminates abruptly (such as host reboot, power loss, OOM kill, or container recreation) while background jobs are active, `job_manager.reconcile_on_startup(app)` executes during Flask application bootstrap in `aarkib/__init__.py`.
+  - It queries the `background_jobs` table for all records lingering in `queued` or `running` states and transitions them to `JobStatus.INTERRUPTED` with `finished_at = datetime.now(UTC)`, `progress_message = "Interrupted by server restart"`, and `error_message = "Job interrupted by server restart"`.
+  - **No Uncontrolled Auto-Retries**: Interrupted jobs are intentionally marked as terminal rather than automatically resumed. This defends against recursive crash loops if an interrupted scan was triggered by a poison-pill corrupt file. Users can inspect interrupted tasks in **Settings → Background Jobs** and trigger rescans manually.
 
 ---
 
@@ -328,23 +335,35 @@ Aarkib decouples runtime application preferences from static environment configu
 
 Aarkib features an automated streaming and transcoding supervisor inspired by Plex and Jellyfin, shielding frontend clients from raw video/audio container incompatibilities while minimizing CPU load:
 
-1. **Deterministic Playback Decision Matrix**:
-   Exposed via `GET /api/media/<id>/playback`, the engine analyzes client capabilities and media stream descriptors:
-   - **Direct Play**: Codecs (`h264`, `aac`, etc.) and container are natively supported by the web browser or client application. Media is served directly with HTTP 206 byte-range seeking.
-   - **Direct Remux**: Codecs are compatible, but container is incompatible (e.g. `.mkv` or `.avi` containing H.264/AAC). Transmuxed on-the-fly to fragmented MP4 (`fmp4`) without re-encoding video.
-   - **Audio Transcode**: Video stream is copied directly; incompatible multi-channel or lossless audio (e.g. AC3, DTS, TrueHD) is transcoded on-the-fly to stereo AAC.
-   - **Full Transcode / HLS**: Incompatible video codec (e.g. HEVC/H.265 on older devices, MPEG-2) or explicit quality downscaling (1080p, 720p, 480p). Transcoded into fragmented HLS playlists (`.m3u8` with `.ts`/`.m4s` segments).
+1. **Deterministic Playback Decision Tree**:
+   Exposed via `GET /api/media/<id>/playback`, `evaluate_playback_strategy()` determines how media is delivered to web and mobile clients based on stream inspection (`probe_media_streams` via `ffprobe` or pure-Python atom fallback):
+   - **Container Native**: File extension in `WEB_NATIVE_CONTAINERS` (`.mp4`, `.webm`).
+   - **Video Native**: Codec in `WEB_NATIVE_VIDEO_CODECS` (`h264`, `vp8`, `vp9`, `av1`) AND not 10-bit color (pixel format does not contain `10` or `p010`).
+   - **Audio Native**: Codec in `WEB_NATIVE_AUDIO_CODECS` (`aac`, `mp3`, `opus`, `vorbis`, `flac`).
+   - **Remuxable**: Container in `REMUXABLE_CONTAINERS` (`.mkv`, `.m4v`, `.mov`).
 
-2. **Hardware Acceleration (VA-API)**:
+   Using Python 3.14 structural pattern matching `match (container_native, video_native, audio_native)`:
+   - **`case (True, True, True)` $\to$ `DIRECT_PLAY`**: Served directly from original storage via HTTP 206 byte-range seeking with zero CPU overhead.
+   - **`case (False, True, True) if ext in REMUXABLE_CONTAINERS` $\to$ `DIRECT_REMUX`**: Video and audio streams are copied directly (`-c:v copy -c:a copy`) into fragmented MP4 (`fmp4`) piped on-the-fly to the HTTP client with zero disk caching and negligible CPU consumption.
+   - **`case (_, True, False)` $\to$ `AUDIO_TRANSCODE`**: Video stream is copied without re-encoding (`-c:v copy`); incompatible multichannel/lossless audio (AC3, DTS, TrueHD) is transcoded to stereo AAC (`-c:a aac -b:a 192k`).
+   - **`case _` $\to$ `FULL_TRANSCODE`**: Incompatible video codecs (e.g. HEVC/H.265 on non-supporting devices, MPEG-2, VC-1) or explicit resolution downscaling (1080p, 720p, 480p). Media is transcoded into segmented HLS streams (`.m3u8` playlist with `.ts` or `.m4s` segments).
+
+2. **FFmpeg Subprocess Lifecycle & Process Group Supervision**:
+   - **Process Group Isolation (`os.setsid`)**: All FFmpeg subprocesses are launched with argument lists (never `shell=True`) and attached to distinct process groups via `preexec_fn=os.setsid`. This ensures that killing the process group terminates all child threads and helper forks, preventing orphaned processes.
+   - **Graceful Termination & Escalation**: Stopping a transcode session sends `SIGTERM` to the process group (`os.killpg(pgid, signal.SIGTERM)`), allows a brief grace window, and escalates to `SIGKILL` (`signal.SIGKILL`) if unresponsive.
+   - **Inactivity Session Reaper**: `TranscodeSupervisor` runs a background reaper thread (`_reap_loop`) checking sessions every 10 seconds. Sessions inactive for longer than `idle_timeout` (default: 300 seconds) are automatically terminated and their temporary chunk directories pruned.
+   - **Shutdown Hook**: An `atexit.register(self.cleanup_all)` handler executes during server shutdown, killing all running FFmpeg processes and purging active session directories.
+
+3. **Transcode Disk Cache Bounding & Eviction**:
+   - **Active Segment Pruning**: HLS sessions continuously prune old media segments outside the sliding live window (`_prune_old_segments`) to prevent runaway disk growth during long viewing sessions.
+   - **Session Directory Eviction**: Temporary session segments reside in `TRANSCODE_DIR/hls_{session_id}/`. Upon session termination (user pause/close or idle reaper trigger), the directory is purged immediately via `shutil.rmtree`.
+   - **Orphan Directory Reaper (`clean_stale_directories`)**: In the event of an ungraceful host power loss or crash, `clean_stale_directories()` scans `TRANSCODE_DIR` at startup and during scheduled maintenance runs (`CACHE_REAP_HOURS`, default: 24h via `SchedulerService`), deleting any abandoned `hls_*` directories.
+
+4. **Hardware Acceleration (VA-API)**:
    - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using lightweight FFmpeg test probes (`-hwaccel vaapi -c:v h264_vaapi`) with safe argument lists.
    - Enables hardware-accelerated decoding and scaling for Intel QuickSync and AMD Radeon GPUs (`-hwaccel vaapi -vaapi_device ...`), drastically reducing CPU consumption in Docker and bare-metal environments.
 
-3. **Transcode Supervisor & Session Lifecycle**:
-   - `TranscodeSupervisor` tracks active HLS and remuxing sessions with unique session tokens.
-   - All FFmpeg processes run inside dedicated process groups (`os.setsid`) to guarantee cleanup of subprocess trees upon client disconnect or abort.
-   - An asynchronous background reaper thread periodically audits active sessions, cleaning expired HLS segments and terminating idle processes after the inactivity threshold (`idle_timeout`).
-
-4. **Subtitle Extraction**:
+5. **Subtitle Extraction**:
    - Embedded SRT, ASS, or SSA subtitles are extracted on-the-fly and converted to standard WebVTT (`.vtt`) format for seamless in-browser overlay rendering.
 
 ---
@@ -378,6 +397,15 @@ Aarkib includes a zero-downtime, crash-consistent backup and restore pipeline:
    - To avoid excessive disk I/O when crawling multi-gigabyte video or audiobook files (e.g. 10GB+ MKVs), Aarkib utilizes a fast partial fingerprint (`compute_fast_fingerprint()`) for files over 32 MB.
    - Computes SHA-256 over: `file_size (8 bytes) + first 64 KB + last 64 KB`.
    - Streaming hash computations (`compute_sha256()`) utilize an optimized 1 MB buffer chunk size.
+3. **Reactive Index Synchronization & Mutation Lifecycle**:
+   - `media_items_fts` is a dedicated SQLite FTS5 virtual table indexing `title`, `creators`, `collection`, `description`, and `tags` using Porter stemming and `unicode61` tokenization.
+   - Kept in continuous synchronization with the primary catalog through reactive application hooks:
+     - **Library Crawler Ingestion**: Newly discovered or updated media items are indexed in batches of 500 via `sync_batch_fts(new_item_ids)` to maximize SQLite throughput and stay within expression variable limits.
+     - **Filesystem Watcher**: Background inotify file creation or update triggers immediate atomic synchronization via `sync_media_item_fts(item.id)`; file deletion triggers `remove_media_item_fts(item_id)`.
+     - **Metadata Editing**: Updating title, creators, collections, or tags via `edit_media_metadata` (`routes/api.py`) immediately issues `sync_media_item_fts(item.id)`.
+     - **Online Metadata Enrichment**: When online providers populate missing descriptions, creators, or tags (`services/enricher.py`), `sync_media_item_fts` updates the FTS index immediately.
+     - **Media Deletion**: Removing media from the catalog issues `remove_media_item_fts(item_id)` to prevent phantom search results.
+     - **Catalog Reindexing**: Administrators can trigger a complete atomic rebuild of the FTS index via `POST /api/search/reindex` or the Web UI (`rebuild_search_index()`), safely swapping the virtual table without downtime.
 
 ---
 
@@ -388,6 +416,62 @@ Aarkib features a non-blocking, lightweight background scheduler daemon running 
 2. **Periodic Library Rescan**: Triggers full directory rescans at configurable intervals (`PERIODIC_RESCAN_HOURS`, 0 to disable) to detect new media on network mounts (NFS/SMB) that do not support inotify/FSEvents filesystem watcher notifications.
 3. **Stale Cache Reaper**: Periodically cleans up orphaned or expired HLS transcode segments and temporary files older than 24 hours (`CACHE_REAP_HOURS`).
 4. **Dynamic Reconfiguration**: Integrates with `settings_service.py` to hot-reload intervals and active policies without requiring server restarts. Automatically disabled when `TESTING=True` to guarantee unit test isolation.
+
+---
+
+### 3.13 Metadata Enrichment & External Provider Subsystem (`services/enricher.py`, `services/metadata/`)
+
+Aarkib integrates a multi-provider metadata retrieval and caching engine designed to fetch rich summaries, high-resolution covers, publication dates, and series metadata across books, comics, video, audiobooks, music, and podcasts:
+
+1. **Pluggable Provider Architecture (`MetadataProviderRegistry`)**:
+   - Built on an extensible `MetadataProvider` base class with uniform `search()` and `fetch_details()` signatures.
+   - Coordinates 7 external providers out-of-the-box:
+     - **Google Books** (`google_books.py`): Books and literature.
+     - **Open Library** (`open_library.py`): Books, editions, and cover imagery.
+     - **ComicVine** (`comicvine.py`): Comic issues, volumes, and publishers.
+     - **The Movie Database (TMDB)** (`tmdb.py`): Feature films, television series, seasons, and episodes.
+     - **MusicBrainz** (`musicbrainz.py`): Music albums, artists, audiobooks, and release tracks.
+     - **iTunes Podcasts** (`itunes.py`): Podcast directory search and high-resolution feed artwork.
+     - **PodcastIndex** (`podcastindex.py`): Open podcast directory search with SHA-1 auth headers.
+
+2. **Priority Waterfall & Conflict Resolution**:
+   - **Type-Specific Waterfalls**: When querying metadata for an item, queries follow `DEFAULT_WATERFALLS` defined per media type:
+     - `book`: `["googlebooks", "openlibrary"]`
+     - `comic`: `["comicvine", "openlibrary", "googlebooks"]`
+     - `video`: `["tmdb"]`
+     - `music`: `["musicbrainz"]`
+     - `audiobook`: `["googlebooks", "openlibrary", "musicbrainz"]`
+     - `podcast`: `["itunes", "podcastindex"]`
+   - **Candidate Deduplication**: Results returned from multiple providers are deduplicated on `f"{title.lower()}:{year}"` and ordered by relevance match score.
+   - **Field Conflict Resolution**: Automated enrichment fills empty attributes while respecting user-locked fields (`locked_fields`). Users can override automated matches at any time via the Web UI detail editor or `POST /api/media/<id>/enrich` with an explicit provider and external ID.
+
+3. **Token-Bucket Rate Limiting (`services/metadata/limiter.py`)**:
+   - Outbound requests strictly comply with third-party rate limits using thread-safe `TokenBucketRateLimiter` instances:
+     - **MusicBrainz**: Strict $1.0\text{ req/sec}$ max (enforcing MusicBrainz Foundation fair use).
+     - **TMDB**: $4.0\text{ req/sec}$ with burst capacity of 40 tokens.
+     - **Google Books & Open Library**: $5.0\text{ req/sec}$ with burst capacity of 20 tokens.
+     - **ComicVine**: $1.0\text{ req/sec}$ with burst capacity of 2 tokens.
+   - When token buckets are exhausted, background worker threads cleanly block for the required replenishment duration without generating HTTP 429 errors or aborting batch operations.
+
+4. **Persistent SQLite Response Cache (`models/metadata_cache.py`, `services/metadata/cache.py`)**:
+   - All external HTTP queries and payloads are persisted to SQLite in the `metadata_cache` table (`MetadataCacheEntry`).
+   - **Deterministic Cache Keys**: `cache_key = sha256(f"{provider}:{endpoint}:{normalized_params}")`.
+   - **Configurable TTL**: Cache validity defaults to 30 days (`METADATA_CACHE_TTL_DAYS`). Cache hits bypass outbound network calls entirely, preventing duplicate API requests across rescans.
+   - **Cache Pruning**: `MetadataCacheManager.prune_expired()` purges stale entries during maintenance cycles.
+
+---
+
+### 3.14 Storage & Cache Management Policies
+
+Aarkib maintains strict separation between permanent user media and generated application caches:
+
+| Directory | Content Type | Eviction & Lifecycle Policy | Disk Bound Strategy |
+| :--- | :--- | :--- | :--- |
+| **`User Media`** | Original files (`.epub`, `.mp4`, etc.) | **Read-Only / Never Evicted**. Aarkib never modifies, re-encodes, or deletes source files. | User-managed storage. |
+| **`data/covers/`** | WebP cover art & thumbnails | Retained while media item exists. Pruned on media deletion. Included in hot database backups. | Bounded by total media catalog count (~50–200 KB per item). |
+| **`data/optimized/`** | E-ink EPUB variants (`{hash}_{preset}.epub`) | **Hash-Addressed Immutable Cache**. Persisted across sessions to avoid repeated dithering/resizing CPU load on low-power servers. Can be cleared manually anytime. | Bounded by unique EPUB count $\times$ accessed e-ink presets (~0.5–2 MB per variant). |
+| **`data/transcode/`** | Segmented HLS chunks (`hls_{session_id}/`) | **Ephemeral Streaming Cache**. Sliding window segment pruning during active streams, 300s idle session reaper, `atexit` wipe on shutdown, and 24h stale folder reap via `SchedulerService`. | Ephemeral. Operators on SD card storage (e.g. Raspberry Pi) can mount `data/transcode` to a `tmpfs` RAM disk to preserve flash drive health. |
+| **`data/backups/`** | Hot SQLite & cover snapshot ZIPs | **Automated Quota Pruning**. Oldest archives beyond `BACKUP_RETENTION_COUNT` (default: 7) are purged automatically upon each backup creation. | Bounded by `BACKUP_RETENTION_COUNT` $\times$ database + cover size. |
 
 ---
 
@@ -542,6 +626,27 @@ erDiagram
 - **Short Write Transactions & Session Detachment**: Database sessions are strictly detached (`db.session.close()`) prior to external HTTP requests (enrichment, artwork fetching), progressive FFmpeg pipe streaming, and `send_file` downloads. This guarantees SQLite connections are never held open during client network latency or subprocess execution.
 - Automatic schema migration (`migrate_database()`) checks `db.metadata.tables` against runtime SQLite columns and executes non-destructive `ALTER TABLE ADD COLUMN` operations on startup.
 
+### Database Indexing Strategy & Query Optimization
+To sustain sub-millisecond query latency across libraries containing tens of thousands of media files, Aarkib implements targeted B-tree indexes across all critical filtering, sorting, deduplication, and relational joins:
+
+1. **High-Cardinality & Deduplication Indexes**:
+   - `media_items.file_hash` (`index=True`): Enables $O(1)$ SHA-256 deduplication during library crawler crawls, avoiding expensive full-table scans.
+   - `media_items.original_file_path` (`unique=True`): Enforces unique filesystem paths and accelerates filesystem watcher change-detection sweeps.
+   - `media_items.external_id` (`index=True`): Speeds up provider entity lookup (e.g. `tmdb:1234`, `comicvine:5678`) to prevent duplicate enrichment ingestion.
+
+2. **Categorization & Shelf Filtering Indexes**:
+   - `media_items.media_type` (`index=True`): Powers instant filtering across Bookshelf, Comics, Movies, TV, Music, and Podcasts.
+   - `media_items.library_id` (`index=True`): Optimizes scoped library directory queries and folder deletion cascades.
+   - `media_items.file_format` (`index=True`): Accelerates extension-specific queries (`.epub`, `.cbz`, `.mp4`).
+   - `media_items.created_at` (`index=True`): Supports high-performance ordering for the *Recently Added* dashboard rails without sorting in memory.
+
+3. **Alphabetical Sorting & Search Indexes**:
+   - `media_items.title` & `media_items.sort_title` (`index=True`): Enables efficient alphabetical ordering and A-Z pagination skipping leading articles ("The", "A", "An").
+   - `media_items.isbn` (`index=True`): Accelerates exact book identifier matching during scanner and enricher passes.
+
+4. **Relational Composite Ordering Index**:
+   - `ix_media_items_collection_series` on `(collection_id, series_index)`: A dedicated multi-column index defined in `media_items.__table_args__`. This guarantees $O(\log n)$ ordered retrieval for numbered comic issues, book series volumes, TV show seasons/episodes, and album tracks without requiring runtime temporary table sorts.
+
 ---
 
 ## 5. Security & Authentication Architecture
@@ -580,9 +685,20 @@ erDiagram
    - Users authorize the TV by entering the code at `/pair` on their smartphone or PC browser.
    - The TV client polls `POST /api/auth/device-code/token` at the prescribed interval; once approved, a permanent Bearer token is issued and the pairing session is securely consumed.
 11. **Native Mobile & TV Dashboard Rails (`services/media_service.py`, `/api/docs`)**:
-   - `GET /api/home` aggregates personalized dashboard rails in a single query: *Continue Watching* (video <90%), *Continue Reading* (books/comics <100%), *Continue Listening* (audio <95%), *Next Up* (candidate next episodes for TV series in progress), *Recently Added*, and *Favorites*.
-   - First-class taxonomy navigation endpoints: `/api/creators` (with media type filtering), `/api/collections` (with ordered item series indexing), and `/api/tags` (with media counts).
-   - Canonical OpenAPI 3.1 specification (`/api/openapi.json`) and zero-dependency interactive documentation explorer (`/api/docs`) powered by Scalar.
+    - `GET /api/home` aggregates personalized dashboard rails in a single query: *Continue Watching* (video <90%), *Continue Reading* (books/comics <100%), *Continue Listening* (audio <95%), *Next Up* (candidate next episodes for TV series in progress), *Recently Added*, and *Favorites*.
+    - First-class taxonomy navigation endpoints: `/api/creators` (with media type filtering), `/api/collections` (with ordered item series indexing), and `/api/tags` (with media counts).
+    - Canonical OpenAPI 3.1 specification (`/api/openapi.json`) and zero-dependency interactive documentation explorer (`/api/docs`) powered by Scalar.
+12. **`SECRET_KEY` Lifecycle & Atomic Persistence (`resolve_secret_key`)**:
+    - Avoids the common self-hosted footgun of hardcoded secrets or random keys regenerated on every restart that immediately log out active users.
+    - **Insecure Default Rejection**: If `SECRET_KEY` is set to the historical insecure placeholder (`'aarkib-secret-key-change-in-production'`), the server immediately refuses to boot with a `RuntimeError`.
+    - **Atomic Disk Persistence**: If no environment variable is provided, Aarkib automatically generates a 32-byte cryptographic hex token (`secrets.token_hex(32)`) and writes it to `DATA_DIR / "secret_key"` using an atomic file descriptor creation mode (`os.O_CREAT | os.O_EXCL`) with strict POSIX `0600` permissions (`-rw-------`). Sessions and Jellyfin tokens survive restarts seamlessly while maintaining security.
+13. **Reverse-Proxy Deployment, TLS & Session Cookie Boundary**:
+    - **Session Cookie Security**: `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SAMESITE="Lax"`, and `SESSION_COOKIE_SECURE = not app.debug`. In production mode (under Waitress), cookies are flagged `Secure`, requiring HTTPS for transmission.
+    - **Proxy Header Inspection**: When deploying behind a reverse proxy (e.g. Nginx, Caddy, Traefik), operators must configure the proxy to pass standard client IP headers (`X-Forwarded-For`, `X-Real-IP`) and protocol headers (`X-Forwarded-Proto: https`).
+    - **Passwordless LAN Boundary Behind Proxies**: Aarkib's `get_client_ip()` defensively extracts the leftmost client IP from `X-Forwarded-For` and `X-Real-IP`, ensuring that passwordless LAN-only accounts remain strictly gated to private RFC 1918 subnets even when the server runs behind a container or ingress proxy.
+14. **Cross-Site Request Forgery (CSRF) Protection**:
+    - **Stateful Forms**: All HTML form views (`/auth/login`, `/auth/setup`, `/auth/profile`, `/pair`, `/settings/users`) are protected with Flask-WTF `CSRFProtect`, requiring valid, signed `csrf_token` inputs or `X-CSRFToken` request headers.
+    - **Stateless API & Protocol Blueprint Exemption**: The REST API (`/api/*`), OPDS feeds (`/opds/*`), Subsonic API (`/rest/*`), and Jellyfin endpoints (`/System/*`) are explicitly CSRF-exempted (`csrf.exempt(api_bp)`, `plugin.csrf_exempt = True`). These interfaces authenticate via cryptographic Bearer tokens (`Authorization: Bearer ark_...`) or HTTP Basic Auth headers (`Authorization: Basic ...`), which browsers cannot forge in cross-site requests, eliminating unnecessary CSRF token overhead for mobile apps and third-party media players.
 
 ---
 
@@ -616,10 +732,11 @@ erDiagram
 
 ### Schema Evolution & Migration Architecture
 - **Current Additive Auto-Migrations**:
-  - Aarkib employs a non-destructive auto-migration routine (`migrate_database()`) at server startup. Using SQLAlchemy reflection and SQLite `PRAGMA table_info`, it introspects the current schema and executes safe `ALTER TABLE ... ADD COLUMN` statements for missing fields without downtime or manual migration files.
-- **Acknowledged Tech Debt & Migration Boundary**:
-  - This zero-overhead approach is optimal for single-file self-hosted SQLite databases during active feature development.
-  - If future schema changes require destructive alterations (such as column renames, column drops, table decomposition, or non-nullable columns without defaults on existing tables), Aarkib will transition to an Alembic migration tree (`alembic.ini`).
+  - Aarkib employs a non-destructive auto-migration routine (`migrate_database()`) at server startup. Using SQLAlchemy reflection and SQLite `PRAGMA table_info`, it introspects the current schema and executes safe `ALTER TABLE ... ADD COLUMN` statements for missing fields with safe type defaults (`_render_default()`), without downtime or manual migration files.
+- **SQLite Alteration Realities & Migration Boundary**:
+  - SQLite historically lacks native `ALTER TABLE` support for dropping columns, changing column datatypes, or altering foreign key constraints without an orchestrated table recreation and data copy procedure (`CREATE TABLE new_table ...; INSERT INTO new_table SELECT ...; DROP TABLE old_table; ALTER TABLE new_table RENAME TO old_table`).
+  - For rapid development and single-node homelab deployments, additive migrations eliminate migration-drift errors and keep startup instant.
+  - **Alembic Transition Trigger**: If future releases introduce breaking architectural changes (such as column renames, column drops, table normalization/decomposition, or foreign key restructuring), Aarkib will transition to an Alembic migration tree (`alembic.ini` + `versions/`) to coordinate transactional SQLite table rebuilds and track schema state via an `alembic_version` table.
 
 ---
 

@@ -25,7 +25,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
 - 🎨 **Modern Web App & PWA**: Responsive interface with Dark, Light, and OLED themes. Installable on phones and tablets as a Progressive Web App.
 - 🎮 **Gamepad & 10-Foot Navigation**: Seamless out-of-the-box controller support across the entire Web UI, readers (comics, manga, EPUB, PDF), and players (video, audio, podcasts) using standard Xbox, PlayStation, Nintendo Switch, and Steam Deck gamepads. Includes spatial navigation, context-aware HUD button prompts, and haptic vibration feedback.
 - 👥 **Multi-User**: Dedicated accounts for family members with individual reading progress, bookmarks, and viewing history.
-- 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, and MusicBrainz, with per-library customization and a built-in metadata editor.
+- 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, MusicBrainz, iTunes, and PodcastIndex, with per-library customization and a built-in metadata editor.
 
 ---
 
