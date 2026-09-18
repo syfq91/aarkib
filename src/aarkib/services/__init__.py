@@ -20,6 +20,7 @@ from aarkib.services.scanner import (
     index_media_file,
     scan_library,
     start_library_watcher,
+    validate_library_availability,
 )
 from aarkib.services.thumbnail import generate_cover_webp
 from aarkib.services.transcoder import (
@@ -40,6 +41,7 @@ __all__ = [
     "index_media_file",
     "scan_library",
     "start_library_watcher",
+    "validate_library_availability",
     "generate_cover_webp",
     "CapabilityService",
     "capability_service",

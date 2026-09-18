@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -86,6 +87,104 @@ def count_media_in_library(library: Library) -> int:
     return (
         db.session.scalar(select(func.count(MediaItem.id)).where(or_(*conditions))) or 0
     )
+
+
+def validate_library_availability(
+    library: Library,
+    expected_items_count: int | None = None,
+    candidate_count: int | None = None,
+    force_prune: bool = False,
+) -> bool:
+    """Validate that library root path exists, is readable, and is not an empty unmounted mount point.
+
+    Returns True if the library is safe to reconcile; False if reconciliation should be aborted.
+    """
+    if not getattr(library, "path", None):
+        logger.warning(
+            "Library '%s' (id=%s) has an empty path configured. Aborting reconciliation.",
+            getattr(library, "name", "unknown"),
+            getattr(library, "id", None),
+        )
+        return False
+
+    lib_path = Path(library.path).expanduser().resolve()
+    if not lib_path.exists():
+        logger.warning(
+            "Library '%s' (id=%s) path does not exist: %s. Aborting reconciliation for safety.",
+            getattr(library, "name", "unknown"),
+            getattr(library, "id", None),
+            lib_path,
+        )
+        return False
+
+    if not lib_path.is_dir():
+        logger.warning(
+            "Library '%s' (id=%s) path is not a directory: %s. Aborting reconciliation for safety.",
+            getattr(library, "name", "unknown"),
+            getattr(library, "id", None),
+            lib_path,
+        )
+        return False
+
+    if not os.access(lib_path, os.R_OK):
+        logger.warning(
+            "Library '%s' (id=%s) path is not readable: %s. Aborting reconciliation for safety.",
+            getattr(library, "name", "unknown"),
+            getattr(library, "id", None),
+            lib_path,
+        )
+        return False
+
+    try:
+        expected = (
+            expected_items_count
+            if expected_items_count is not None
+            else count_media_in_library(library)
+        )
+    except Exception:
+        expected = expected_items_count or 0
+
+    if expected > 0 and not force_prune:
+        if candidate_count is not None:
+            if candidate_count == 0:
+                logger.warning(
+                    "Library '%s' (id=%s) expected %d items but scan found 0 candidate media files at %s "
+                    "(unmounted mount point suspected). Aborting reconciliation to prevent data loss.",
+                    getattr(library, "name", "unknown"),
+                    getattr(library, "id", None),
+                    expected,
+                    lib_path,
+                )
+                return False
+        else:
+            try:
+                entries = [
+                    e.name
+                    for e in os.scandir(lib_path)
+                    if e.name not in ("lost+found", ".stfolder", ".keep")
+                    and not e.name.startswith("._")
+                ]
+                if not entries:
+                    logger.warning(
+                        "Library '%s' (id=%s) expected %d items but directory %s is empty "
+                        "(unmounted mount point suspected). Aborting reconciliation to prevent data loss.",
+                        getattr(library, "name", "unknown"),
+                        getattr(library, "id", None),
+                        expected,
+                        lib_path,
+                    )
+                    return False
+            except OSError as exc:
+                logger.warning(
+                    "Library '%s' (id=%s) directory access error at %s: %s. Aborting reconciliation.",
+                    getattr(library, "name", "unknown"),
+                    getattr(library, "id", None),
+                    lib_path,
+                    exc,
+                )
+                return False
+
+    return True
 
 
 def get_media_dirs_from_config(app: Flask | None = None) -> list[Path]:
