@@ -20,6 +20,10 @@ from aarkib.models.media import (
 )
 from aarkib.models.media_item import MediaItem
 from aarkib.models.metadata_cache import MetadataCacheEntry
+from aarkib.models.playback import (
+    PlaybackMode,
+    PlaybackPlan,
+)
 from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.setting import SystemSetting
@@ -58,4 +62,6 @@ __all__ = [
     "SubtitleCapabilities",
     "StreamingCapabilities",
     "DeviceCapabilities",
+    "PlaybackMode",
+    "PlaybackPlan",
 ]

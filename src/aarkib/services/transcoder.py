@@ -324,105 +324,50 @@ def evaluate_playback_strategy(
     streams_info: dict[str, Any] | None = None,
     client_caps: ClientCapabilities | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Determines the optimal playback strategy for a media item."""
-    from aarkib.models.capabilities import ClientCapabilities
+    """Determines the optimal playback strategy for a media item.
 
-    caps: ClientCapabilities | None = None
-    if isinstance(client_caps, ClientCapabilities):
-        caps = client_caps
-    elif isinstance(client_caps, dict):
-        caps = ClientCapabilities.from_dict(client_caps)
+    Delegates deterministic decision planning to PlaybackService while preserving
+    the legacy dictionary return shape for backward compatibility.
+    """
+    from aarkib.models.playback import PlaybackMode
+    from aarkib.services.playback_service import playback_service
 
-    if streams_info is None:
-        streams_info = probe_media_streams(file_path)
-
-    ext = Path(file_path).suffix.lower()
-    container_native = (
-        (ext in caps.video.containers)
-        if caps and caps.video.containers
-        else (ext in WEB_NATIVE_CONTAINERS)
+    file_path = Path(file_path)
+    plan = playback_service.plan_for_file(
+        file_path=file_path,
+        streams_info=streams_info,
+        capabilities=client_caps,
     )
-    reasons: list[str] = []
 
-    video = streams_info.get("video") or {}
-    v_codec = (video.get("codec") or "").lower()
-    pix_fmt = (video.get("pix_fmt") or "").lower()
-
-    # Check video codec compatibility
-    is_10bit = "10" in pix_fmt or "p010" in pix_fmt
-    if caps:
-        video_native = bool(
-            v_codec and caps.supports_video(v_codec, ext, is_10bit=is_10bit)
-        )
-    else:
-        video_native = bool(
-            v_codec and v_codec in WEB_NATIVE_VIDEO_CODECS and not is_10bit
-        )
-
-    if not video_native and v_codec:
-        if is_10bit and (not caps or not caps.video.supports_10bit):
-            reasons.append(f"10-bit color ({pix_fmt}) requires transcoding")
-        else:
-            client_target = caps.device.client_name if caps else "browser"
-            reasons.append(
-                f"Video codec '{v_codec}' is not natively supported by {client_target}"
-            )
-
-    # Check audio codecs compatibility
-    audio_list = streams_info.get("audio", [])
-    primary_audio = audio_list[0] if audio_list else {}
-    a_codec = (primary_audio.get("codec") or "").lower()
-
-    if caps:
-        audio_native = bool(not a_codec or caps.supports_audio(a_codec, ext))
-    else:
-        audio_native = bool(not a_codec or a_codec in WEB_NATIVE_AUDIO_CODECS)
-
-    if not audio_native and a_codec:
-        client_target = caps.device.client_name if caps else "browser"
-        reasons.append(
-            f"Audio codec '{a_codec}' is not natively supported by {client_target}"
-        )
-
-    # Evaluate overall strategy using structural pattern matching
-    match (container_native, video_native, audio_native):
-        case (True, True, True):
-            strategy = PlaybackStrategy.DIRECT_PLAY
-        case (False, True, True) if ext in REMUXABLE_CONTAINERS:
-            strategy = PlaybackStrategy.DIRECT_REMUX
-            reasons.append(
-                f"Container '{ext}' can be remuxed to MP4 on-the-fly with zero re-encoding"
-            )
-        case (_, True, False):
+    # Map PlaybackPlan mode to legacy PlaybackStrategy enum
+    if plan.mode == PlaybackMode.DIRECT:
+        strategy = PlaybackStrategy.DIRECT_PLAY
+    elif plan.mode == PlaybackMode.REMUX:
+        strategy = PlaybackStrategy.DIRECT_REMUX
+    elif plan.mode == PlaybackMode.TRANSCODE:
+        if plan.diagnostics.get("copy_video"):
             strategy = PlaybackStrategy.AUDIO_TRANSCODE
-            reasons.append(
-                "Video stream can be copied directly while audio is transcoded to AAC"
-            )
-        case _:
+        else:
             strategy = PlaybackStrategy.FULL_TRANSCODE
-            if not reasons:
-                reasons.append(
-                    "Transcoding required for optimal browser playback compatibility"
-                )
+    else:
+        strategy = PlaybackStrategy.FULL_TRANSCODE
+
+    diag = plan.diagnostics
+    ext = file_path.suffix.lower()
 
     return {
         "strategy": strategy.value,
-        "reasons": reasons,
+        "reasons": list(plan.reasons),
         "container": ext,
-        "container_native": container_native,
-        "video_codec": v_codec,
-        "video_native": video_native,
-        "audio_codec": a_codec,
-        "audio_native": audio_native,
-        "duration": streams_info.get("duration"),
-        "resolution": {
-            "width": video.get("width"),
-            "height": video.get("height"),
-        }
-        if video.get("width")
-        else None,
-        "audio_tracks_count": len(audio_list),
-        "subtitles_count": len(streams_info.get("subtitles", [])),
+        "container_native": diag.get("container_native", True),
+        "video_codec": plan.video_codec,
+        "video_native": diag.get("video_native", True),
+        "audio_codec": plan.audio_codec,
+        "audio_native": diag.get("audio_native", True),
+        "duration": diag.get("duration"),
+        "resolution": diag.get("resolution"),
+        "audio_tracks_count": diag.get("audio_tracks_count", 0),
+        "subtitles_count": diag.get("subtitles_count", 0),
     }
 
 

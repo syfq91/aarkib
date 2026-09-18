@@ -9,6 +9,11 @@ from aarkib.services.parsers.base import (
     ParsedVideoMetadata,
     extract_metadata_from_file,
 )
+from aarkib.services.playback_service import (
+    PlaybackService,
+    plan_playback,
+    playback_service,
+)
 from aarkib.services.scanner import (
     compute_fast_fingerprint,
     compute_sha256,
@@ -32,4 +37,7 @@ __all__ = [
     "CapabilityService",
     "capability_service",
     "detect_client_capabilities",
+    "PlaybackService",
+    "playback_service",
+    "plan_playback",
 ]
