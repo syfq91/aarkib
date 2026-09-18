@@ -14,6 +14,13 @@ from sqlalchemy import or_, select
 
 from aarkib.extensions import db
 from aarkib.models import Library, MediaItem
+from aarkib.services.events import (
+    EVENT_MEDIA_ADDED,
+    EVENT_SCAN_FINISHED,
+    EVENT_SCAN_PROGRESS,
+    EVENT_SCAN_STARTED,
+    event_bus,
+)
 from aarkib.services.indexer import (
     DEFAULT_EXTENSIONS,
     SUPPORTED_EXTENSIONS,
@@ -93,6 +100,7 @@ def scan_library(
         auto_enrich = app.config.get("AUTO_ENRICH", False)
         covers_dir.mkdir(parents=True, exist_ok=True)
 
+        event_bus.emit(EVENT_SCAN_STARTED, {"library_id": library_id})
         if progress_callback:
             progress_callback(5.0, "Discovering media files in library folders...")
 
@@ -182,12 +190,25 @@ def scan_library(
                     db.session.flush()
                 new_item_ids.append(item.id)
                 added += 1
+                event_bus.emit(
+                    EVENT_MEDIA_ADDED,
+                    {
+                        "id": item.id,
+                        "title": item.title,
+                        "media_type": item.media_type,
+                        "file_format": item.file_format,
+                    },
+                )
 
             if progress_callback and (idx % 5 == 0 or idx == total_candidates - 1):
                 db.session.commit()
                 pct = 10.0 + ((idx + 1) / max(total_candidates, 1)) * 80.0
                 progress_callback(
                     pct, f"Indexing {file_path.name} ({idx + 1}/{total_candidates})"
+                )
+                event_bus.emit(
+                    EVENT_SCAN_PROGRESS,
+                    {"percentage": pct, "file": file_path.name},
                 )
             elif (idx + 1) % 100 == 0:
                 db.session.commit()
@@ -265,6 +286,16 @@ def scan_library(
                 "indexed": added,
                 "deleted": deleted,
                 "total_files": total_scanned,
+                "duration_seconds": duration_seconds,
+                "library_id": library_id,
+            },
+        )
+        event_bus.emit(
+            EVENT_SCAN_FINISHED,
+            {
+                "scanned": total_scanned,
+                "added_or_updated": added,
+                "deleted": deleted,
                 "duration_seconds": duration_seconds,
                 "library_id": library_id,
             },

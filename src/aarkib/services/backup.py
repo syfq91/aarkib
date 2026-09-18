@@ -22,6 +22,11 @@ from sqlalchemy import func, select
 
 from aarkib.extensions import db
 from aarkib.models import MediaItem
+from aarkib.services.events import (
+    EVENT_BACKUP_FINISHED,
+    EVENT_BACKUP_STARTED,
+    event_bus,
+)
 
 if TYPE_CHECKING:
     from flask import Flask
@@ -89,6 +94,11 @@ def create_backup(
         else:
             archive_path = Path(output_path)
             archive_path.parent.mkdir(parents=True, exist_ok=True)
+
+        event_bus.emit(
+            EVENT_BACKUP_STARTED,
+            {"archive_path": str(archive_path), "filename": archive_path.name},
+        )
 
         covers_dir = Path(app.config.get("COVERS_DIR", "data/covers"))
         media_count = db.session.scalar(select(func.count(MediaItem.id))) or 0
@@ -162,6 +172,20 @@ def create_backup(
             covers_count,
         )
         prune_backups(app)
+        size_mb = (
+            round(archive_path.stat().st_size / (1024 * 1024), 2)
+            if archive_path.exists()
+            else 0.0
+        )
+        event_bus.emit(
+            EVENT_BACKUP_FINISHED,
+            {
+                "archive_path": str(archive_path),
+                "filename": archive_path.name,
+                "size_mb": size_mb,
+                "media_count": media_count,
+            },
+        )
         return archive_path
 
 

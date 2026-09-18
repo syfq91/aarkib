@@ -142,7 +142,8 @@ aarkib/
 │   │   ├── optimizer.py      # EInkOptimizerPlugin: E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
 │   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
 │   │   ├── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
-│   │   └── jellyfin.py       # Jellyfin protocol plugin
+│   │   ├── jellyfin.py       # Jellyfin protocol plugin
+│   │   └── mqtt.py           # MqttPlugin: Home Assistant Auto-Discovery, real-time media player, and MQTT commands
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints
@@ -151,6 +152,7 @@ aarkib/
 │   │   └── reader.py         # In-browser reader/player views (EPUB, CBZ, PDF, Video, Audio, Podcasts)
 │   ├── services/
 │   │   ├── __init__.py
+│   │   ├── events.py         # Internal thread-safe EventDispatcher publish-subscribe bus
 │   │   ├── backup.py         # Hot SQLite snapshot, ZIP packaging, validation, atomic database restore
 │   │   ├── scheduler.py      # Background maintenance scheduler (automated backups, library rescans, cache reaping)
 │   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting
@@ -175,7 +177,7 @@ aarkib/
 │   │       └── podcast.py    # RSS podcast feed XML parser
 │   ├── static/               # Obsidian design tokens, modern CSS, gamepad engine (gamepad.js), PWA SW
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (290 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (296 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
@@ -256,7 +258,7 @@ uv sync
 # 2. Run Aarkib development server
 uv run aarkib
 
-# 3. Execute Pytest suite (all 290 tests must pass 100%)
+# 3. Execute Pytest suite (all 296 tests must pass 100%)
 uv run pytest
 
 # 4. Run single test file

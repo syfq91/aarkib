@@ -251,6 +251,52 @@
     {% endfor %}
   </div>
 </div>
+
+<!-- Group 4: Smart Home & Automation Plugins -->
+<div style="margin-bottom: 2rem;" class="plugin-group-section" id="group-integration">
+  <h4 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+    <span>📡</span> Smart Home &amp; Automation
+    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal; margin-left: auto;">Home Assistant &amp; MQTT</span>
+  </h4>
+
+  <div class="plugin-grid">
+    {% for p in plugins_info if p.type == 'integration' %}
+    <div class="plugin-card" id="card-{{ p.name }}" data-enabled="{{ 'true' if p.enabled else 'false' }}" data-plugin-name="{{ p.name }}">
+      <div>
+        <div class="plugin-header">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.25rem;">📡</span>
+              <strong style="font-size: 1rem; color: var(--text-primary);">{{ p.display_name }}</strong>
+            </div>
+            <div class="plugin-meta">
+              <span class="badge" style="background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.7rem;">{{ p.type|title }}</span>
+              {% if p.enabled %}
+                <span class="badge" id="badge-{{ p.name }}" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.7rem;">🟢 Active</span>
+              {% else %}
+                <span class="badge" id="badge-{{ p.name }}" style="background: rgba(156, 163, 175, 0.2); color: var(--text-secondary); font-size: 0.7rem;">⚪ Inactive</span>
+              {% endif %}
+            </div>
+          </div>
+          <label class="plugin-toggle" title="Toggle {{ p.display_name }}">
+            <input type="checkbox" id="setting-{{ p.setting_key }}" {% if p.enabled %}checked{% endif %} onchange="togglePlugin('{{ p.setting_key }}', '{{ p.name }}', this.checked)">
+            <span class="plugin-slider"></span>
+          </label>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.75rem 0 0.5rem 0; line-height: 1.4;">
+          {{ p.description }}
+        </p>
+      </div>
+
+      <div style="border-top: 1px solid var(--border); padding-top: 0.75rem; font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-family: monospace;">Setting: {{ p.setting_key }}</span>
+        <span>{{ p.health.get('status', 'healthy')|title }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% else %}
 <div class="alert alert-error">
   Administrator privileges required to manage plugins.

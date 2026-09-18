@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from aarkib.extensions import db
 from aarkib.models import Bookmark, MediaItem, UserProgress
+from aarkib.services.events import EVENT_PLAYBACK_UPDATED, event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,20 @@ def update_progress(
     record.last_accessed_at = datetime.now(UTC)
     db.session.add(record)
     db.session.commit()
+    event_bus.emit(
+        EVENT_PLAYBACK_UPDATED,
+        {
+            "media_id": item.id,
+            "title": item.title,
+            "media_type": getattr(item, "media_type", "book"),
+            "location": record.progress_location,
+            "percentage": record.percentage,
+            "position_seconds": record.position_seconds,
+            "duration": record.duration,
+            "is_completed": record.is_completed,
+            "playback_type": record.playback_type,
+        },
+    )
     return record
 
 

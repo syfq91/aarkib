@@ -285,6 +285,9 @@ Aarkib features a decoupled, extensible plugin architecture designed to manage d
    - **Audiobooks & Music**: Dedicated album tracks, disc numbering, and chaptered listening.
    - **Podcasts (`PodcastMediaPlugin`)**: RSS enclosure feeds, episodic seasons, and episode tracking.
 
+6. **Integration & Smart Home Plugins**:
+   - **MQTT & Home Assistant Integration (`MqttPlugin`)**: Bi-directional bridge providing native Home Assistant MQTT Auto-Discovery, real-time media player state broadcasting, library and system metrics reporting, and remote command routing (triggering library scans, backups, cache clearing, and dynamic setting toggles).
+
 ---
 
 ### 3.7 Background Job Manager & Concurrency (`services/job_manager.py`)

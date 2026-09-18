@@ -5,6 +5,7 @@
 {% set subsonic_active = (enabled_plugins.get('subsonic') if enabled_plugins is defined and enabled_plugins else (system_settings.settings.ENABLE_SUBSONIC.value if system_settings and system_settings.settings and system_settings.settings.ENABLE_SUBSONIC else True)) %}
 {% set jellyfin_active = (enabled_plugins.get('jellyfin') if enabled_plugins is defined and enabled_plugins else (system_settings.settings.ENABLE_JELLYFIN.value if system_settings and system_settings.settings and system_settings.settings.ENABLE_JELLYFIN else True)) %}
 {% set eink_active = (enabled_plugins.get('eink_optimizer') if enabled_plugins is defined and enabled_plugins else (system_settings.settings.ENABLE_EINK_OPTIMIZER.value if system_settings and system_settings.settings and system_settings.settings.ENABLE_EINK_OPTIMIZER else True)) %}
+{% set mqtt_active = (enabled_plugins.get('mqtt') if enabled_plugins is defined and enabled_plugins else (system_settings.settings.ENABLE_MQTT.value if system_settings and system_settings.settings and system_settings.settings.ENABLE_MQTT else False)) %}
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
 
@@ -155,8 +156,41 @@
   </div>
   {% endif %}
 
+  {% if mqtt_active %}
+  {# MQTT & Home Assistant Card #}
+  <div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>📡</span> MQTT &amp; Home Assistant
+        <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; font-size: 0.75rem; margin-left: auto;">🟢 Active</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+        Bidirectional smart-home bridge with native Home Assistant MQTT Auto-Discovery:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">Broker:</strong>
+          <code>{{ system_settings.settings.MQTT_BROKER_HOST.value if system_settings and system_settings.settings and system_settings.settings.MQTT_BROKER_HOST else 'localhost' }}:{{ system_settings.settings.MQTT_BROKER_PORT.value if system_settings and system_settings.settings and system_settings.settings.MQTT_BROKER_PORT else '1883' }}</code>
+        </div>
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">Base Topic:</strong>
+          <code>{{ system_settings.settings.MQTT_TOPIC_PREFIX.value if system_settings and system_settings.settings and system_settings.settings.MQTT_TOPIC_PREFIX else 'aarkib' }}/#</code>
+        </div>
+        <div style="background: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
+          <strong style="color: var(--text-primary);">Discovery Prefix:</strong>
+          <code>{{ system_settings.settings.MQTT_DISCOVERY_PREFIX.value if system_settings and system_settings.settings and system_settings.settings.MQTT_DISCOVERY_PREFIX else 'homeassistant' }}/#</code>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.5rem;">
+      🏠 Home Assistant automatically discovers Aarkib sensors, action buttons, switches, and media player entity!
+    </div>
+  </div>
+  {% endif %}
+
   {# Empty State when no integrations are enabled #}
-  {% if not (opds_active or subsonic_active or jellyfin_active or eink_active) %}
+  {% if not (opds_active or subsonic_active or jellyfin_active or eink_active or mqtt_active) %}
   <div style="background: var(--bg-secondary); border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 3rem 2rem; text-align: center; color: var(--text-secondary); grid-column: 1 / -1;">
     <div style="font-size: 2.5rem; margin-bottom: 1rem;">🔌</div>
     <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">No Integrations Enabled</h3>
