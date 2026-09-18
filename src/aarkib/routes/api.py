@@ -593,7 +593,8 @@ def list_plugins() -> ResponseReturnValue:
 def list_jobs() -> ResponseReturnValue:
     """List recent background tasks and their execution states."""
     limit = min(request.args.get("limit", 20, type=int), 100)
-    jobs = job_manager.list_jobs(limit=limit)
+    status = request.args.get("status", "").strip() or None
+    jobs = job_manager.list_jobs(limit=limit, status=status)
     return jsonify({"jobs": [j.to_dict() for j in jobs]})
 
 
@@ -616,6 +617,17 @@ def cancel_job(job_id: str) -> ResponseReturnValue:
     if not res.get("cancelled"):
         return api_error(res.get("message", "Job could not be cancelled"), 400)
     return jsonify({"status": "success", "job": res})
+
+
+@api_bp.route("/jobs/<job_id>/retry", methods=["POST"])
+@api_admin_required
+def retry_job(job_id: str) -> ResponseReturnValue:
+    """Retry a failed or cancelled background job."""
+    app_obj = current_app._get_current_object()
+    job = job_manager.retry_job(job_id, app=app_obj)
+    if not job:
+        return api_error("Job not found or cannot be retried", 400)
+    return jsonify({"status": "accepted", "job": job.to_dict()}), 202
 
 
 @api_bp.route("/media", methods=["GET"])

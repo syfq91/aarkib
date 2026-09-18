@@ -278,7 +278,7 @@ function pollBackgroundJob(jobId, onProgress, onComplete, onError) {
       if (job.status === "running" || job.status === "queued") {
         if (onProgress) onProgress(job.progress, job.progress_message);
         setTimeout(poll, 600);
-      } else if (job.status === "completed") {
+      } else if (job.status === "succeeded" || job.status === "completed") {
         if (onComplete) onComplete(job.result);
       } else if (job.status === "failed") {
         if (onError) onError(job.error || "Job execution failed");

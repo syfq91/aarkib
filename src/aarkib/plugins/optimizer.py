@@ -7,8 +7,10 @@ import logging
 import os
 import re
 import tempfile
+import threading
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -214,6 +216,8 @@ def optimize_epub(
     source_path: Path,
     output_path: Path,
     preset_key: str = "generic",
+    progress_callback: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> Path:
     """Reads a source EPUB, strips fonts, optimizes images, cleans CSS, and writes
 
@@ -311,7 +315,19 @@ def optimize_epub(
                     modified_opf_bytes = opf_data
 
             # 4. Process and write all other files
-            for item in src_zip.infolist():
+            infolist = src_zip.infolist()
+            total_items = max(1, len(infolist))
+            for idx, item in enumerate(infolist):
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("optimize_epub cancelled during file processing")
+                    break
+
+                if progress_callback is not None and (
+                    idx % 5 == 0 or idx == total_items - 1
+                ):
+                    pct = round((idx / total_items) * 100.0, 1)
+                    progress_callback(pct, f"Optimizing {item.filename}")
+
                 name = item.filename
                 if name == "mimetype":
                     continue
@@ -385,6 +401,14 @@ def optimize_epub(
                     dst_zip.writestr(
                         name, raw_bytes, compress_type=zipfile.ZIP_DEFLATED
                     )
+
+        if cancel_event is not None and cancel_event.is_set():
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+            return output_path
+
+        if progress_callback is not None:
+            progress_callback(100.0, "Optimization complete")
 
         # Atomically move temp file to target output path
         os.replace(tmp_path, output_path)

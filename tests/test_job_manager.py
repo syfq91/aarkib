@@ -142,11 +142,11 @@ def test_api_async_scan_and_jobs(client, app, tmp_path, sample_epub):
         status_res = client.get(f"/api/jobs/{job_id}")
         assert status_res.status_code == 200
         job_data = status_res.get_json()
-        if job_data["status"] in ("completed", "failed"):
+        if job_data["status"] in ("succeeded", "completed", "failed"):
             break
         time.sleep(0.05)
 
-    assert job_data["status"] == "completed"
+    assert job_data["status"] in ("succeeded", "completed")
     assert "scanned" in job_data["result"]
 
     # 3. List all jobs
@@ -188,11 +188,11 @@ def test_api_async_single_library_scan(client, app, tmp_path, sample_epub):
     start = time.time()
     while time.time() - start < timeout:
         status_res = client.get(f"/api/jobs/{job_id}")
-        if status_res.get_json()["status"] in ("completed", "failed"):
+        if status_res.get_json()["status"] in ("succeeded", "completed", "failed"):
             break
         time.sleep(0.05)
 
-    assert status_res.get_json()["status"] == "completed"
+    assert status_res.get_json()["status"] in ("succeeded", "completed")
 
 
 def test_api_async_enrich_library(client, app, sample_epub):
@@ -238,11 +238,11 @@ def test_api_async_enrich_library(client, app, sample_epub):
         start = time.time()
         while time.time() - start < timeout:
             status_res = client.get(f"/api/jobs/{job_id}")
-            if status_res.get_json()["status"] in ("completed", "failed"):
+            if status_res.get_json()["status"] in ("succeeded", "completed", "failed"):
                 break
             time.sleep(0.05)
 
-        assert status_res.get_json()["status"] == "completed"
+        assert status_res.get_json()["status"] in ("succeeded", "completed")
 
 
 def test_media_item_library_foreign_key_and_relationships(app, tmp_path, sample_epub):
@@ -403,7 +403,9 @@ def test_job_reconciliation_on_startup(app):
         assert "server restart" in rec2.error_message
 
         rec3 = db.session.get(JobRecord, "job_already_done")
-        assert rec3.status == JobStatus.COMPLETED.value
+        assert JobStatus(rec3.status) == JobStatus.SUCCEEDED
+        assert JobStatus(rec3.status) == JobStatus.COMPLETED
+        assert rec3.status == "completed"
 
 
 def test_job_cleanup_db(app):
@@ -428,3 +430,253 @@ def test_job_cleanup_db(app):
         assert db.session.get(JobRecord, job.id) is None
 
     jm.shutdown(wait=True)
+
+
+def test_job_status_enum_backward_compatibility():
+    """Verify JobStatus values, aliases, and backward compatibility."""
+    assert JobStatus.QUEUED == "queued"
+    assert JobStatus.RUNNING == "running"
+    assert JobStatus.SUCCEEDED == "succeeded"
+    assert JobStatus.FAILED == "failed"
+    assert JobStatus.CANCELLED == "cancelled"
+    assert JobStatus.INTERRUPTED == "interrupted"
+
+    # Backward compatibility alias
+    assert JobStatus.COMPLETED is JobStatus.SUCCEEDED
+    assert JobStatus.COMPLETED == JobStatus.SUCCEEDED
+    assert JobStatus("completed") == JobStatus.SUCCEEDED
+    assert JobStatus("COMPLETE") == JobStatus.SUCCEEDED
+    assert JobStatus("succeeded") == JobStatus.SUCCEEDED
+
+    # Symmetric equality
+    assert JobStatus.SUCCEEDED == "completed"
+    assert "completed" == JobStatus.SUCCEEDED
+    assert JobStatus.SUCCEEDED == "succeeded"
+    assert "succeeded" == JobStatus.SUCCEEDED
+
+
+def test_job_state_progression_and_attributes(app):
+    """Verify state progression from QUEUED -> RUNNING -> SUCCEEDED and attribute serialization."""
+    jm = JobManager(max_workers=2)
+
+    states_observed = []
+
+    def state_worker(app, progress_callback=None):
+        time.sleep(0.05)
+        return {"output": "ok"}
+
+    job = jm.submit_job("state_test", state_worker, app=app)
+    assert job.status in (JobStatus.QUEUED, JobStatus.RUNNING)
+    states_observed.append(job.status)
+    assert job.retry_count == 0
+    assert job.cancel_requested is False
+
+    if job._future:
+        job._future.result(timeout=3.0)
+
+    assert job.status == JobStatus.SUCCEEDED
+    assert job.status == JobStatus.COMPLETED
+    assert job.progress == 100.0
+
+    d = job.to_dict()
+    assert d["status"] == "succeeded"
+    assert d["retry_count"] == 0
+    assert d["cancel_requested"] is False
+
+    with app.app_context():
+        rec = db.session.get(JobRecord, job.id)
+        assert rec is not None
+        assert rec.status == JobStatus.SUCCEEDED.value
+        assert rec.retry_count == 0
+        assert rec.cancel_requested is False
+        rec_d = rec.to_dict()
+        assert rec_d["retry_count"] == 0
+        assert rec_d["cancel_requested"] is False
+
+    jm.shutdown(wait=True)
+
+
+def test_job_cancellation_mechanics(app):
+    """Verify request_cancel on queued and running jobs with cooperative cancel_event."""
+    import threading
+
+    jm = JobManager(max_workers=1)
+
+    gate = threading.Event()
+    cancelled_observed = threading.Event()
+
+    def cancellable_worker(app, progress_callback=None, cancel_event=None):
+        gate.wait(timeout=2.0)
+        while True:
+            if cancel_event and cancel_event.is_set():
+                cancelled_observed.set()
+                return {"interrupted": True}
+            time.sleep(0.01)
+
+    # 1. Test cancel while running
+    job = jm.submit_job("running_cancel_test", cancellable_worker, app=app)
+    gate.set()  # Let it enter the running loop
+    time.sleep(0.05)
+
+    assert jm.request_cancel(job.id, app=app) is True
+    assert job.cancel_requested is True
+    assert job.is_cancelled is True
+
+    # Wait for worker to see cancellation
+    assert cancelled_observed.wait(timeout=2.0) is True
+    time.sleep(0.05)
+
+    assert job.status == JobStatus.CANCELLED
+    with app.app_context():
+        rec = db.session.get(JobRecord, job.id)
+        assert rec.status == JobStatus.CANCELLED.value
+        assert rec.cancel_requested is True
+
+    # 2. Test request_cancel on an already cancelled job returns False
+    assert jm.request_cancel(job.id, app=app) is False
+
+    # 3. Test cancel on queued job (blocked by worker)
+    block_worker_event = threading.Event()
+
+    def blocking_task(app, progress_callback=None):
+        block_worker_event.wait(timeout=2.0)
+        return "done"
+
+    _job_block = jm.submit_job("blocker", blocking_task, app=app)
+    # Submitting another job when max_workers=1 will queue it
+    queued_job = jm.submit_job("queued_cancel_test", blocking_task, app=app)
+    assert queued_job.status == JobStatus.QUEUED
+
+    assert jm.request_cancel(queued_job.id, app=app) is True
+    assert queued_job.status == JobStatus.CANCELLED
+    assert queued_job.cancel_requested is True
+
+    block_worker_event.set()
+    jm.shutdown(wait=True)
+
+
+def test_job_retry_mechanics(app):
+    """Verify job retry increments retry_count and allows recovery from failure."""
+    jm = JobManager(max_workers=2)
+
+    attempts = [0]
+
+    def flaky_task(app, progress_callback=None):
+        attempts[0] += 1
+        if attempts[0] == 1:
+            raise RuntimeError("Initial simulated failure")
+        return {"attempt": attempts[0], "recovered": True}
+
+    job = jm.submit_job("flaky_task", flaky_task, app=app)
+    if job._future:
+        try:
+            job._future.result(timeout=3.0)
+        except Exception:
+            pass
+
+    assert job.status == JobStatus.FAILED
+    assert job.retry_count == 0
+    assert "Initial simulated failure" in (job.error or "")
+
+    # Retry the failed job
+    retried = jm.retry_job(job.id, app=app)
+    assert retried is not None
+    assert retried.id == job.id
+    assert retried.retry_count == 1
+    assert retried.status in (JobStatus.QUEUED, JobStatus.RUNNING)
+
+    if retried._future:
+        retried._future.result(timeout=3.0)
+
+    assert retried.status == JobStatus.SUCCEEDED
+    assert retried.result == {"attempt": 2, "recovered": True}
+
+    with app.app_context():
+        rec = db.session.get(JobRecord, job.id)
+        assert rec is not None
+        assert rec.status == JobStatus.SUCCEEDED.value
+        assert rec.retry_count == 1
+        assert rec.cancel_requested is False
+
+    jm.shutdown(wait=True)
+
+
+def test_api_job_cancel_and_retry(client, app):
+    """Verify /api/jobs/<id>/cancel, /api/jobs/<id>/retry, and status filtering."""
+    _login_admin(client, app)
+
+    from aarkib.services.job_manager import job_manager
+
+    attempts = [0]
+
+    def flaky_api_worker(app, progress_callback=None):
+        attempts[0] += 1
+        if attempts[0] == 1:
+            raise ValueError("First attempt failed")
+        return {"success": True}
+
+    job = job_manager.submit_job(
+        "flaky_api_task",
+        flaky_api_worker,
+        app=app,
+    )
+    if job._future:
+        try:
+            job._future.result(timeout=3.0)
+        except Exception:
+            pass
+
+    assert job.status == JobStatus.FAILED
+
+    # Retry via API endpoint
+    retry_res = client.post(f"/api/jobs/{job.id}/retry")
+    assert retry_res.status_code == 202
+    retry_data = retry_res.get_json()
+    assert retry_data["status"] == "accepted"
+    assert retry_data["job"]["retry_count"] == 1
+
+    # Wait for completion
+    timeout = 3.0
+    start = time.time()
+    while time.time() - start < timeout:
+        status_res = client.get(f"/api/jobs/{job.id}")
+        if status_res.get_json()["status"] in ("succeeded", "completed"):
+            break
+        time.sleep(0.05)
+
+    assert status_res.get_json()["status"] in ("succeeded", "completed")
+
+    # Test filtering by status via API
+    filter_res = client.get("/api/jobs?status=succeeded")
+    assert filter_res.status_code == 200
+    filtered_jobs = filter_res.get_json()["jobs"]
+    assert any(j["id"] == job.id for j in filtered_jobs)
+
+    # Legacy filter by 'completed' should resolve to succeeded
+    legacy_filter = client.get("/api/jobs?status=completed")
+    assert legacy_filter.status_code == 200
+    legacy_jobs = legacy_filter.get_json()["jobs"]
+    assert any(j["id"] == job.id for j in legacy_jobs)
+
+
+def test_cooperative_cancellation_optimizer_and_backup(app, tmp_path, sample_epub):
+    """Verify cooperative cancellation support in optimize_epub and create_backup."""
+    import threading
+
+    from aarkib.plugins.optimizer import optimize_epub
+    from aarkib.services.backup import create_backup
+
+    # Test optimize_epub with cancel_event already set
+    cancel_opt = threading.Event()
+    cancel_opt.set()
+    opt_out = tmp_path / "cancelled_opt.epub"
+    res_opt = optimize_epub(sample_epub, opt_out, cancel_event=cancel_opt)
+    # Should exit cleanly without error
+    assert res_opt == opt_out
+
+    # Test create_backup with cancel_event already set
+    cancel_bak = threading.Event()
+    cancel_bak.set()
+    bak_out = tmp_path / "cancelled_bak.zip"
+    res_bak = create_backup(app, output_path=bak_out, cancel_event=cancel_bak)
+    assert res_bak == bak_out

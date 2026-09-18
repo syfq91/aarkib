@@ -14,7 +14,9 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import threading
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -73,6 +75,8 @@ def create_backup(
     app: Flask,
     output_path: Path | None = None,
     include_covers: bool = True,
+    progress_callback: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
     **kwargs: Any,
 ) -> Path:
     """Creates a full backup archive of the Aarkib database and cover art.
@@ -83,6 +87,9 @@ def create_backup(
     Returns the Path to the created .zip backup archive.
     """
     with app.app_context():
+        if progress_callback is not None:
+            progress_callback(5.0, "Preparing backup directory and path...")
+
         backup_dir = get_backup_dir(app)
         timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d-%H%M%S")
         if output_path is None:
@@ -95,6 +102,10 @@ def create_backup(
             archive_path = Path(output_path)
             archive_path.parent.mkdir(parents=True, exist_ok=True)
 
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("create_backup cancelled before start")
+            return archive_path
+
         event_bus.emit(
             EVENT_BACKUP_STARTED,
             {"archive_path": str(archive_path), "filename": archive_path.name},
@@ -103,6 +114,9 @@ def create_backup(
         try:
             covers_dir = Path(app.config.get("COVERS_DIR", "data/covers"))
             media_count = db.session.scalar(select(func.count(MediaItem.id))) or 0
+
+            if progress_callback is not None:
+                progress_callback(20.0, "Taking hot database snapshot...")
 
             # Create temporary working directory for the hot snapshot
             with tempfile.TemporaryDirectory(prefix="aarkib_backup_") as tmpdir:
@@ -135,8 +149,18 @@ def create_backup(
                 finally:
                     raw_conn.close()
 
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("create_backup cancelled after database snapshot")
+                    return archive_path
+
+                if progress_callback is not None:
+                    progress_callback(50.0, "Calculating database checksum...")
+
                 db_checksum = _compute_sha256(temp_db_path)
                 covers_count = 0
+
+                if progress_callback is not None:
+                    progress_callback(60.0, "Archiving database and covers...")
 
                 # Write archive
                 with zipfile.ZipFile(
@@ -147,14 +171,35 @@ def create_backup(
 
                     # 2. Add covers if requested and directory exists
                     if include_covers and covers_dir.is_dir():
-                        for cover_file in covers_dir.iterdir():
-                            if cover_file.is_file() and not cover_file.name.startswith(
-                                "."
-                            ):
-                                zf.write(
-                                    cover_file, arcname=f"covers/{cover_file.name}"
+                        cover_files = [
+                            f
+                            for f in covers_dir.iterdir()
+                            if f.is_file() and not f.name.startswith(".")
+                        ]
+                        total_covers = max(1, len(cover_files))
+                        for c_idx, cover_file in enumerate(cover_files):
+                            if cancel_event is not None and cancel_event.is_set():
+                                logger.info(
+                                    "create_backup cancelled during cover archiving"
                                 )
-                                covers_count += 1
+                                break
+                            zf.write(cover_file, arcname=f"covers/{cover_file.name}")
+                            covers_count += 1
+                            if progress_callback is not None and c_idx % 20 == 0:
+                                cover_pct = 60.0 + (c_idx / total_covers) * 30.0
+                                progress_callback(
+                                    round(cover_pct, 1),
+                                    f"Archiving covers ({covers_count})",
+                                )
+
+                    if cancel_event is not None and cancel_event.is_set():
+                        logger.info("create_backup cancelled before manifest creation")
+                        if archive_path.exists():
+                            archive_path.unlink(missing_ok=True)
+                        return archive_path
+
+                    if progress_callback is not None:
+                        progress_callback(95.0, "Writing backup manifest...")
 
                     # 3. Create manifest
                     manifest = {
@@ -169,6 +214,9 @@ def create_backup(
                     }
                     manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
                     zf.writestr(MANIFEST_FILENAME, manifest_bytes)
+
+            if progress_callback is not None:
+                progress_callback(100.0, "Backup complete")
 
             logger.info(
                 "Created Aarkib backup '%s' (items: %d, covers: %d)",
