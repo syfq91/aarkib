@@ -77,8 +77,8 @@ gantt
     Phase 7: Profiles & Unified ACLs        :done, p7, 13, 16
     section Enrichment & Presentation
     Phase 8: Metadata Matching & Provenance :done, p8, 16, 18
-    Phase 9: Versioned Clean API (/api/v1)  :active, p9, 18, 20
-    Phase 10: UI Diagnostics & Management   :p10, 20, 22
+    Phase 9: Versioned Clean API (/api/v1)  :done, p9, 18, 20
+    Phase 10: UI Diagnostics & Management   :active, p10, 20, 22
     Phase 11: Final Verification & DoD      :p11, 22, 23
 ```
 
@@ -558,7 +558,7 @@ Execute rigorous validation across the entire repository to ensure zero regressi
 
 ## 🚀 Current Status & Next Steps
 
-1. **Phases 0 through 8 Complete**:
+1. **Phases 0 through 9 Complete**:
    - Baseline validation (Phase 0)
    - Client capabilities domain model & detection service (Phase 1)
    - Deterministic playback planner & domain models (Phase 2)
@@ -568,10 +568,11 @@ Execute rigorous validation across the entire repository to ensure zero regressi
    - Mount-safe library reconciliation & availability guards (Phase 6)
    - User profiles & centralized authorization / library ACLs (Phase 7)
    - Metadata candidate matcher, field-level provenance tracking & manual edit lock protection (Phase 8)
+   - Versioned clean REST API (`/api/v1/...`) with dedicated blueprint, playback-plan, jobs, profiles, and mount-safe reconciliation (Phase 9)
 2. **Current Verification Status**:
-   - All 377 Pytest tests pass cleanly (100% pass rate).
+   - All 385 Pytest tests pass cleanly (100% pass rate).
    - Zero Ruff linting errors (`uv run ruff check .`).
    - Zero Ruff formatting issues (`uv run ruff format --check .`).
-3. **Next Recommended Milestone — Phase 9**:
-   - Implement versioned clean REST API (`/api/v1/...`) with dedicated blueprint and schemas.
-   - Clean route abstractions for playback-plan, jobs, profiles, and mount-safe reconciliation.
+3. **Next Recommended Milestone — Phase 10**:
+   - Implement UI diagnostics overlay (playback stats HUD with key 'D') in reader templates.
+   - Implement live background jobs management card in WebUI settings.
