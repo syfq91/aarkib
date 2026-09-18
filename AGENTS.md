@@ -33,7 +33,7 @@ graph TD
             Scanner[Library Scanner & File Crawler]
             Transcoder[FFmpeg Remuxing & Transcoding Supervisor]
             Optimizer[E-Ink Device EPUB Optimizer]
-            Enricher[Metadata Providers: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
+            Enricher[Unified Metadata Registry: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
             MediaService[Media CRUD, Creator/Collection/Tag Resolvers]
         end
         
@@ -160,7 +160,7 @@ aarkib/
 │   │   ├── watcher.py        # Filesystem watcher with debounced event handling for library directories
 │   │   ├── search.py         # SQLite FTS5 full-text search engine, query builder, and field-qualified filters
 │   │   ├── transcoder.py     # On-demand video/audio remuxing, HLS adaptive streaming supervisor, VAAPI detection
-│   │   ├── enricher.py       # Multi-source metadata enrichment client
+│   │   ├── enricher.py       # Metadata enrichment workflow using the unified metadata_registry
 │   │   ├── thumbnail.py      # WebP thumbnail and cover generator
 │   │   ├── opml.py           # OPML podcast feed import and parser
 │   │   ├── media_service.py  # Canonical multi-media service: edit metadata, resolve creators/collections/tags

@@ -46,7 +46,7 @@ graph TD
             Scanner[Library Scanner & File Crawler]
             Transcoder[FFmpeg Remuxing & Transcoding Supervisor]
             Optimizer[E-Ink Device EPUB Optimizer]
-            Enricher[Metadata Providers: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
+            Enricher[Unified Metadata Registry: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
             MediaService[Media CRUD, Creator/Collection/Tag Resolvers]
         end
 

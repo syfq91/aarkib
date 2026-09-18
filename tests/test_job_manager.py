@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from aarkib.extensions import db
 from aarkib.models import JobRecord, Library, MediaItem, User
-from aarkib.services.enricher import EnrichedMetadata
 from aarkib.services.indexer import index_media_file
 from aarkib.services.job_manager import JobManager, JobStatus
 from aarkib.services.scanner import scan_library
@@ -203,15 +202,33 @@ def test_api_async_enrich_library(client, app, sample_epub):
         covers_dir = Path(app.config["COVERS_DIR"])
         index_media_file(sample_epub, covers_dir)
 
-    mock_meta = EnrichedMetadata(
+    from aarkib.services.metadata.base import MediaMetadataDetails, MetadataSearchResult
+
+    mock_search_result = [
+        MetadataSearchResult(
+            id="mock-123",
+            provider="mock",
+            title="Async Enriched Book",
+            score=1.0,
+        )
+    ]
+    mock_details = MediaMetadataDetails(
+        id="mock-123",
+        provider="mock",
         title="Async Enriched Book",
-        description="Async description",
+        overview="Async description",
         publisher="Async Pub",
-        source="Mock Source",
     )
 
-    with patch(
-        "aarkib.services.enricher.fetch_external_metadata", return_value=mock_meta
+    with (
+        patch(
+            "aarkib.services.metadata.registry.MetadataProviderRegistry.search",
+            return_value=mock_search_result,
+        ),
+        patch(
+            "aarkib.services.metadata.registry.MetadataProviderRegistry.fetch_details",
+            return_value=mock_details,
+        ),
     ):
         enrich_res = client.post("/api/libraries/enrich", json={"overwrite": True})
         assert enrich_res.status_code == 202
