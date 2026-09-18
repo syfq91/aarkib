@@ -183,6 +183,54 @@ def migrate_database() -> None:
     with db.engine.begin() as conn:
         init_search_fts(conn)
 
+        # Ensure all existing users have a Default profile and link existing progress & bookmarks
+        try:
+            users_without_profile = conn.execute(
+                text(
+                    "SELECT id FROM users WHERE id NOT IN (SELECT DISTINCT user_id FROM profiles)"
+                )
+            ).fetchall()
+            for u in users_without_profile:
+                conn.execute(
+                    text(
+                        "INSERT INTO profiles (user_id, name, is_child, created_at) "
+                        "VALUES (:user_id, 'Default', 0, CURRENT_TIMESTAMP)"
+                    ),
+                    {"user_id": u[0]},
+                )
+
+            conn.execute(
+                text(
+                    """
+                    UPDATE user_progress
+                    SET profile_id = (
+                        SELECT p.id FROM profiles p
+                        WHERE p.user_id = user_progress.user_id
+                        ORDER BY p.id ASC LIMIT 1
+                    )
+                    WHERE profile_id IS NULL AND user_id IS NOT NULL
+                    """
+                )
+            )
+
+            conn.execute(
+                text(
+                    """
+                    UPDATE bookmarks
+                    SET profile_id = (
+                        SELECT p.id FROM profiles p
+                        WHERE p.user_id = bookmarks.user_id
+                        ORDER BY p.id ASC LIMIT 1
+                    )
+                    WHERE profile_id IS NULL AND user_id IS NOT NULL
+                    """
+                )
+            )
+        except Exception as e:
+            logger.debug(
+                "Profile data auto-migration skipped or table not ready: %s", e
+            )
+
 
 def create_app(config_class: type[Config] | dict[str, Any] | None = None) -> Flask:
     if config_class is None:

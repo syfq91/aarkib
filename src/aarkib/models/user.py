@@ -12,6 +12,7 @@ from aarkib.extensions import db
 
 if TYPE_CHECKING:
     from aarkib.models.playlist import Playlist, UserFavorite
+    from aarkib.models.profile import Profile
     from aarkib.models.progress import Bookmark, UserProgress
     from aarkib.models.token import DeviceToken
 
@@ -30,6 +31,9 @@ class User(UserMixin, db.Model):
     )
 
     # Relationships
+    profiles: Mapped[list[Profile]] = relationship(
+        "Profile", back_populates="user", cascade="all, delete-orphan"
+    )
     progress_records: Mapped[list[UserProgress]] = relationship(
         "UserProgress", back_populates="user", cascade="all, delete-orphan"
     )
@@ -45,6 +49,16 @@ class User(UserMixin, db.Model):
     tokens: Mapped[list[DeviceToken]] = relationship(
         "DeviceToken", back_populates="user", cascade="all, delete-orphan"
     )
+
+    @property
+    def default_profile(self) -> Profile | None:
+        """Returns user's default profile, or the first active profile."""
+        if not self.profiles:
+            return None
+        for p in self.profiles:
+            if p.name.lower() == "default":
+                return p
+        return self.profiles[0]
 
     @property
     def has_password(self) -> bool:

@@ -12,7 +12,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,18 +19,26 @@ from aarkib.extensions import db
 
 if TYPE_CHECKING:
     from aarkib.models.media_item import MediaItem
+    from aarkib.models.profile import Profile
     from aarkib.models.user import User
 
 
 class UserProgress(db.Model):
     __tablename__ = "user_progress"
     __table_args__ = (
-        UniqueConstraint("user_id", "media_item_id", name="uq_user_item_progress"),
+        Index("ix_user_progress_profile_item", "profile_id", "media_item_id"),
+        Index("ix_user_progress_user_item", "user_id", "media_item_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    profile_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     media_item_id: Mapped[int] = mapped_column(
         Integer,
@@ -66,6 +73,9 @@ class UserProgress(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="progress_records")
+    profile: Mapped[Profile | None] = relationship(
+        "Profile", back_populates="progress_records"
+    )
     media_item: Mapped[MediaItem] = relationship(
         "MediaItem", back_populates="progress_records"
     )
@@ -80,7 +90,7 @@ class UserProgress(db.Model):
 
     def __repr__(self) -> str:
         pct = self.percentage or 0.0
-        return f"<UserProgress user={self.user_id} item={self.media_item_id} progress={pct:.1f}%>"
+        return f"<UserProgress user={self.user_id} profile={self.profile_id} item={self.media_item_id} progress={pct:.1f}%>"
 
 
 class Bookmark(db.Model):
@@ -92,11 +102,18 @@ class Bookmark(db.Model):
             "user_id",
             "created_at",
         ),
+        Index("ix_bookmarks_profile_created", "profile_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    profile_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     media_item_id: Mapped[int] = mapped_column(
         Integer,
@@ -113,6 +130,9 @@ class Bookmark(db.Model):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", back_populates="bookmarks")
+    profile: Mapped[Profile | None] = relationship(
+        "Profile", back_populates="bookmarks"
+    )
     media_item: Mapped[MediaItem] = relationship(
         "MediaItem", back_populates="bookmarks"
     )

@@ -45,9 +45,14 @@ def default_user(app: Flask):
             select(User).where(User.username == "default_test_admin")
         )
         if not user:
+            from aarkib.models import Profile
+
             user = User(username="default_test_admin", is_admin=True)
             user.set_password("defaultpass")
             db.session.add(user)
+            db.session.flush()
+            prof = Profile(user_id=user.id, name="Default", is_child=False)
+            db.session.add(prof)
             db.session.commit()
         return user.id
 

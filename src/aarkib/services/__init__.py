@@ -1,3 +1,7 @@
+from aarkib.services.authorization import (
+    AuthorizationService,
+    authorization,
+)
 from aarkib.services.capability_service import (
     CapabilityService,
     capability_service,
@@ -43,6 +47,8 @@ __all__ = [
     "start_library_watcher",
     "validate_library_availability",
     "generate_cover_webp",
+    "AuthorizationService",
+    "authorization",
     "CapabilityService",
     "capability_service",
     "detect_client_capabilities",

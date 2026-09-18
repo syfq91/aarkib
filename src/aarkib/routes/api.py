@@ -19,11 +19,12 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db, safe_commit
@@ -213,7 +214,9 @@ def api_admin_required(view):
                 jsonify({"error": "Device token missing required 'admin' scope"}),
                 HTTPStatus.FORBIDDEN,
             )
-        if not current_user.is_admin:
+        from aarkib.services.authorization import authorization
+
+        if not authorization.can(current_user, "admin"):
             return (
                 jsonify({"error": "Administrator privileges required"}),
                 HTTPStatus.FORBIDDEN,
@@ -1243,8 +1246,17 @@ def get_media_item(item_id: int) -> ResponseReturnValue:
     if not item:
         return api_error("Media item not found", 404)
 
-    user_id = current_user.id if current_user.is_authenticated else None
-    prog_data = get_progress_service(user_id, item)
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    subject = active_prof or user
+    if subject and not authorization.can(subject, "library.read", item.library_id):
+        return api_error("Access denied by library access control", 403)
+
+    user_id = user.id if user else None
+    profile_id = getattr(active_prof, "id", None)
+    prog_data = get_progress_service(user_id, item, profile_id=profile_id)
     prog = (
         {
             "percentage": prog_data["percentage"],
@@ -1382,6 +1394,14 @@ def get_media_file(item_id: int, filename: str | None = None) -> ResponseReturnV
     if not item:
         return api_error("Media item not found", 404)
 
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    subject = active_prof or user
+    if subject and not authorization.can(subject, "media.stream", item):
+        return api_error("Access denied by library access control", 403)
+
     file_path = Path(item.original_file_path).resolve()
     if not is_safe_media_path(file_path):
         return api_error(
@@ -1432,7 +1452,15 @@ def get_media_playback(item_id: int) -> ResponseReturnValue:
     if not item:
         return api_error("Media item not found", 404)
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    subject = active_prof or user
+    if subject and not authorization.can(subject, "media.stream", item):
+        return api_error("Access denied by library access control", 403)
+
+    user_id = user.id if user else None
     from aarkib.plugins import plugin_registry
     from aarkib.services.capability_service import capability_service
     from aarkib.services.playback_service import playback_service
@@ -1814,6 +1842,14 @@ def download_media_file(item_id: int, preset: str | None = None) -> ResponseRetu
     if not item:
         return api_error("Media item not found", 404)
 
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    subject = active_prof or user
+    if subject and not authorization.can(subject, "library.download", item.library_id):
+        return api_error("Download denied by library access control", 403)
+
     preset_arg = preset or request.args.get("preset") or request.args.get("optimize")
     if preset_arg:
         from aarkib.plugins.optimizer import DEVICE_PRESETS
@@ -2075,7 +2111,12 @@ def media_progress(item_id: int) -> ResponseReturnValue:
     if not item:
         return api_error("Media item not found", 404)
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    profile_id = getattr(active_prof, "id", None)
+    user_id = user.id if user else None
     token = getattr(g, "device_token", None)
 
     if request.method == "POST":
@@ -2087,7 +2128,7 @@ def media_progress(item_id: int) -> ResponseReturnValue:
                 HTTPStatus.FORBIDDEN,
             )
         data = request.get_json(silent=True) or {}
-        record = update_progress_service(user_id, item, data)
+        record = update_progress_service(user_id, item, data, profile_id=profile_id)
         return jsonify(
             {
                 "status": "ok",
@@ -2106,7 +2147,7 @@ def media_progress(item_id: int) -> ResponseReturnValue:
             jsonify({"error": "Device token missing required scope: 'media:read'"}),
             HTTPStatus.FORBIDDEN,
         )
-    return jsonify(get_progress_service(user_id, item))
+    return jsonify(get_progress_service(user_id, item, profile_id=profile_id))
 
 
 @api_bp.route("/media/<int:item_id>/bookmarks", methods=["GET", "POST"])
@@ -2116,7 +2157,12 @@ def bookmarks(item_id: int) -> ResponseReturnValue:
     if not item:
         return api_error("Media item not found", 404)
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    profile_id = getattr(active_prof, "id", None)
+    user_id = user.id if user else None
 
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
@@ -2126,7 +2172,12 @@ def bookmarks(item_id: int) -> ResponseReturnValue:
 
         try:
             bm = add_bookmark_service(
-                item.id, user_id, location=location, title=title, snippet=snippet
+                item.id,
+                user_id,
+                location=location,
+                title=title,
+                snippet=snippet,
+                profile_id=profile_id,
             )
         except ValueError as exc:
             return api_error(str(exc), 400)
@@ -2143,7 +2194,7 @@ def bookmarks(item_id: int) -> ResponseReturnValue:
             201,
         )
 
-    bms = list_bookmarks_service(item.id, user_id)
+    bms = list_bookmarks_service(item.id, user_id=user_id, profile_id=profile_id)
     return jsonify(
         [
             {
@@ -2161,14 +2212,19 @@ def bookmarks(item_id: int) -> ResponseReturnValue:
 @api_bp.route("/bookmarks/<int:bookmark_id>", methods=["DELETE"])
 def delete_bookmark(bookmark_id: int) -> ResponseReturnValue:
     """Delete a bookmark, restricted to its owner (or any anonymous bookmark)."""
-    user_id = current_user.id if current_user.is_authenticated else None
+    from aarkib.services.authorization import authorization
+
+    user = current_user if current_user.is_authenticated else None
+    active_prof = authorization.get_active_profile(user)
+    profile_id = getattr(active_prof, "id", None)
+    user_id = user.id if user else None
     try:
-        delete_bookmark_service(bookmark_id, user_id)
+        delete_bookmark_service(bookmark_id, user_id=user_id, profile_id=profile_id)
     except KeyError:
         return api_error("Bookmark not found", 404)
     except PermissionError:
         return api_error("Forbidden", 403)
-    return jsonify({"status": "deleted"})
+    return jsonify({"status": "deleted"}), 200
 
 
 @api_bp.route("/library/scan", methods=["POST"])
@@ -2972,3 +3028,245 @@ def notification_status() -> ResponseReturnValue:
             "stats": stats,
         }
     )
+
+
+# --- Profile Management & Library ACL Endpoints ---
+
+
+@api_bp.route("/profiles", methods=["GET"])
+@login_required
+def list_user_profiles() -> ResponseReturnValue:
+    """List all profiles associated with the currently authenticated user."""
+    from aarkib.models import Profile
+
+    profiles = db.session.scalars(
+        select(Profile)
+        .where(Profile.user_id == current_user.id)
+        .order_by(Profile.created_at.asc())
+    ).all()
+    return jsonify(
+        {
+            "status": "success",
+            "profiles": [p.to_dict() for p in profiles],
+        }
+    )
+
+
+@api_bp.route("/profiles", methods=["POST"])
+@login_required
+def create_user_profile() -> ResponseReturnValue:
+    """Create a new profile under the currently authenticated user account."""
+    from aarkib.models import Profile, ProfileLibraryAccess
+
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    if not name:
+        return api_error("Profile name is required", 400)
+
+    is_child = bool(data.get("is_child", False))
+    avatar_url = data.get("avatar_url")
+    if avatar_url:
+        avatar_url = str(avatar_url).strip()
+
+    profile = Profile(
+        user_id=current_user.id,
+        name=name,
+        is_child=is_child,
+        avatar_url=avatar_url,
+    )
+    db.session.add(profile)
+    db.session.flush()
+
+    # Optional initial library access rules
+    access_rules = data.get("library_access")
+    if isinstance(access_rules, list):
+        for rule in access_rules:
+            if isinstance(rule, dict) and "library_id" in rule:
+                acl = ProfileLibraryAccess(
+                    profile_id=profile.id,
+                    library_id=int(rule["library_id"]),
+                    can_read=bool(rule.get("can_read", True)),
+                    can_download=bool(rule.get("can_download", not is_child)),
+                )
+                db.session.add(acl)
+
+    db.session.commit()
+    return (
+        jsonify({"status": "success", "profile": profile.to_dict()}),
+        201,
+    )
+
+
+@api_bp.route("/profiles/<int:profile_id>", methods=["GET"])
+@login_required
+def get_user_profile(profile_id: int) -> ResponseReturnValue:
+    """Retrieve details and ACLs for a specific profile."""
+    from aarkib.models import Profile
+
+    profile = db.session.get(Profile, profile_id)
+    if not profile:
+        return api_error("Profile not found", 404)
+    if profile.user_id != current_user.id and not current_user.is_admin:
+        return api_error("Forbidden", 403)
+
+    return jsonify({"status": "success", "profile": profile.to_dict()})
+
+
+@api_bp.route("/profiles/<int:profile_id>", methods=["PUT"])
+@login_required
+def update_user_profile(profile_id: int) -> ResponseReturnValue:
+    """Update attributes and ACL permissions for a specific profile."""
+    from aarkib.models import Profile, ProfileLibraryAccess
+
+    profile = db.session.get(Profile, profile_id)
+    if not profile:
+        return api_error("Profile not found", 404)
+    if profile.user_id != current_user.id and not current_user.is_admin:
+        return api_error("Forbidden", 403)
+
+    data = request.get_json(silent=True) or {}
+    if "name" in data:
+        name = str(data["name"]).strip()
+        if not name:
+            return api_error("Profile name cannot be empty", 400)
+        profile.name = name
+
+    if "is_child" in data:
+        profile.is_child = bool(data["is_child"])
+
+    if "avatar_url" in data:
+        profile.avatar_url = (
+            str(data["avatar_url"]).strip() if data["avatar_url"] else None
+        )
+
+    if "library_access" in data and isinstance(data["library_access"], list):
+        for rule in data["library_access"]:
+            if isinstance(rule, dict) and "library_id" in rule:
+                lib_id = int(rule["library_id"])
+                existing = db.session.scalar(
+                    select(ProfileLibraryAccess).where(
+                        ProfileLibraryAccess.profile_id == profile.id,
+                        ProfileLibraryAccess.library_id == lib_id,
+                    )
+                )
+                if existing:
+                    if "can_read" in rule:
+                        existing.can_read = bool(rule["can_read"])
+                    if "can_download" in rule:
+                        existing.can_download = bool(rule["can_download"])
+                else:
+                    acl = ProfileLibraryAccess(
+                        profile_id=profile.id,
+                        library_id=lib_id,
+                        can_read=bool(rule.get("can_read", True)),
+                        can_download=bool(
+                            rule.get("can_download", not profile.is_child)
+                        ),
+                    )
+                    db.session.add(acl)
+
+    db.session.commit()
+    return jsonify({"status": "success", "profile": profile.to_dict()})
+
+
+@api_bp.route("/profiles/<int:profile_id>", methods=["DELETE"])
+@login_required
+def delete_user_profile(profile_id: int) -> ResponseReturnValue:
+    """Delete a profile, preventing deletion if it is the user's sole profile."""
+    from aarkib.models import Profile
+
+    profile = db.session.get(Profile, profile_id)
+    if not profile:
+        return api_error("Profile not found", 404)
+    if profile.user_id != current_user.id and not current_user.is_admin:
+        return api_error("Forbidden", 403)
+
+    total_profiles = (
+        db.session.scalar(
+            select(func.count(Profile.id)).where(Profile.user_id == profile.user_id)
+        )
+        or 0
+    )
+    if total_profiles <= 1:
+        return api_error("Cannot delete the only profile for this user account", 400)
+
+    if session.get("profile_id") == profile.id:
+        session.pop("profile_id", None)
+
+    name = profile.name
+    db.session.delete(profile)
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Profile '{name}' deleted"})
+
+
+@api_bp.route("/profiles/<int:profile_id>/select", methods=["POST"])
+@login_required
+def select_active_profile(profile_id: int) -> ResponseReturnValue:
+    """Select active profile for the current user session."""
+    from aarkib.models import Profile
+
+    profile = db.session.get(Profile, profile_id)
+    if not profile:
+        return api_error("Profile not found", 404)
+    if profile.user_id != current_user.id and not current_user.is_admin:
+        return api_error("Forbidden", 403)
+
+    session["profile_id"] = profile.id
+    g.active_profile = profile
+    return jsonify({"status": "success", "active_profile": profile.to_dict()})
+
+
+@api_bp.route("/profiles/<int:profile_id>/access", methods=["GET", "PUT"])
+@login_required
+def profile_library_access_endpoint(profile_id: int) -> ResponseReturnValue:
+    """Get or update library access controls (ACLs) for a profile."""
+    from aarkib.models import Profile, ProfileLibraryAccess
+
+    profile = db.session.get(Profile, profile_id)
+    if not profile:
+        return api_error("Profile not found", 404)
+    if profile.user_id != current_user.id and not current_user.is_admin:
+        return api_error("Forbidden", 403)
+
+    if request.method == "GET":
+        acls = db.session.scalars(
+            select(ProfileLibraryAccess).where(
+                ProfileLibraryAccess.profile_id == profile.id
+            )
+        ).all()
+        return jsonify({"status": "success", "access": [a.to_dict() for a in acls]})
+
+    data = request.get_json(silent=True) or []
+    if not isinstance(data, list):
+        return api_error("Expected a list of access rules", 400)
+
+    for rule in data:
+        if isinstance(rule, dict) and "library_id" in rule:
+            lib_id = int(rule["library_id"])
+            existing = db.session.scalar(
+                select(ProfileLibraryAccess).where(
+                    ProfileLibraryAccess.profile_id == profile.id,
+                    ProfileLibraryAccess.library_id == lib_id,
+                )
+            )
+            if existing:
+                if "can_read" in rule:
+                    existing.can_read = bool(rule["can_read"])
+                if "can_download" in rule:
+                    existing.can_download = bool(rule["can_download"])
+            else:
+                acl = ProfileLibraryAccess(
+                    profile_id=profile.id,
+                    library_id=lib_id,
+                    can_read=bool(rule.get("can_read", True)),
+                    can_download=bool(rule.get("can_download", not profile.is_child)),
+                )
+                db.session.add(acl)
+
+    db.session.commit()
+    updated_acls = db.session.scalars(
+        select(ProfileLibraryAccess).where(
+            ProfileLibraryAccess.profile_id == profile.id
+        )
+    ).all()
+    return jsonify({"status": "success", "access": [a.to_dict() for a in updated_acls]})

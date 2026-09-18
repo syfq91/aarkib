@@ -79,7 +79,9 @@ def admin_required(f: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(f)
     @login_required
     def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        if not current_user.is_admin:
+        from aarkib.services.authorization import authorization
+
+        if not authorization.can(current_user, "admin"):
             flash("Administrator privileges required to access this page.", "error")
             return redirect(url_for("ui.index"))
         return f(*args, **kwargs)
@@ -189,9 +191,14 @@ def setup() -> ResponseReturnValue:
         elif password != confirm_password:
             flash("Passwords do not match.", "error")
         else:
+            from aarkib.models import Profile
+
             user = User(username=username, is_admin=True)
             user.set_password(password)
             db.session.add(user)
+            db.session.flush()
+            prof = Profile(user_id=user.id, name="Default", is_child=False)
+            db.session.add(prof)
             safe_commit()
             login_user(user)
             flash("Admin account created! Welcome to Aarkib.", "success")
@@ -300,6 +307,11 @@ def manage_users() -> ResponseReturnValue:
             else:
                 new_user.set_password(None)
             db.session.add(new_user)
+            db.session.flush()
+            from aarkib.models import Profile
+
+            prof = Profile(user_id=new_user.id, name="Default", is_child=False)
+            db.session.add(prof)
             safe_commit()
             flash(f"User '{username}' created successfully.", "success")
             referrer = request.referrer or ""

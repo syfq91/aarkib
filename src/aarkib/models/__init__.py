@@ -25,6 +25,7 @@ from aarkib.models.playback import (
     PlaybackPlan,
 )
 from aarkib.models.playlist import Playlist, PlaylistItem, UserFavorite
+from aarkib.models.profile import Profile, ProfileLibraryAccess
 from aarkib.models.progress import Bookmark, UserProgress
 from aarkib.models.setting import SystemSetting
 from aarkib.models.tag import Tag, media_tags
@@ -33,6 +34,8 @@ from aarkib.models.user import User
 
 __all__ = [
     "User",
+    "Profile",
+    "ProfileLibraryAccess",
     "DeviceToken",
     "DevicePairingCode",
     "MediaItem",

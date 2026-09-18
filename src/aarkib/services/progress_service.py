@@ -16,19 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 def get_progress_for_items(
-    user_id: int | None, item_ids: list[int]
+    user_id: int | None,
+    item_ids: list[int],
+    profile_id: int | None = None,
 ) -> dict[int, dict[str, Any]]:
-    """Fetches progress summary map keyed by media_item_id."""
+    """Fetches progress summary map keyed by media_item_id, scoped by profile or user."""
     if not item_ids:
         return {}
 
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
+    if profile_id is not None:
+        target_cond = UserProgress.profile_id == profile_id
+    elif user_id is not None:
+        target_cond = UserProgress.user_id == user_id
+    else:
+        target_cond = UserProgress.user_id.is_(None)
+
     records = db.session.scalars(
-        select(UserProgress).where(user_cond, UserProgress.media_item_id.in_(item_ids))
+        select(UserProgress).where(
+            target_cond, UserProgress.media_item_id.in_(item_ids)
+        )
     ).all()
 
     return {
@@ -48,15 +54,21 @@ def get_progress_for_items(
     }
 
 
-def get_progress(user_id: int | None, item: MediaItem) -> dict[str, Any]:
-    """Fetches progress dictionary for a single media item."""
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
+def get_progress(
+    user_id: int | None,
+    item: MediaItem,
+    profile_id: int | None = None,
+) -> dict[str, Any]:
+    """Fetches progress dictionary for a single media item, scoped by profile or user."""
+    if profile_id is not None:
+        target_cond = UserProgress.profile_id == profile_id
+    elif user_id is not None:
+        target_cond = UserProgress.user_id == user_id
+    else:
+        target_cond = UserProgress.user_id.is_(None)
+
     record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
+        select(UserProgress).where(target_cond, UserProgress.media_item_id == item.id)
     )
 
     if record:
@@ -88,13 +100,16 @@ def update_progress(
     user_id: int | None,
     item: MediaItem,
     data: dict[str, Any],
+    profile_id: int | None = None,
 ) -> UserProgress:
-    """Updates or inserts reading/video progress for a media item."""
-    user_cond = (
-        UserProgress.user_id.is_(None)
-        if user_id is None
-        else (UserProgress.user_id == user_id)
-    )
+    """Updates or inserts reading/video progress for a media item, scoped by profile or user."""
+    if profile_id is not None:
+        target_cond = UserProgress.profile_id == profile_id
+    elif user_id is not None:
+        target_cond = UserProgress.user_id == user_id
+    else:
+        target_cond = UserProgress.user_id.is_(None)
+
     location = str(data.get("location", "0"))
     try:
         percentage = float(data.get("percentage", 0.0))
@@ -104,10 +119,16 @@ def update_progress(
     is_completed = bool(data.get("is_completed", False) or percentage >= 99.0)
 
     record = db.session.scalar(
-        select(UserProgress).where(user_cond, UserProgress.media_item_id == item.id)
+        select(UserProgress).where(target_cond, UserProgress.media_item_id == item.id)
     )
     if not record:
-        record = UserProgress(user_id=user_id, media_item_id=item.id)
+        record = UserProgress(
+            user_id=user_id,
+            profile_id=profile_id,
+            media_item_id=item.id,
+        )
+    elif profile_id is not None and record.profile_id is None:
+        record.profile_id = profile_id
 
     # Only update location if new location is non-zero or record has no valid location
     if (location and location != "0") or not record.progress_location:
@@ -171,10 +192,16 @@ def update_progress(
     return record
 
 
-def list_bookmarks(media_item_id: int, user_id: int | None = None) -> list[Bookmark]:
-    """List bookmarks for a media item, optionally filtered by user."""
+def list_bookmarks(
+    media_item_id: int,
+    user_id: int | None = None,
+    profile_id: int | None = None,
+) -> list[Bookmark]:
+    """List bookmarks for a media item, optionally filtered by user or profile."""
     query = select(Bookmark).where(Bookmark.media_item_id == media_item_id)
-    if user_id:
+    if profile_id is not None:
+        query = query.where(Bookmark.profile_id == profile_id)
+    elif user_id is not None:
         query = query.where(Bookmark.user_id == user_id)
     return list(db.session.scalars(query.order_by(Bookmark.created_at.desc())).all())
 
@@ -185,13 +212,15 @@ def add_bookmark(
     location: str,
     title: str | None = None,
     snippet: str | None = None,
+    profile_id: int | None = None,
 ) -> Bookmark:
-    """Create a bookmark for a media item."""
+    """Create a bookmark for a media item, optionally associated with a profile."""
     if not location:
         raise ValueError("Location is required")
 
     bm = Bookmark(
         user_id=user_id,
+        profile_id=profile_id,
         media_item_id=media_item_id,
         location=location,
         title=title or f"Bookmark at {location}",
@@ -202,17 +231,27 @@ def add_bookmark(
     return bm
 
 
-def delete_bookmark(bookmark_id: int, user_id: int | None = None) -> bool:
-    """Delete a bookmark, checking authorization if owned by a specific user.
+def delete_bookmark(
+    bookmark_id: int,
+    user_id: int | None = None,
+    profile_id: int | None = None,
+) -> bool:
+    """Delete a bookmark, checking authorization if owned by a specific user or profile.
 
     Returns True if deleted.
     Raises KeyError if bookmark does not exist.
-    Raises PermissionError if bookmark belongs to another user.
+    Raises PermissionError if bookmark belongs to another user or profile.
     """
     bm = db.session.get(Bookmark, bookmark_id)
     if not bm:
         raise KeyError("Bookmark not found")
-    if bm.user_id and bm.user_id != user_id:
+    if (
+        profile_id is not None
+        and bm.profile_id is not None
+        and bm.profile_id != profile_id
+    ):
+        raise PermissionError("Forbidden")
+    if bm.user_id and user_id and bm.user_id != user_id:
         raise PermissionError("Forbidden")
 
     db.session.delete(bm)
