@@ -424,15 +424,29 @@ class PlaybackService:
 
         # Hardware acceleration detection for transcode scenarios
         hwaccel_device: str = "software"
-        if hwaccel in ("auto", "vaapi"):
-            try:
-                from aarkib.services.transcoder import detect_vaapi_device
+        hwaccel_backend: str = "software"
+        try:
+            from aarkib.services.transcoder import (
+                detect_transcode_capabilities,
+                resolve_transcode_profile,
+            )
 
-                vaapi_node = detect_vaapi_device()
-                if vaapi_node:
-                    hwaccel_device = vaapi_node
-            except Exception:
-                pass
+            trans_caps = detect_transcode_capabilities()
+            trans_prof = resolve_transcode_profile(
+                requested_backend=hwaccel,
+                capabilities=trans_caps,
+                target_width=target_w if "target_w" in locals() and target_w else None,
+                bitrate_kbps=target_bitrate or 4500,
+            )
+            hwaccel_backend = trans_prof.backend
+            if trans_prof.backend == "vaapi":
+                hwaccel_device = trans_prof.device or "vaapi"
+            elif trans_prof.backend == "qsv":
+                hwaccel_device = "qsv"
+            else:
+                hwaccel_device = "software"
+        except Exception:
+            pass
 
         common_diagnostics: dict[str, Any] = {
             "container": ext,
@@ -569,6 +583,7 @@ class PlaybackService:
                         "transcode_video": True,
                         "transcode_audio": True,
                         "hwaccel": hwaccel_device,
+                        "hwaccel_backend": hwaccel_backend,
                         "downscale": res_requested_downscale,
                     },
                 )

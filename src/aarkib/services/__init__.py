@@ -22,6 +22,13 @@ from aarkib.services.scanner import (
     start_library_watcher,
 )
 from aarkib.services.thumbnail import generate_cover_webp
+from aarkib.services.transcoder import (
+    TranscodeCapabilities,
+    TranscodeProfile,
+    detect_transcode_capabilities,
+    resolve_transcode_profile,
+    transcode_supervisor,
+)
 
 __all__ = [
     "BaseParsedMetadata",
@@ -40,4 +47,9 @@ __all__ = [
     "PlaybackService",
     "playback_service",
     "plan_playback",
+    "TranscodeCapabilities",
+    "TranscodeProfile",
+    "detect_transcode_capabilities",
+    "resolve_transcode_profile",
+    "transcode_supervisor",
 ]

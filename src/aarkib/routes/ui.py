@@ -412,6 +412,25 @@ def settings(category: str | None = None) -> ResponseReturnValue:
             len(list(backups_dir.glob("*.zip"))) if backups_dir.is_dir() else 0
         )
 
+        from aarkib.services.transcoder import (
+            detect_transcode_capabilities,
+            resolve_transcode_profile,
+        )
+
+        hw_caps = detect_transcode_capabilities()
+        transcode_backend = current_app.config.get("TRANSCODE_BACKEND", "auto")
+        hw_profile = resolve_transcode_profile(
+            requested_backend=transcode_backend,
+            capabilities=hw_caps,
+        )
+
+        if hw_profile.backend == "vaapi":
+            hw_active_label = f"VA-API ({hw_profile.device or 'auto'})"
+        elif hw_profile.backend == "qsv":
+            hw_active_label = "Intel QSV"
+        else:
+            hw_active_label = "CPU Software (libx264)"
+
         system_health = {
             "sqlite_version": sqlite3.sqlite_version,
             "journal_mode": str(journal_mode).upper(),
@@ -425,6 +444,10 @@ def settings(category: str | None = None) -> ResponseReturnValue:
             "ffprobe_path": ffprobe_bin or "Not Found",
             "covers_count": covers_count,
             "backups_count": backups_count,
+            "hwaccel_backend": transcode_backend,
+            "hwaccel_active": hw_active_label,
+            "hwaccel_vaapi": hw_caps.vaapi_device,
+            "hwaccel_qsv": hw_caps.qsv_available,
         }
 
         from aarkib.models.job import JobRecord

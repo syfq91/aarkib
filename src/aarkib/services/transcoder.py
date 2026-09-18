@@ -25,15 +25,359 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 VAAPI_PROBE_TIMEOUT: int = 5
+QSV_PROBE_TIMEOUT: int = 5
 FFPROBE_STREAM_TIMEOUT: int = 12
 SUBTITLE_CONVERT_TIMEOUT: int = 10
 REMUX_PROCESS_STOP_TIMEOUT: float = 1.5
 TRANSCODE_PROCESS_STOP_TIMEOUT: float = 2.0
 
-# Cache detected VAAPI device to avoid probing repeatedly
+# Cache detected transcode capabilities to avoid probing repeatedly
+_CACHED_TRANSCODE_CAPS: TranscodeCapabilities | None = None
+_TRANSCODE_CAPS_LOCK = threading.Lock()
 _CACHED_VAAPI_DEVICE: str | None = None
 _VAAPI_CHECKED: bool = False
 _VAAPI_LOCK = threading.Lock()
+
+
+@dataclass
+class TranscodeCapabilities:
+    """Hardware and software video transcoding capabilities."""
+
+    software_available: bool = True
+    vaapi_device: str | None = None
+    qsv_available: bool = False
+    active_backend: str = "auto"
+
+    @property
+    def is_hardware_accelerated(self) -> bool:
+        return bool(self.vaapi_device or self.qsv_available)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "software_available": self.software_available,
+            "vaapi_device": self.vaapi_device,
+            "qsv_available": self.qsv_available,
+            "active_backend": self.active_backend,
+            "is_hardware_accelerated": self.is_hardware_accelerated,
+        }
+
+
+@dataclass(frozen=True)
+class TranscodeProfile:
+    """Resolved FFmpeg transcoding parameters and argument lists."""
+
+    backend: str  # "software", "vaapi", "qsv"
+    video_codec: str  # "libx264", "h264_vaapi", "h264_qsv"
+    device: str | None = None
+    hwaccel_args: tuple[str, ...] = ()
+    filter_args: tuple[str, ...] = ()
+    encoder_args: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "backend": self.backend,
+            "video_codec": self.video_codec,
+            "device": self.device,
+            "hwaccel_args": list(self.hwaccel_args),
+            "filter_args": list(self.filter_args),
+            "encoder_args": list(self.encoder_args),
+        }
+
+
+def _probe_vaapi_node(ffmpeg_bin: str, node: str) -> bool:
+    """Probes whether a Linux VA-API render node supports h264_vaapi encoding."""
+    try:
+        probe_cmd = [
+            ffmpeg_bin,
+            "-v",
+            "quiet",
+            "-hwaccel",
+            "vaapi",
+            "-vaapi_device",
+            node,
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=d=0.1",
+            "-vf",
+            "format=nv12,hwupload",
+            "-c:v",
+            "h264_vaapi",
+            "-f",
+            "null",
+            "-",
+        ]
+        res = subprocess.run(
+            probe_cmd, capture_output=True, timeout=VAAPI_PROBE_TIMEOUT
+        )
+        return res.returncode == 0
+    except Exception as e:
+        logger.debug("VAAPI probe exception on device %s: %s", node, e)
+        return False
+
+
+def _probe_qsv_support(ffmpeg_bin: str) -> bool:
+    """Probes whether Intel QuickSync Video (h264_qsv) encoder is functional."""
+    try:
+        probe_cmd = [
+            ffmpeg_bin,
+            "-v",
+            "quiet",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=d=0.1",
+            "-c:v",
+            "h264_qsv",
+            "-f",
+            "null",
+            "-",
+        ]
+        res = subprocess.run(probe_cmd, capture_output=True, timeout=QSV_PROBE_TIMEOUT)
+        return res.returncode == 0
+    except Exception as e:
+        logger.debug("QSV probe exception: %s", e)
+        return False
+
+
+def detect_transcode_capabilities(
+    device_override: str | None = None,
+    force_refresh: bool = False,
+) -> TranscodeCapabilities:
+    """Detects available hardware and software video transcoding capabilities.
+
+    Probes Linux VA-API render nodes (/dev/dri/renderD*) and Intel QuickSync Video
+    (h264_qsv) encoder support with bounded 5s timeouts and safe subprocess execution.
+    """
+    global _CACHED_TRANSCODE_CAPS, _CACHED_VAAPI_DEVICE, _VAAPI_CHECKED
+
+    if not force_refresh and not device_override:
+        with _TRANSCODE_CAPS_LOCK:
+            if _CACHED_TRANSCODE_CAPS is not None:
+                return _CACHED_TRANSCODE_CAPS
+
+    ffmpeg_bin = get_ffmpeg_binary()
+    if not ffmpeg_bin:
+        caps = TranscodeCapabilities(
+            software_available=False,
+            vaapi_device=None,
+            qsv_available=False,
+            active_backend="software",
+        )
+        if not device_override:
+            with _TRANSCODE_CAPS_LOCK:
+                _CACHED_TRANSCODE_CAPS = caps
+            with _VAAPI_LOCK:
+                _CACHED_VAAPI_DEVICE = None
+                _VAAPI_CHECKED = True
+        return caps
+
+    # 1. Linux VA-API render node discovery & probe
+    vaapi_node: str | None = None
+    if device_override:
+        vaapi_node = device_override
+    else:
+        candidate_nodes: list[str] = []
+        env_device = os.getenv("AARKIB_VAAPI_DEVICE")
+        if env_device:
+            candidate_nodes.append(env_device)
+
+        dri_dir = Path("/dev/dri")
+        if dri_dir.is_dir():
+            for p in sorted(dri_dir.glob("renderD*")):
+                s_path = str(p)
+                if s_path not in candidate_nodes:
+                    candidate_nodes.append(s_path)
+
+        for node in candidate_nodes:
+            if not os.path.exists(node):
+                continue
+            if not os.access(node, os.R_OK | os.W_OK):
+                logger.debug(
+                    "Skipping VAAPI node %s: insufficient read/write permissions", node
+                )
+                continue
+            if _probe_vaapi_node(ffmpeg_bin, node):
+                logger.info(
+                    "Successfully validated VAAPI hardware encoder on device: %s", node
+                )
+                vaapi_node = node
+                break
+            else:
+                logger.debug("VAAPI probe failed on device %s", node)
+
+    # 2. Intel QSV probe
+    qsv_supported = _probe_qsv_support(ffmpeg_bin)
+    if qsv_supported:
+        logger.info("Successfully validated Intel QuickSync Video (h264_qsv) encoder")
+
+    caps = TranscodeCapabilities(
+        software_available=True,
+        vaapi_device=vaapi_node,
+        qsv_available=qsv_supported,
+        active_backend="auto",
+    )
+
+    if not device_override:
+        with _TRANSCODE_CAPS_LOCK:
+            _CACHED_TRANSCODE_CAPS = caps
+        with _VAAPI_LOCK:
+            _CACHED_VAAPI_DEVICE = vaapi_node
+            _VAAPI_CHECKED = True
+
+    return caps
+
+
+def detect_vaapi_device(device_override: str | None = None) -> str | None:
+    """Dynamically detects usable Linux VAAPI render nodes with fallback.
+
+    Maintained for backward compatibility. Delegates to detect_transcode_capabilities.
+    """
+    caps = detect_transcode_capabilities(device_override=device_override)
+    return caps.vaapi_device
+
+
+def reset_transcode_cache() -> None:
+    """Resets cached transcode capabilities and VA-API discovery."""
+    global _CACHED_TRANSCODE_CAPS, _CACHED_VAAPI_DEVICE, _VAAPI_CHECKED
+    with _TRANSCODE_CAPS_LOCK:
+        _CACHED_TRANSCODE_CAPS = None
+    with _VAAPI_LOCK:
+        _CACHED_VAAPI_DEVICE = None
+        _VAAPI_CHECKED = False
+
+
+def reset_vaapi_cache() -> None:
+    """Resets the cached VAAPI device discovery (useful in tests)."""
+    reset_transcode_cache()
+
+
+def resolve_transcode_profile(
+    requested_backend: str = "auto",
+    capabilities: TranscodeCapabilities | None = None,
+    target_width: int | None = None,
+    bitrate_kbps: int = 4500,
+) -> TranscodeProfile:
+    """Resolves an optimal FFmpeg TranscodeProfile based on requested backend and capabilities.
+
+    Selects appropriate FFmpeg hardware acceleration flags and video encoders
+    with safe, non-shell argument lists and graceful CPU software fallback.
+    """
+    if capabilities is None:
+        capabilities = detect_transcode_capabilities()
+
+    requested = (requested_backend or "auto").lower().strip()
+
+    # Determine effective backend
+    chosen_backend = "software"
+    if requested == "vaapi":
+        if capabilities.vaapi_device:
+            chosen_backend = "vaapi"
+        else:
+            logger.warning(
+                "VA-API backend requested but no usable VA-API device detected; falling back to CPU software encoding"
+            )
+            chosen_backend = "software"
+    elif requested == "qsv":
+        if capabilities.qsv_available:
+            chosen_backend = "qsv"
+        else:
+            logger.warning(
+                "QSV backend requested but Intel QSV encoder is unavailable; falling back to CPU software encoding"
+            )
+            chosen_backend = "software"
+    elif requested == "software":
+        chosen_backend = "software"
+    else:  # "auto" or other
+        if capabilities.vaapi_device:
+            chosen_backend = "vaapi"
+        elif capabilities.qsv_available:
+            chosen_backend = "qsv"
+        else:
+            chosen_backend = "software"
+
+    # Build structured argument lists based on chosen backend
+    if chosen_backend == "vaapi":
+        device = capabilities.vaapi_device or "/dev/dri/renderD128"
+        hwaccel_args = ("-hwaccel", "vaapi", "-vaapi_device", device)
+        filter_str = (
+            f"scale=w='min({target_width},iw)':h=-2,format=nv12,hwupload"
+            if target_width
+            else "format=nv12,hwupload"
+        )
+        filter_args = ("-vf", filter_str)
+        encoder_args = (
+            "-c:v",
+            "h264_vaapi",
+            "-b:v",
+            f"{bitrate_kbps}k",
+            "-maxrate",
+            f"{int(bitrate_kbps * 1.25)}k",
+            "-bufsize",
+            f"{bitrate_kbps * 2}k",
+        )
+        return TranscodeProfile(
+            backend="vaapi",
+            video_codec="h264_vaapi",
+            device=device,
+            hwaccel_args=hwaccel_args,
+            filter_args=filter_args,
+            encoder_args=encoder_args,
+        )
+
+    if chosen_backend == "qsv":
+        hwaccel_args = ()
+        filter_args = (
+            ("-vf", f"scale=w='min({target_width},iw)':h=-2") if target_width else ()
+        )
+        encoder_args = (
+            "-c:v",
+            "h264_qsv",
+            "-preset",
+            "veryfast",
+            "-b:v",
+            f"{bitrate_kbps}k",
+            "-maxrate",
+            f"{int(bitrate_kbps * 1.25)}k",
+            "-bufsize",
+            f"{bitrate_kbps * 2}k",
+        )
+        return TranscodeProfile(
+            backend="qsv",
+            video_codec="h264_qsv",
+            device=None,
+            hwaccel_args=hwaccel_args,
+            filter_args=filter_args,
+            encoder_args=encoder_args,
+        )
+
+    # Software fallback (libx264)
+    hwaccel_args = ()
+    filter_args = (
+        ("-vf", f"scale=w='min({target_width},iw)':h=-2") if target_width else ()
+    )
+    encoder_args = (
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-maxrate",
+        f"{int(bitrate_kbps * 1.25)}k",
+        "-bufsize",
+        f"{bitrate_kbps * 2}k",
+        "-pix_fmt",
+        "yuv420p",
+    )
+    return TranscodeProfile(
+        backend="software",
+        video_codec="libx264",
+        device=None,
+        hwaccel_args=hwaccel_args,
+        filter_args=filter_args,
+        encoder_args=encoder_args,
+    )
 
 
 class PlaybackStrategy(StrEnum):
@@ -79,107 +423,6 @@ RESOLUTION_PRESETS: dict[str, dict[str, Any]] = {
     "480p": {"width": 854, "height": 480, "video_bitrate": 1200},
     "original": {"width": None, "height": None, "video_bitrate": 5000},
 }
-
-
-def detect_vaapi_device(device_override: str | None = None) -> str | None:
-    """Dynamically detects usable Linux VAAPI render nodes with fallback.
-
-    Scans /dev/dri/renderD* devices, checks process access permissions, and
-    executes a lightweight live test probe to ensure hardware encoding works.
-    """
-    global _CACHED_VAAPI_DEVICE, _VAAPI_CHECKED
-
-    if device_override:
-        return device_override
-
-    with _VAAPI_LOCK:
-        if _VAAPI_CHECKED:
-            return _CACHED_VAAPI_DEVICE
-
-        # Check environment variable first
-        env_device = os.getenv("AARKIB_VAAPI_DEVICE")
-        candidate_nodes: list[str] = []
-        if env_device:
-            candidate_nodes.append(env_device)
-
-        dri_dir = Path("/dev/dri")
-        if dri_dir.is_dir():
-            render_nodes = sorted(str(p) for p in dri_dir.glob("renderD*"))
-            for node in render_nodes:
-                if node not in candidate_nodes:
-                    candidate_nodes.append(node)
-
-        ffmpeg_bin = get_ffmpeg_binary()
-        if not ffmpeg_bin or not candidate_nodes:
-            _VAAPI_CHECKED = True
-            _CACHED_VAAPI_DEVICE = None
-            return None
-
-        for node in candidate_nodes:
-            if not os.path.exists(node):
-                continue
-            if not os.access(node, os.R_OK | os.W_OK):
-                logger.debug(
-                    "Skipping VAAPI node %s: insufficient read/write permissions", node
-                )
-                continue
-
-            try:
-                # Probe VAAPI hardware encoder capability
-                probe_cmd = [
-                    ffmpeg_bin,
-                    "-v",
-                    "quiet",
-                    "-hwaccel",
-                    "vaapi",
-                    "-vaapi_device",
-                    node,
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "testsrc=d=0.1",
-                    "-vf",
-                    "format=nv12,hwupload",
-                    "-c:v",
-                    "h264_vaapi",
-                    "-f",
-                    "null",
-                    "-",
-                ]
-                res = subprocess.run(
-                    probe_cmd, capture_output=True, timeout=VAAPI_PROBE_TIMEOUT
-                )
-                if res.returncode == 0:
-                    logger.info(
-                        "Successfully validated VAAPI hardware encoder on device: %s",
-                        node,
-                    )
-                    _CACHED_VAAPI_DEVICE = node
-                    _VAAPI_CHECKED = True
-                    return _CACHED_VAAPI_DEVICE
-                else:
-                    logger.debug(
-                        "VAAPI probe failed on device %s (exit code %d)",
-                        node,
-                        res.returncode,
-                    )
-            except Exception as e:
-                logger.debug("VAAPI probe exception on device %s: %s", node, e)
-
-        logger.info(
-            "No usable VAAPI hardware acceleration device found; defaulting to CPU software encoding."
-        )
-        _CACHED_VAAPI_DEVICE = None
-        _VAAPI_CHECKED = True
-        return None
-
-
-def reset_vaapi_cache() -> None:
-    """Resets the cached VAAPI device discovery (useful in tests)."""
-    global _CACHED_VAAPI_DEVICE, _VAAPI_CHECKED
-    with _VAAPI_LOCK:
-        _CACHED_VAAPI_DEVICE = None
-        _VAAPI_CHECKED = False
 
 
 def probe_media_streams(file_path: Path) -> dict[str, Any]:
@@ -558,6 +801,7 @@ class TranscodeSession:
     last_activity: float = field(default_factory=time.time)
     target_resolution: str = "original"
     vaapi_device: str | None = None
+    backend: str = "software"
     seek_offset: float = 0.0
     audio_track_index: int = 0
     is_active: bool = True
@@ -639,6 +883,7 @@ class TranscodeSupervisor:
         seek_offset: float = 0.0,
         audio_track_index: int = 0,
         vaapi_device: str | None = None,
+        backend: str | None = None,
     ) -> TranscodeSession:
         """Spawns an FFmpeg HLS transcoding session or returns an active matching one."""
         file_path = Path(file_path)
@@ -661,118 +906,98 @@ class TranscodeSupervisor:
         session_dir = transcode_base_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
-        # Detect VAAPI device if available and not explicitly disabled
-        detected_vaapi = detect_vaapi_device(vaapi_device)
-
-        # Build FFmpeg command line
-        ffmpeg_bin = get_ffmpeg_binary() or "ffmpeg"
-        cmd = [ffmpeg_bin, "-y"]
-
-        if seek_offset > 0:
-            cmd.extend(["-ss", str(seek_offset)])
-
-        if detected_vaapi:
-            cmd.extend(
-                [
-                    "-hwaccel",
-                    "vaapi",
-                    "-vaapi_device",
-                    detected_vaapi,
-                ]
-            )
-
-        cmd.extend(["-i", str(file_path)])
-        cmd.extend(["-map", "0:v:0", "-map", f"0:a:{audio_track_index}?"])
-
-        # Resolution scaling & codec parameters
         preset = RESOLUTION_PRESETS.get(resolution, RESOLUTION_PRESETS["original"])
         target_w = preset["width"]
         bitrate = preset["video_bitrate"]
 
-        if detected_vaapi:
-            vf_scale = (
-                f"scale=w='min({target_w},iw)':h=-2,format=nv12,hwupload"
-                if target_w
-                else "format=nv12,hwupload"
-            )
-            cmd.extend(
-                [
-                    "-vf",
-                    vf_scale,
-                    "-c:v",
-                    "h264_vaapi",
-                    "-b:v",
-                    f"{bitrate}k",
-                    "-maxrate",
-                    f"{int(bitrate * 1.25)}k",
-                    "-bufsize",
-                    f"{bitrate * 2}k",
-                ]
-            )
-        else:
-            vf_scale = f"scale=w='min({target_w},iw)':h=-2" if target_w else None
-            if vf_scale:
-                cmd.extend(["-vf", vf_scale])
-            cmd.extend(
-                [
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "veryfast",
-                    "-crf",
-                    "23",
-                    "-maxrate",
-                    f"{int(bitrate * 1.25)}k",
-                    "-bufsize",
-                    f"{bitrate * 2}k",
-                    "-pix_fmt",
-                    "yuv420p",
-                ]
-            )
+        req_backend = backend or os.getenv("AARKIB_TRANSCODE_BACKEND", "auto")
+        trans_caps = detect_transcode_capabilities(device_override=vaapi_device)
+        profile = resolve_transcode_profile(
+            requested_backend=req_backend,
+            capabilities=trans_caps,
+            target_width=target_w,
+            bitrate_kbps=bitrate,
+        )
 
-        # Audio settings: AAC stereo
-        cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
-
-        # HLS fMP4 flags: list_size 0 for full timeline seeking, independent segments
+        ffmpeg_bin = get_ffmpeg_binary() or "ffmpeg"
         playlist_path = session_dir / "playlist.m3u8"
         segment_pattern = str(session_dir / "segment_%05d.m4s")
 
-        cmd.extend(
-            [
-                "-f",
-                "hls",
-                "-hls_time",
-                "6",
-                "-hls_list_size",
-                "0",
-                "-hls_segment_type",
-                "fmp4",
-                "-hls_flags",
-                "independent_segments",
-                "-hls_segment_filename",
-                segment_pattern,
-                str(playlist_path),
-            ]
-        )
+        def _build_cmd(p: TranscodeProfile) -> list[str]:
+            c = [ffmpeg_bin, "-y"]
+            if seek_offset > 0:
+                c.extend(["-ss", str(seek_offset)])
+            if p.hwaccel_args:
+                c.extend(p.hwaccel_args)
+            c.extend(["-i", str(file_path)])
+            c.extend(["-map", "0:v:0", "-map", f"0:a:{audio_track_index}?"])
+            if p.filter_args:
+                c.extend(p.filter_args)
+            if p.encoder_args:
+                c.extend(p.encoder_args)
+            c.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
+            c.extend(
+                [
+                    "-f",
+                    "hls",
+                    "-hls_time",
+                    "6",
+                    "-hls_list_size",
+                    "0",
+                    "-hls_segment_type",
+                    "fmp4",
+                    "-hls_flags",
+                    "independent_segments",
+                    "-hls_segment_filename",
+                    segment_pattern,
+                    str(playlist_path),
+                ]
+            )
+            return c
 
-        proc: subprocess.Popen | None = None
-        if get_ffmpeg_binary():
+        def _spawn_proc(c: list[str]) -> subprocess.Popen | None:
+            if not get_ffmpeg_binary():
+                return None
             try:
-                proc = subprocess.Popen(
-                    cmd,
+                p = subprocess.Popen(
+                    c,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     preexec_fn=os.setsid if hasattr(os, "setsid") else None,
                 )
                 logger.info(
-                    "Launched HLS transcode process %d for session %s",
-                    proc.pid,
+                    "Launched HLS transcode process %d for session %s (backend: %s)",
+                    p.pid,
                     session_id,
+                    profile.backend,
                 )
+                return p
             except Exception as e:
                 logger.error(
                     "Failed to spawn FFmpeg process for session %s: %s", session_id, e
                 )
+                return None
+
+        cmd = _build_cmd(profile)
+        proc = _spawn_proc(cmd)
+
+        # Runtime fallback: if hardware acceleration failed on startup, fallback to software CPU encoding
+        if profile.backend != "software" and proc is not None:
+            time.sleep(0.1)
+            if proc.poll() is not None and proc.returncode != 0:
+                logger.warning(
+                    "Hardware transcode backend '%s' failed on startup (exit %d). Falling back to CPU software encoding.",
+                    profile.backend,
+                    proc.returncode,
+                )
+                profile = resolve_transcode_profile(
+                    requested_backend="software",
+                    capabilities=trans_caps,
+                    target_width=target_w,
+                    bitrate_kbps=bitrate,
+                )
+                cmd = _build_cmd(profile)
+                proc = _spawn_proc(cmd)
 
         session = TranscodeSession(
             session_id=session_id,
@@ -781,7 +1006,8 @@ class TranscodeSupervisor:
             output_dir=session_dir,
             process=proc,
             target_resolution=resolution,
-            vaapi_device=detected_vaapi,
+            vaapi_device=profile.device if profile.backend == "vaapi" else None,
+            backend=profile.backend,
             seek_offset=seek_offset,
             audio_track_index=audio_track_index,
         )

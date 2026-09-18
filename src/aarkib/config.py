@@ -181,6 +181,7 @@ class Config:
     )
     BACKUP_DIR: Path = Path(os.getenv("AARKIB_BACKUP_DIR", DATA_DIR / "backups"))
     VAAPI_DEVICE: str | None = os.getenv("AARKIB_VAAPI_DEVICE")
+    TRANSCODE_BACKEND: str = os.getenv("AARKIB_TRANSCODE_BACKEND", "auto")
     FFMPEG_PATH: str = os.getenv("AARKIB_FFMPEG_PATH", "ffmpeg")
     FFPROBE_PATH: str = os.getenv("AARKIB_FFPROBE_PATH", "ffprobe")
 

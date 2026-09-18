@@ -205,6 +205,15 @@ MANAGED_SETTINGS: dict[str, SettingDefinition] = {
         description="Enable indexing, container metadata parsing, HTTP 206 streaming, and HTML5 video playback.",
         category="Media Format Plugins",
     ),
+    "TRANSCODE_BACKEND": SettingDefinition(
+        key="TRANSCODE_BACKEND",
+        type=str,
+        default="auto",
+        display_name="Hardware Transcoding Backend",
+        description="Hardware acceleration engine for on-the-fly video transcoding (auto, software, vaapi, qsv).",
+        category="Media Format Plugins",
+        choices=("auto", "software", "vaapi", "qsv"),
+    ),
     "ENABLE_AUDIO": SettingDefinition(
         key="ENABLE_AUDIO",
         type=bool,

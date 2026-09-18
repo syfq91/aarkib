@@ -291,6 +291,30 @@
         </div>
       </div>
 
+      <!-- Card 6: Transcoding & Hardware Acceleration -->
+      <div style="background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 1rem;">
+        <h4 style="margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+          <span>⚡</span> Transcoding &amp; Hardware Acceleration
+        </h4>
+
+        <!-- TRANSCODE_BACKEND -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">Transcoding Backend</label>
+          <select id="setting-TRANSCODE_BACKEND" class="input-text" style="width: 100%; font-size: 0.85rem;">
+            <option value="auto" {% if system_settings and system_settings.settings.TRANSCODE_BACKEND.value == 'auto' %}selected{% endif %}>Auto-Detect (VA-API / QSV / CPU Fallback)</option>
+            <option value="software" {% if system_settings and system_settings.settings.TRANSCODE_BACKEND.value == 'software' %}selected{% endif %}>CPU Software Only (libx264)</option>
+            <option value="vaapi" {% if system_settings and system_settings.settings.TRANSCODE_BACKEND.value == 'vaapi' %}selected{% endif %}>Linux VA-API (/dev/dri/renderD*)</option>
+            <option value="qsv" {% if system_settings and system_settings.settings.TRANSCODE_BACKEND.value == 'qsv' %}selected{% endif %}>Intel QuickSync Video (QSV)</option>
+          </select>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Hardware engine used for HLS adaptive streaming and on-the-fly video transcoding.
+          </p>
+          {% if system_settings and system_settings.settings.TRANSCODE_BACKEND.is_overridden %}
+            <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.TRANSCODE_BACKEND.default_value }})</span></div>
+          {% endif %}
+        </div>
+      </div>
+
     </div>
   </form>
 </div>
@@ -346,7 +370,7 @@
       </div>
     </div>
 
-    <!-- FFmpeg -->
+    <!-- FFmpeg & Hardware Transcoder -->
     <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border);">
       <div style="color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase;">Media Transcoder</div>
       <div style="font-weight: 600; font-size: 1.05rem; color: var(--text-primary); margin: 0.25rem 0;">
@@ -356,7 +380,10 @@
           <span style="color: var(--danger);">✗ Not Found</span>
         {% endif %}
       </div>
-      <div style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; overflow: hidden; text-overflow: ellipsis;" title="{{ system_health.ffmpeg_path }}">
+      <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
+        Engine: <span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">{{ system_health.hwaccel_active }}</span>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; overflow: hidden; text-overflow: ellipsis; margin-top: 0.25rem;" title="{{ system_health.ffmpeg_path }}">
         {{ system_health.ffmpeg_path }}
       </div>
     </div>
@@ -523,8 +550,9 @@ async function resetSystemSettings() {
       resetBtn.innerText = "↺ Reset to Defaults";
     }
   }
+}
 
-  function toggleSystemPasswordVisibility(inputId, btn) {
+function toggleSystemPasswordVisibility(inputId, btn) {
     const input = document.getElementById(inputId);
     if (!input) return;
     if (input.type === "password") {
