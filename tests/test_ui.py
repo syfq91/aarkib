@@ -438,3 +438,66 @@ def test_settings_system_api_key_ui(client, app):
     assert b"setting-COMICVINE_API_KEY" in res.data
     assert b"setting-PODCASTINDEX_API_KEY" in res.data
     assert b"setting-GOOGLE_BOOKS_API_KEY" in res.data
+
+
+def test_reader_video_diagnostics_overlay(client, app, tmp_path):
+    """Verify that video reader renders playback diagnostics button and overlay HUD."""
+
+    from aarkib.extensions import db
+    from aarkib.models.media_item import MediaItem
+
+    with app.app_context():
+        video_file = tmp_path / "diag_test.mp4"
+        video_file.write_bytes(b"dummy_mp4_bytes")
+
+        video_item = MediaItem(
+            title="Diagnostics Test Video",
+            original_file_path=str(video_file),
+            file_format="mp4",
+            media_type="video",
+            file_size=1024,
+            file_hash="hash_diag_1",
+            codec="h264",
+        )
+        db.session.add(video_item)
+        db.session.commit()
+        video_id = video_item.id
+
+    res = client.get(f"/reader/video/{video_id}")
+    assert res.status_code == 200
+    assert b'id="stats-btn"' in res.data
+    assert b'id="diagnostics-overlay"' in res.data
+    assert b"Playback Diagnostics" in res.data
+    assert b"toggleDiagnosticsHUD()" in res.data
+    assert b'id="diag-client"' in res.data
+    assert b'id="diag-mode"' in res.data
+    assert b'id="diag-hwaccel"' in res.data
+    assert b'id="diag-reasons"' in res.data
+
+
+def test_settings_system_live_jobs_manager(client):
+    """Verify that /settings/system renders the live background job manager."""
+    res = client.get("/settings/system")
+    assert res.status_code == 200
+    assert b'id="live-jobs-container"' in res.data
+    assert b"Background Jobs Live Manager" in res.data
+    assert b"refreshLiveJobs()" in res.data
+    assert b"cancelLiveJob" in res.data
+    assert b"retryLiveJob" in res.data
+
+
+def test_settings_users_profiles_and_acl_matrix(client):
+    """Verify that /settings/users renders family profile management and library ACL matrix."""
+    res = client.get("/settings/users")
+    assert res.status_code == 200
+    assert b'id="profiles-management"' in res.data
+    assert (
+        b"Family Profiles &amp; Library Access Control" in res.data
+        or b"Family Profiles & Library Access Control" in res.data
+    )
+    assert b'id="add-profile-box"' in res.data
+    assert b'id="acl-modal"' in res.data
+    assert b"acl-table" in res.data
+    assert b"saveAclPermissions()" in res.data
+    assert b"openAclModal" in res.data
+    assert b"btn-profile-acl" in res.data

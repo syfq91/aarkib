@@ -403,57 +403,81 @@
 </div>
 {% endif %}
 
-<!-- Recent Background Operations -->
-{% if recent_jobs %}
-<div style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 2rem;">
-  <h3 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
-    <span>⏱️</span> Recent Background Operations
-  </h3>
-  <div style="overflow-x: auto;">
-    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
-      <thead>
-        <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary);">
-          <th style="padding: 0.5rem;">Job Type</th>
-          <th style="padding: 0.5rem;">Status</th>
-          <th style="padding: 0.5rem;">Progress / Message</th>
-          <th style="padding: 0.5rem;">Duration</th>
-          <th style="padding: 0.5rem;">Started</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for job in recent_jobs %}
-        <tr style="border-bottom: 1px solid var(--border);">
-          <td style="padding: 0.5rem; font-weight: 600; font-family: monospace; color: var(--text-primary);">{{ job.job_type }}</td>
-          <td style="padding: 0.5rem;">
+<!-- Background Jobs Live Manager -->
+<div id="live-jobs-container" style="background-color: var(--bg-secondary); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+        <span>⏱️</span> Background Jobs Live Manager
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+        Real-time tracking of library rescans, metadata queries, and maintenance operations.
+      </p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;">
+        <input type="checkbox" id="jobs-auto-refresh" checked style="accent-color: var(--accent);">
+        <span>Auto-refresh (2.5s)</span>
+      </label>
+      <button type="button" class="btn btn-secondary" onclick="refreshLiveJobs()" id="jobs-refresh-btn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem;">
+        <span>🔄</span> Refresh
+      </button>
+    </div>
+  </div>
+
+  <div id="live-jobs-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+    <!-- Job Cards dynamically populated via JS -->
+    {% if recent_jobs %}
+      {% for job in recent_jobs %}
+      <div class="job-card" id="job-card-{{ job.id }}" style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.6rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <strong style="font-family: monospace; font-size: 0.9rem; color: var(--text-primary);">{{ job.job_type }}</strong>
             {% if job.status == 'succeeded' or job.status == 'completed' %}
-              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">Succeeded</span>
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">SUCCEEDED</span>
             {% elif job.status == 'running' %}
-              <span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">Running</span>
+              <span class="badge" style="background: rgba(0, 210, 255, 0.2); color: #00d2ff;">RUNNING</span>
             {% elif job.status == 'failed' %}
-              <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">Failed</span>
+              <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">FAILED</span>
             {% elif job.status == 'cancelled' %}
-              <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #eab308;">Cancelled</span>
+              <span class="badge" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8;">CANCELLED</span>
             {% else %}
-              <span class="badge" style="background: var(--bg-tertiary); color: var(--text-secondary);">{{ job.status }}</span>
+              <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #eab308;">QUEUED</span>
             {% endif %}
-          </td>
-          <td style="padding: 0.5rem; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            {{ job.progress_message or (job.progress|round|int ~ '%') }}
-          </td>
-          <td style="padding: 0.5rem; color: var(--text-secondary); font-family: monospace;">
-            {% set job_dict = job.to_dict() %}
-            {{ job_dict.elapsed_seconds ~ 's' if job_dict.elapsed_seconds is not none else '-' }}
-          </td>
-          <td style="padding: 0.5rem; color: var(--text-secondary);">
-            {{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') if job.started_at else (job.created_at.strftime('%Y-%m-%d %H:%M:%S') if job.created_at else '-') }}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            <span>ID: <code style="font-size: 0.75rem;">{{ job.id[:12] }}</code></span>
+            {% if job.status in ('running', 'queued') %}
+              <button type="button" class="btn btn-secondary" onclick="cancelLiveJob('{{ job.id }}')" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--danger);" title="Cancel background job">
+                ✕ Cancel
+              </button>
+            {% elif job.status in ('failed', 'cancelled') %}
+              <button type="button" class="btn btn-secondary" onclick="retryLiveJob('{{ job.id }}')" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--accent);" title="Retry background job">
+                ↺ Retry
+              </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+            <span>{{ job.progress_message or 'Executing...' }}</span>
+            <span>{{ job.progress|round|int }}%</span>
+          </div>
+          <div class="job-progress-bar" style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 9999px; overflow: hidden;">
+            <div class="job-progress-fill" style="width: {{ job.progress|round|int }}%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0.5rem 0;" id="no-jobs-msg">
+        No active or recent background operations found.
+      </p>
+    {% endif %}
   </div>
 </div>
-{% endif %}
 {% else %}
 <div class="alert alert-error">
   Administrator privileges required to view system preferences.
@@ -579,6 +603,108 @@ function toggleSystemPasswordVisibility(inputId, btn) {
     showToast("Gamepad settings updated!", "success");
   }
 
+  // Live Background Jobs Poller
+  let liveJobsTimer = null;
+
+  async function refreshLiveJobs() {
+    const listEl = document.getElementById("live-jobs-list");
+    if (!listEl) return;
+
+    try {
+      const res = await fetch("/api/v1/jobs?limit=10");
+      if (!res.ok) return;
+      const data = await res.json();
+      const jobs = data.data || data.jobs || [];
+
+      if (jobs.length === 0) {
+        listEl.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0.5rem 0;" id="no-jobs-msg">No active or recent background operations found.</p>';
+        return;
+      }
+
+      listEl.innerHTML = jobs.map(job => {
+        let badgeHtml = '';
+        const st = (job.status || '').toLowerCase();
+        if (st === 'succeeded' || st === 'completed') {
+          badgeHtml = '<span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">SUCCEEDED</span>';
+        } else if (st === 'running') {
+          badgeHtml = '<span class="badge" style="background: rgba(0, 210, 255, 0.2); color: #00d2ff; box-shadow: 0 0 10px rgba(0, 210, 255, 0.35);">RUNNING</span>';
+        } else if (st === 'failed') {
+          badgeHtml = '<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">FAILED</span>';
+        } else if (st === 'cancelled') {
+          badgeHtml = '<span class="badge" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8;">CANCELLED</span>';
+        } else {
+          badgeHtml = '<span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #eab308;">QUEUED</span>';
+        }
+
+        let actionHtml = '';
+        if (st === 'running' || st === 'queued') {
+          actionHtml = `<button type="button" class="btn btn-secondary" onclick="cancelLiveJob('${job.id}')" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--danger);" title="Cancel background job">✕ Cancel</button>`;
+        } else if (st === 'failed' || st === 'cancelled') {
+          actionHtml = `<button type="button" class="btn btn-secondary" onclick="retryLiveJob('${job.id}')" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: var(--accent);" title="Retry background job">↺ Retry</button>`;
+        }
+
+        const pct = Math.round(job.progress || 0);
+        const msg = job.progress_message || (st === 'running' ? 'Executing...' : (st === 'succeeded' ? 'Completed successfully' : ''));
+
+        return `
+          <div class="job-card" id="job-card-${job.id}" style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.6rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div style="display: flex; align-items: center; gap: 0.6rem;">
+                <strong style="font-family: monospace; font-size: 0.9rem; color: var(--text-primary);">${job.job_type}</strong>
+                ${badgeHtml}
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+                <span>ID: <code style="font-size: 0.75rem;">${job.id.substring(0, 12)}</code></span>
+                ${actionHtml}
+              </div>
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+                <span>${msg}</span>
+                <span>${pct}%</span>
+              </div>
+              <div class="job-progress-bar" style="height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 9999px; overflow: hidden;">
+                <div class="job-progress-fill" style="width: ${pct}%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      console.debug("Failed refreshing jobs:", e);
+    }
+  }
+
+  async function cancelLiveJob(jobId) {
+    try {
+      const res = await fetch(`/api/v1/jobs/${jobId}/cancel`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        showToast("Job cancellation requested", "success");
+      } else {
+        showToast(data.error || "Failed to cancel job", "error");
+      }
+      refreshLiveJobs();
+    } catch (e) {
+      showToast("Error sending cancel request", "error");
+    }
+  }
+
+  async function retryLiveJob(jobId) {
+    try {
+      const res = await fetch(`/api/v1/jobs/${jobId}/retry`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Job retry initiated", "success");
+      } else {
+        showToast(data.error || "Failed to retry job", "error");
+      }
+      refreshLiveJobs();
+    } catch (e) {
+      showToast("Error sending retry request", "error");
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     const savedHud = localStorage.getItem("aarkib-gamepad-hud") || "auto";
     const savedRumble = localStorage.getItem("aarkib-gamepad-rumble") !== "false";
@@ -586,6 +712,13 @@ function toggleSystemPasswordVisibility(inputId, btn) {
     const rumbleBox = document.getElementById("setting-GAMEPAD_RUMBLE");
     if (hudSelect) hudSelect.value = savedHud;
     if (rumbleBox) rumbleBox.checked = savedRumble;
+
+    const autoRefreshBox = document.getElementById("jobs-auto-refresh");
+    liveJobsTimer = setInterval(() => {
+      if (autoRefreshBox && autoRefreshBox.checked) {
+        refreshLiveJobs();
+      }
+    }, 2500);
   });
 </script>
 {% endblock %}

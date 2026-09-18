@@ -116,6 +116,147 @@
   <input type="hidden" name="new_password" id="reset-new-password">
 </form>
 
+<!-- Family Profiles & Library Access Control (ACLs) -->
+<div id="profiles-management" style="margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+        <span>👥</span> Family Profiles &amp; Library Access Control (ACLs)
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+        Multi-profile accounts, kid-safe mature content filters, and per-library read/download permissions.
+      </p>
+    </div>
+    <button type="button" class="btn btn-secondary" onclick="toggleAddProfileBox()" style="display: flex; align-items: center; gap: 0.35rem;">
+      <span id="add-profile-icon">➕</span> Add Family Profile
+    </button>
+  </div>
+
+  <!-- Add Profile Form -->
+  <div id="add-profile-box" style="display: none; background: var(--bg-tertiary); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px dashed var(--border); margin-bottom: 1.5rem;">
+    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">➕ Create New Profile</h4>
+    <form id="create-profile-form" onsubmit="handleCreateProfile(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto; gap: 0.75rem; align-items: end;">
+      <div>
+        <label for="new-profile-name" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Profile Name *</label>
+        <input type="text" id="new-profile-name" class="input-text" required placeholder="e.g. Alice, Kids, Living Room" style="width: 100%;">
+      </div>
+      <div>
+        <label for="new-profile-avatar" style="display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Avatar URL (Optional)</label>
+        <input type="text" id="new-profile-avatar" class="input-text" placeholder="https://example.com/avatar.png" style="width: 100%;">
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.4rem;">
+        <input type="checkbox" id="new-profile-is-child" style="width: 1.1rem; height: 1.1rem; accent-color: var(--accent);">
+        <label for="new-profile-is-child" style="font-size: 0.85rem; cursor: pointer;">Kid-Safe (Restrict mature content)</label>
+      </div>
+      <button type="submit" class="btn btn-primary" id="btn-save-profile">Save Profile</button>
+    </form>
+  </div>
+
+  <!-- Profile Cards Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+    {% for u in users %}
+      {% for prof in u.profiles %}
+      <div class="profile-card" id="profile-card-{{ prof.id }}" style="background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            {% if prof.avatar_url %}
+              <img src="{{ prof.avatar_url }}" alt="{{ prof.name }}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent);">
+            {% else %}
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--bg-tertiary); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; border: 2px solid rgba(255, 255, 255, 0.1);">
+                {{ prof.name[:1]|upper }}
+              </div>
+            {% endif %}
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <strong style="color: var(--text-primary); font-size: 1rem;">{{ prof.name }}</strong>
+                {% if prof.name.lower() == 'default' %}
+                  <span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Default</span>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                Account: <strong>{{ u.username }}</strong>
+              </div>
+            </div>
+          </div>
+          <div>
+            {% if prof.is_child %}
+              <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: #eab308; font-size: 0.72rem;">🧒 Child Safe</span>
+            {% else %}
+              <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #4ade80; font-size: 0.72rem;">Standard</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Action row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 0.6rem; font-size: 0.8rem;">
+          <button type="button" class="btn btn-secondary btn-profile-acl" data-profile-id="{{ prof.id }}" data-profile-name="{{ prof.name }}" data-is-child="{{ 'true' if prof.is_child else 'false' }}" onclick="openAclModalFromButton(this)" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.3rem;">
+            <span>🛡️</span> Permissions (ACLs)
+          </button>
+          {% if prof.name.lower() != 'default' and u.profiles|length > 1 %}
+          <button type="button" class="btn btn-secondary btn-profile-delete" data-profile-id="{{ prof.id }}" data-profile-name="{{ prof.name }}" onclick="deleteProfileFromButton(this)" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: var(--danger);">
+            ✕ Delete
+          </button>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  <!-- Permissions Modal / Overlay Card -->
+  <div id="acl-modal" style="display: none; background: var(--bg-secondary); border: 1px solid var(--accent); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+      <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary);">
+        <span>🛡️</span> Library Access Control Matrix: <span id="acl-modal-profile-name" style="color: var(--accent);"></span>
+      </h4>
+      <button type="button" onclick="closeAclModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.25rem; cursor: pointer;">✕</button>
+    </div>
+
+    <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 1rem 0;">
+      Define granular read (browsing &amp; streaming) and download permissions for this profile across media folders.
+    </p>
+
+    <div style="overflow-x: auto; margin-bottom: 1.25rem;">
+      <table class="acl-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); color: var(--text-secondary); text-transform: uppercase; font-size: 0.75rem;">
+            <th style="padding: 0.6rem 0.75rem;">Library Name</th>
+            <th style="padding: 0.6rem 0.75rem;">Type</th>
+            <th style="padding: 0.6rem 0.75rem; text-align: center;">Can Read / Stream</th>
+            <th style="padding: 0.6rem 0.75rem; text-align: center;">Can Download</th>
+          </tr>
+        </thead>
+        <tbody id="acl-table-body">
+          {% if libraries %}
+            {% for lib in libraries %}
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.6rem 0.75rem;">
+                <strong style="color: var(--text-primary);">{{ lib.name }}</strong>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">{{ lib.path }}</div>
+              </td>
+              <td style="padding: 0.6rem 0.75rem; text-transform: uppercase; font-size: 0.75rem; color: var(--accent);">
+                {{ lib.media_type }}
+              </td>
+              <td style="padding: 0.6rem 0.75rem; text-align: center;">
+                <input type="checkbox" class="acl-read-check" data-library-id="{{ lib.id }}" checked style="width: 1.1rem; height: 1.1rem; accent-color: var(--accent); cursor: pointer;">
+              </td>
+              <td style="padding: 0.6rem 0.75rem; text-align: center;">
+                <input type="checkbox" class="acl-download-check" data-library-id="{{ lib.id }}" checked style="width: 1.1rem; height: 1.1rem; accent-color: var(--accent); cursor: pointer;">
+              </td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <button type="button" class="btn btn-secondary" onclick="closeAclModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-save-acls" onclick="saveAclPermissions()">💾 Save Permissions</button>
+    </div>
+  </div>
+</div>
+
 <!-- API & Device Tokens Management Section -->
 <div style="margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 2rem;">
   <div style="margin-bottom: 1.25rem;">
@@ -349,6 +490,191 @@ function escapeHtml(str) {
     "'": '&#39;',
     '"': '&quot;'
   }[tag] || tag));
+}
+
+let activeAclProfileId = null;
+
+function toggleAddProfileBox() {
+  const box = document.getElementById('add-profile-box');
+  const icon = document.getElementById('add-profile-icon');
+  if (box.style.display === 'none' || !box.style.display) {
+    box.style.display = 'block';
+    if (icon) icon.textContent = '✕';
+    const nameInput = document.getElementById('new-profile-name');
+    if (nameInput) nameInput.focus();
+  } else {
+    box.style.display = 'none';
+    if (icon) icon.textContent = '➕';
+  }
+}
+
+async function handleCreateProfile(e) {
+  e.preventDefault();
+  const nameInput = document.getElementById('new-profile-name');
+  const avatarInput = document.getElementById('new-profile-avatar');
+  const childInput = document.getElementById('new-profile-is-child');
+  const btn = document.getElementById('btn-save-profile');
+
+  const name = nameInput.value.trim();
+  if (!name) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const res = await fetch('/api/v1/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        avatar_url: avatarInput.value.trim() || null,
+        is_child: childInput.checked
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      alert('Failed to create profile: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.textContent = 'Save Profile';
+    }
+  } catch (err) {
+    alert('Error creating profile: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Save Profile';
+  }
+}
+
+async function openAclModal(profileId, profileName, isChild) {
+  activeAclProfileId = profileId;
+  const modal = document.getElementById('acl-modal');
+  const title = document.getElementById('acl-modal-profile-name');
+  if (title) {
+    title.textContent = profileName + (isChild ? ' (Child Safe)' : '');
+  }
+  modal.style.display = 'block';
+  modal.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Reset checkboxes to defaults while loading
+  document.querySelectorAll('.acl-read-check').forEach(cb => cb.checked = true);
+  document.querySelectorAll('.acl-download-check').forEach(cb => cb.checked = !isChild);
+
+  try {
+    const res = await fetch(`/api/v1/profiles/${profileId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const profile = data.profile || data.data || {};
+      const accessList = profile.library_access || [];
+      const accessMap = {};
+      accessList.forEach(a => {
+        accessMap[a.library_id] = a;
+      });
+
+      document.querySelectorAll('.acl-read-check').forEach(cb => {
+        const libId = parseInt(cb.getAttribute('data-library-id'), 10);
+        if (accessMap[libId]) {
+          cb.checked = !!accessMap[libId].can_read;
+        }
+      });
+
+      document.querySelectorAll('.acl-download-check').forEach(cb => {
+        const libId = parseInt(cb.getAttribute('data-library-id'), 10);
+        if (accessMap[libId]) {
+          cb.checked = !!accessMap[libId].can_download;
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Failed to fetch profile ACLs:', err);
+  }
+}
+
+function closeAclModal() {
+  const modal = document.getElementById('acl-modal');
+  if (modal) modal.style.display = 'none';
+  activeAclProfileId = null;
+}
+
+async function saveAclPermissions() {
+  if (!activeAclProfileId) return;
+
+  const btn = document.getElementById('btn-save-acls');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+
+  const accessRules = [];
+  const readChecks = document.querySelectorAll('.acl-read-check');
+  readChecks.forEach(readCb => {
+    const libId = parseInt(readCb.getAttribute('data-library-id'), 10);
+    const downloadCb = document.querySelector(`.acl-download-check[data-library-id="${libId}"]`);
+    accessRules.push({
+      library_id: libId,
+      can_read: readCb.checked,
+      can_download: downloadCb ? downloadCb.checked : true
+    });
+  });
+
+  try {
+    const res = await fetch(`/api/v1/profiles/${activeAclProfileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        library_access: accessRules
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeAclModal();
+      alert('Permissions updated successfully!');
+    } else {
+      alert('Failed to update permissions: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error updating permissions: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '💾 Save Permissions';
+    }
+  }
+}
+
+async function handleDeleteProfile(profileId, profileName) {
+  if (!confirm(`Are you sure you want to delete profile "${profileName}"? This action cannot be undone.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/v1/profiles/${profileId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      const card = document.getElementById(`profile-card-${profileId}`);
+      if (card) {
+        card.remove();
+      } else {
+        window.location.reload();
+      }
+    } else {
+      alert('Failed to delete profile: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error deleting profile: ' + err.message);
+  }
+}
+
+function openAclModalFromButton(btn) {
+  const profileId = parseInt(btn.getAttribute('data-profile-id'), 10);
+  const profileName = btn.getAttribute('data-profile-name');
+  const isChild = btn.getAttribute('data-is-child') === 'true';
+  openAclModal(profileId, profileName, isChild);
+}
+
+function deleteProfileFromButton(btn) {
+  const profileId = parseInt(btn.getAttribute('data-profile-id'), 10);
+  const profileName = btn.getAttribute('data-profile-name');
+  handleDeleteProfile(profileId, profileName);
 }
 
 document.addEventListener('DOMContentLoaded', loadDeviceTokens);

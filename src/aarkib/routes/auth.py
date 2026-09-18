@@ -18,9 +18,10 @@ from flask import (
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from aarkib.extensions import db, login_manager, safe_commit
-from aarkib.models import Bookmark, User, UserProgress
+from aarkib.models import Bookmark, Library, Profile, User, UserProgress
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -308,7 +309,6 @@ def manage_users() -> ResponseReturnValue:
                 new_user.set_password(None)
             db.session.add(new_user)
             db.session.flush()
-            from aarkib.models import Profile
 
             prof = Profile(user_id=new_user.id, name="Default", is_child=False)
             db.session.add(prof)
@@ -319,10 +319,16 @@ def manage_users() -> ResponseReturnValue:
                 return redirect(url_for("ui.settings", category="users"))
             return redirect(url_for("auth.manage_users"))
 
-    users_list = db.session.scalars(select(User).order_by(User.id.asc())).all()
+    libraries = db.session.scalars(select(Library).order_by(Library.name.asc())).all()
+    users_list = db.session.scalars(
+        select(User)
+        .options(selectinload(User.profiles).selectinload(Profile.library_access))
+        .order_by(User.id.asc())
+    ).all()
     return render_template(
         "settings/users.html",
         users=users_list,
+        libraries=libraries,
         active_category="users",
         category_title="User Management",
         is_admin=True,

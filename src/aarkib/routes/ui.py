@@ -23,6 +23,7 @@ from aarkib.models import (
     Collection,
     Creator,
     MediaItem,
+    Profile,
     Tag,
     User,
     UserProgress,
@@ -337,7 +338,11 @@ def settings(category: str | None = None) -> ResponseReturnValue:
             )
 
     users = (
-        db.session.scalars(select(User).order_by(User.id.asc())).all()
+        db.session.scalars(
+            select(User)
+            .options(selectinload(User.profiles).selectinload(Profile.library_access))
+            .order_by(User.id.asc())
+        ).all()
         if is_admin
         else []
     )

@@ -78,8 +78,8 @@ gantt
     section Enrichment & Presentation
     Phase 8: Metadata Matching & Provenance :done, p8, 16, 18
     Phase 9: Versioned Clean API (/api/v1)  :done, p9, 18, 20
-    Phase 10: UI Diagnostics & Management   :active, p10, 20, 22
-    Phase 11: Final Verification & DoD      :p11, 22, 23
+    Phase 10: UI Diagnostics & Management   :done, p10, 20, 22
+    Phase 11: Final Verification & DoD      :active, p11, 22, 23
 ```
 
 ---
@@ -558,7 +558,7 @@ Execute rigorous validation across the entire repository to ensure zero regressi
 
 ## 🚀 Current Status & Next Steps
 
-1. **Phases 0 through 9 Complete**:
+1. **Phases 0 through 10 Complete**:
    - Baseline validation (Phase 0)
    - Client capabilities domain model & detection service (Phase 1)
    - Deterministic playback planner & domain models (Phase 2)
@@ -569,10 +569,11 @@ Execute rigorous validation across the entire repository to ensure zero regressi
    - User profiles & centralized authorization / library ACLs (Phase 7)
    - Metadata candidate matcher, field-level provenance tracking & manual edit lock protection (Phase 8)
    - Versioned clean REST API (`/api/v1/...`) with dedicated blueprint, playback-plan, jobs, profiles, and mount-safe reconciliation (Phase 9)
+   - UI Diagnostics & Operational Views (Video Playback Diagnostics HUD, Live Background Jobs Manager, Family Profiles & ACL Matrix UI) (Phase 10)
 2. **Current Verification Status**:
-   - All 385 Pytest tests pass cleanly (100% pass rate).
+   - All 388 Pytest tests pass cleanly (100% pass rate).
    - Zero Ruff linting errors (`uv run ruff check .`).
    - Zero Ruff formatting issues (`uv run ruff format --check .`).
-3. **Next Recommended Milestone — Phase 10**:
-   - Implement UI diagnostics overlay (playback stats HUD with key 'D') in reader templates.
-   - Implement live background jobs management card in WebUI settings.
+3. **Next Recommended Milestone — Phase 11**:
+   - Verification, full repository audit, and compliance checklist across all 19 points in the Definition of Done.
+
