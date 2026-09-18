@@ -1,3 +1,8 @@
+from aarkib.services.capability_service import (
+    CapabilityService,
+    capability_service,
+    detect_client_capabilities,
+)
 from aarkib.services.parsers.base import (
     BaseParsedMetadata,
     ParsedBookMetadata,
@@ -24,4 +29,7 @@ __all__ = [
     "scan_library",
     "start_library_watcher",
     "generate_cover_webp",
+    "CapabilityService",
+    "capability_service",
+    "detect_client_capabilities",
 ]

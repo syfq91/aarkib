@@ -175,8 +175,8 @@ def test_transcode_supervisor_reaper_cleans_expired(tmp_path):
 
         # Wait for the background reaper thread to automatically clean it up
         reaped = False
-        for _ in range(30):
-            if supervisor.get_session(sid) is None:
+        for _ in range(40):
+            if supervisor.get_session(sid) is None and not session_dir.exists():
                 reaped = True
                 break
             time.sleep(0.05)

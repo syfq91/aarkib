@@ -1,3 +1,11 @@
+from aarkib.models.capabilities import (
+    AudioCapabilities,
+    ClientCapabilities,
+    DeviceCapabilities,
+    StreamingCapabilities,
+    SubtitleCapabilities,
+    VideoCapabilities,
+)
 from aarkib.models.collection import Collection
 from aarkib.models.creator import Creator, media_creators
 from aarkib.models.job import JobRecord
@@ -44,4 +52,10 @@ __all__ = [
     "MetadataCacheEntry",
     "media_creators",
     "media_tags",
+    "ClientCapabilities",
+    "VideoCapabilities",
+    "AudioCapabilities",
+    "SubtitleCapabilities",
+    "StreamingCapabilities",
+    "DeviceCapabilities",
 ]

@@ -14,9 +14,13 @@ from collections.abc import Generator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
+
+if TYPE_CHECKING:
+    from aarkib.models.capabilities import ClientCapabilities
+
 
 logger = logging.getLogger(__name__)
 
@@ -318,15 +322,26 @@ def probe_media_streams(file_path: Path) -> dict[str, Any]:
 def evaluate_playback_strategy(
     file_path: Path,
     streams_info: dict[str, Any] | None = None,
-    client_caps: dict[str, Any] | None = None,
+    client_caps: ClientCapabilities | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Determines the optimal playback strategy for a media item."""
-    _ = client_caps
+    from aarkib.models.capabilities import ClientCapabilities
+
+    caps: ClientCapabilities | None = None
+    if isinstance(client_caps, ClientCapabilities):
+        caps = client_caps
+    elif isinstance(client_caps, dict):
+        caps = ClientCapabilities.from_dict(client_caps)
+
     if streams_info is None:
         streams_info = probe_media_streams(file_path)
 
     ext = Path(file_path).suffix.lower()
-    container_native = ext in WEB_NATIVE_CONTAINERS
+    container_native = (
+        (ext in caps.video.containers)
+        if caps and caps.video.containers
+        else (ext in WEB_NATIVE_CONTAINERS)
+    )
     reasons: list[str] = []
 
     video = streams_info.get("video") or {}
@@ -335,22 +350,39 @@ def evaluate_playback_strategy(
 
     # Check video codec compatibility
     is_10bit = "10" in pix_fmt or "p010" in pix_fmt
-    video_native = bool(v_codec and v_codec in WEB_NATIVE_VIDEO_CODECS and not is_10bit)
+    if caps:
+        video_native = bool(
+            v_codec and caps.supports_video(v_codec, ext, is_10bit=is_10bit)
+        )
+    else:
+        video_native = bool(
+            v_codec and v_codec in WEB_NATIVE_VIDEO_CODECS and not is_10bit
+        )
+
     if not video_native and v_codec:
-        if is_10bit:
+        if is_10bit and (not caps or not caps.video.supports_10bit):
             reasons.append(f"10-bit color ({pix_fmt}) requires transcoding")
         else:
+            client_target = caps.device.client_name if caps else "browser"
             reasons.append(
-                f"Video codec '{v_codec}' is not natively supported by browser"
+                f"Video codec '{v_codec}' is not natively supported by {client_target}"
             )
 
     # Check audio codecs compatibility
     audio_list = streams_info.get("audio", [])
     primary_audio = audio_list[0] if audio_list else {}
     a_codec = (primary_audio.get("codec") or "").lower()
-    audio_native = bool(not a_codec or a_codec in WEB_NATIVE_AUDIO_CODECS)
+
+    if caps:
+        audio_native = bool(not a_codec or caps.supports_audio(a_codec, ext))
+    else:
+        audio_native = bool(not a_codec or a_codec in WEB_NATIVE_AUDIO_CODECS)
+
     if not audio_native and a_codec:
-        reasons.append(f"Audio codec '{a_codec}' is not natively supported by browser")
+        client_target = caps.device.client_name if caps else "browser"
+        reasons.append(
+            f"Audio codec '{a_codec}' is not natively supported by {client_target}"
+        )
 
     # Evaluate overall strategy using structural pattern matching
     match (container_native, video_native, audio_native):
