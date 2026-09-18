@@ -24,6 +24,7 @@ class VideoMediaPlugin(MediaPlugin):
         ".mov",
         ".m4v",
     }
+    config_keys: ClassVar[list[str]] = ["TMDB_API_KEY"]
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses video metadata from container and filename."""
@@ -84,14 +85,14 @@ class VideoMediaPlugin(MediaPlugin):
         """Performs health check for video plugin."""
         from aarkib.config import get_ffmpeg_binary, get_ffprobe_binary
 
-        return {
-            "status": "ok",
-            "plugin": self.name,
-            "media_type": self.media_type,
-            "supported_extensions": sorted(self.supported_extensions),
-            "ffmpeg_available": bool(get_ffmpeg_binary()),
-            "ffprobe_available": bool(get_ffprobe_binary()),
-        }
+        res = super().check_health()
+        res.update(
+            {
+                "ffmpeg_available": bool(get_ffmpeg_binary()),
+                "ffprobe_available": bool(get_ffprobe_binary()),
+            }
+        )
+        return res
 
 
 class MovieMediaPlugin(VideoMediaPlugin):

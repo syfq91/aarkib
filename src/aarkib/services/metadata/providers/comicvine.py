@@ -43,18 +43,21 @@ class ComicVineProvider(MetadataProvider):
         )
 
     def get_api_key(self) -> str | None:
-        """Resolves ComicVine API key from instance, environment, or Flask config."""
+        """Resolves ComicVine API key from instance, Flask config, or environment."""
         if self._api_key:
             return self._api_key
-        env_key = os.getenv("COMICVINE_API_KEY")
-        if env_key:
-            return env_key.strip()
         try:
-            cfg_key = current_app.config.get("COMICVINE_API_KEY")
-            if cfg_key:
-                return str(cfg_key).strip()
+            from flask import has_app_context
+
+            if has_app_context():
+                cfg_key = current_app.config.get("COMICVINE_API_KEY")
+                if cfg_key:
+                    return str(cfg_key).strip()
         except Exception:
             pass
+        env_key = os.getenv("AARKIB_COMICVINE_API_KEY", os.getenv("COMICVINE_API_KEY"))
+        if env_key:
+            return env_key.strip()
         return None
 
     def search(

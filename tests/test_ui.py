@@ -405,3 +405,36 @@ def test_settings_backup_view(client):
     )
     assert b"Create Backup" in res.data
     assert b"Upload &amp; Restore" in res.data or b"Upload & Restore" in res.data
+
+
+def test_settings_plugins_api_key_ui(client, app):
+    """Verify that /settings/plugins renders API Key configuration fields for video, books, and podcast plugins."""
+    from aarkib.services.settings_service import update_settings
+
+    # Initially keys not set
+    res = client.get("/settings/plugins")
+    assert res.status_code == 200
+    assert b"API Key Settings" in res.data
+    assert b"TMDB API Key" in res.data
+    assert b"ComicVine API Key" in res.data
+    assert b"plugin-input-TMDB_API_KEY" in res.data
+    assert b"Key Not Set" in res.data
+
+    # Now set TMDB API key
+    update_settings(app, {"TMDB_API_KEY": "test_tmdb_key_12345"})
+    res_set = client.get("/settings/plugins")
+    assert res_set.status_code == 200
+    assert b"Configured" in res_set.data
+    assert b"Active" in res_set.data
+
+
+def test_settings_system_api_key_ui(client, app):
+    """Verify that /settings/system renders API key fields in the Metadata Enrichment card."""
+    res = client.get("/settings/system")
+    assert res.status_code == 200
+    assert b"TMDB API Key (Video Plugin)" in res.data
+    assert b"ComicVine API Key (Books &amp; Comics Plugin)" in res.data
+    assert b"setting-TMDB_API_KEY" in res.data
+    assert b"setting-COMICVINE_API_KEY" in res.data
+    assert b"setting-PODCASTINDEX_API_KEY" in res.data
+    assert b"setting-GOOGLE_BOOKS_API_KEY" in res.data

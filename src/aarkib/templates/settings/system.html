@@ -113,6 +113,91 @@
             <div style="margin-top: 0.25rem;"><span class="badge" style="background: var(--accent-light); color: var(--accent); font-size: 0.7rem;">Customized (default: {{ system_settings.settings.METADATA_PROVIDER.default_value if system_settings.settings.METADATA_PROVIDER.default_value is defined else system_settings.settings.METADATA_PROVIDER.env_default }})</span></div>
           {% endif %}
         </div>
+
+        <!-- TMDB_API_KEY -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">
+            TMDB API Key (Video Plugin)
+            {% if system_settings and system_settings.settings.TMDB_API_KEY and system_settings.settings.TMDB_API_KEY.is_set %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; font-size: 0.65rem; margin-left: 0.5rem;">Configured</span>
+            {% endif %}
+          </label>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <input type="password" id="setting-TMDB_API_KEY" name="TMDB_API_KEY" class="input-text" style="width: 100%; font-size: 0.85rem; font-family: monospace;" value="{{ system_settings.settings.TMDB_API_KEY.value if system_settings and system_settings.settings.TMDB_API_KEY else '' }}" placeholder="{% if system_settings and system_settings.settings.TMDB_API_KEY and system_settings.settings.TMDB_API_KEY.is_set %}•••••••• (Configured){% else %}Enter TMDB API Key / v4 Read Token{% endif %}">
+            <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; line-height: 1;" onclick="toggleSystemPasswordVisibility('setting-TMDB_API_KEY', this)" title="Show / Hide">👁️</button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            The Movie Database (TMDB) API Key or Read Access Token (v4) for movies &amp; TV shows.
+          </p>
+        </div>
+
+        <!-- COMICVINE_API_KEY -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">
+            ComicVine API Key (Books &amp; Comics Plugin)
+            {% if system_settings and system_settings.settings.COMICVINE_API_KEY and system_settings.settings.COMICVINE_API_KEY.is_set %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; font-size: 0.65rem; margin-left: 0.5rem;">Configured</span>
+            {% endif %}
+          </label>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <input type="password" id="setting-COMICVINE_API_KEY" name="COMICVINE_API_KEY" class="input-text" style="width: 100%; font-size: 0.85rem; font-family: monospace;" value="{{ system_settings.settings.COMICVINE_API_KEY.value if system_settings and system_settings.settings.COMICVINE_API_KEY else '' }}" placeholder="{% if system_settings and system_settings.settings.COMICVINE_API_KEY and system_settings.settings.COMICVINE_API_KEY.is_set %}•••••••• (Configured){% else %}Enter ComicVine API Key{% endif %}">
+            <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; line-height: 1;" onclick="toggleSystemPasswordVisibility('setting-COMICVINE_API_KEY', this)" title="Show / Hide">👁️</button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            ComicVine API key for comic books, graphic novels, and manga issue metadata.
+          </p>
+        </div>
+
+        <!-- PODCASTINDEX_API_KEY -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">
+            PodcastIndex API Key (Podcast Plugin)
+            {% if system_settings and system_settings.settings.PODCASTINDEX_API_KEY and system_settings.settings.PODCASTINDEX_API_KEY.is_set %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; font-size: 0.65rem; margin-left: 0.5rem;">Configured</span>
+            {% endif %}
+          </label>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <input type="password" id="setting-PODCASTINDEX_API_KEY" name="PODCASTINDEX_API_KEY" class="input-text" style="width: 100%; font-size: 0.85rem; font-family: monospace;" value="{{ system_settings.settings.PODCASTINDEX_API_KEY.value if system_settings and system_settings.settings.PODCASTINDEX_API_KEY else '' }}" placeholder="{% if system_settings and system_settings.settings.PODCASTINDEX_API_KEY and system_settings.settings.PODCASTINDEX_API_KEY.is_set %}•••••••• (Configured){% else %}Enter PodcastIndex API Key{% endif %}">
+            <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; line-height: 1;" onclick="toggleSystemPasswordVisibility('setting-PODCASTINDEX_API_KEY', this)" title="Show / Hide">👁️</button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            API key for the open podcast directory search at PodcastIndex.org.
+          </p>
+        </div>
+
+        <!-- PODCASTINDEX_API_SECRET -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">
+            PodcastIndex API Secret
+            {% if system_settings and system_settings.settings.PODCASTINDEX_API_SECRET and system_settings.settings.PODCASTINDEX_API_SECRET.is_set %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; font-size: 0.65rem; margin-left: 0.5rem;">Configured</span>
+            {% endif %}
+          </label>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <input type="password" id="setting-PODCASTINDEX_API_SECRET" name="PODCASTINDEX_API_SECRET" class="input-text" style="width: 100%; font-size: 0.85rem; font-family: monospace;" value="{{ system_settings.settings.PODCASTINDEX_API_SECRET.value if system_settings and system_settings.settings.PODCASTINDEX_API_SECRET else '' }}" placeholder="{% if system_settings and system_settings.settings.PODCASTINDEX_API_SECRET and system_settings.settings.PODCASTINDEX_API_SECRET.is_set %}•••••••• (Configured){% else %}Enter PodcastIndex API Secret{% endif %}">
+            <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; line-height: 1;" onclick="toggleSystemPasswordVisibility('setting-PODCASTINDEX_API_SECRET', this)" title="Show / Hide">👁️</button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            API secret used to generate SHA-1 authentication signatures for PodcastIndex.
+          </p>
+        </div>
+
+        <!-- GOOGLE_BOOKS_API_KEY -->
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; font-weight: 600;">
+            Google Books API Key
+            {% if system_settings and system_settings.settings.GOOGLE_BOOKS_API_KEY and system_settings.settings.GOOGLE_BOOKS_API_KEY.is_set %}
+              <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #4ade80; font-size: 0.65rem; margin-left: 0.5rem;">Configured</span>
+            {% endif %}
+          </label>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <input type="password" id="setting-GOOGLE_BOOKS_API_KEY" name="GOOGLE_BOOKS_API_KEY" class="input-text" style="width: 100%; font-size: 0.85rem; font-family: monospace;" value="{{ system_settings.settings.GOOGLE_BOOKS_API_KEY.value if system_settings and system_settings.settings.GOOGLE_BOOKS_API_KEY else '' }}" placeholder="{% if system_settings and system_settings.settings.GOOGLE_BOOKS_API_KEY and system_settings.settings.GOOGLE_BOOKS_API_KEY.is_set %}•••••••• (Configured){% else %}Optional Google Books API Key{% endif %}">
+            <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; line-height: 1;" onclick="toggleSystemPasswordVisibility('setting-GOOGLE_BOOKS_API_KEY', this)" title="Show / Hide">👁️</button>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0.25rem 0 0 0;">
+            Optional API key for higher volume Google Books request quotas.
+          </p>
+        </div>
       </div>
 
       <!-- Card 3: Display & Presentation -->
@@ -438,6 +523,19 @@ async function resetSystemSettings() {
       resetBtn.innerText = "↺ Reset to Defaults";
     }
   }
+
+  function toggleSystemPasswordVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    if (input.type === "password") {
+      input.type = "text";
+      btn.innerText = "🔒";
+    } else {
+      input.type = "password";
+      btn.innerText = "👁️";
+    }
+  }
+
   function updateGamepadSettings() {
     const hudSelect = document.getElementById("setting-GAMEPAD_HUD_MODE");
     const rumbleBox = document.getElementById("setting-GAMEPAD_RUMBLE");

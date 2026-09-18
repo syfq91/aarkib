@@ -299,3 +299,27 @@ def test_plugin_supported_extensions_active_only():
             )
         finally:
             video_plugin.enabled = original_state
+
+
+def test_plugin_config_keys_and_api(client):
+    """Verifies that plugins declare config_keys and /api/plugins returns them."""
+    from aarkib.plugins import plugin_registry
+
+    video_p = plugin_registry.get_plugin("video")
+    books_p = plugin_registry.get_plugin("books")
+    podcast_p = plugin_registry.get_plugin("podcast")
+
+    assert "TMDB_API_KEY" in video_p.config_keys
+    assert "COMICVINE_API_KEY" in books_p.config_keys
+    assert "PODCASTINDEX_API_KEY" in podcast_p.config_keys
+
+    health = video_p.check_health()
+    assert "config_keys" in health
+    assert "TMDB_API_KEY" in health["config_keys"]
+
+    res = client.get("/api/plugins")
+    assert res.status_code == 200
+    data = res.get_json()
+    v_item = next(p for p in data["plugins"] if p["name"] == "video")
+    assert "config_keys" in v_item
+    assert "TMDB_API_KEY" in v_item["config_keys"]

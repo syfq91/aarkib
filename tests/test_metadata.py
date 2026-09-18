@@ -400,3 +400,41 @@ def test_api_metadata_search_and_apply(client, app, sample_epub):
         )
         assert lf_put.status_code == 200
         assert set(lf_put.get_json()["locked_fields"]) == {"title", "cover_image"}
+
+
+def test_providers_dynamic_api_key_resolution(app):
+    """Verifies that all metadata providers dynamically pick up API keys from app.config."""
+    from aarkib.services.metadata.providers.comicvine import ComicVineProvider
+    from aarkib.services.metadata.providers.google_books import GoogleBooksProvider
+    from aarkib.services.metadata.providers.podcastindex import PodcastIndexProvider
+    from aarkib.services.metadata.providers.tmdb import TMDBProvider
+    from aarkib.services.settings_service import update_settings
+
+    with app.app_context():
+        # TMDB
+        tmdb = TMDBProvider()
+        update_settings(app, {"TMDB_API_KEY": "dynamic_tmdb_key_abc"})
+        assert tmdb._get_api_key() == "dynamic_tmdb_key_abc"
+
+        # ComicVine
+        cv = ComicVineProvider()
+        update_settings(app, {"COMICVINE_API_KEY": "dynamic_cv_key_def"})
+        assert cv.get_api_key() == "dynamic_cv_key_def"
+
+        # PodcastIndex
+        pi = PodcastIndexProvider()
+        update_settings(
+            app,
+            {
+                "PODCASTINDEX_API_KEY": "pi_key_123",
+                "PODCASTINDEX_API_SECRET": "pi_secret_456",
+            },
+        )
+        assert pi.api_key == "pi_key_123"
+        assert pi.api_secret == "pi_secret_456"
+        assert pi.is_configured() is True
+
+        # Google Books
+        gb = GoogleBooksProvider()
+        update_settings(app, {"GOOGLE_BOOKS_API_KEY": "gb_key_789"})
+        assert gb.get_api_key() == "gb_key_789"

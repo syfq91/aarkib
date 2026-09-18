@@ -581,6 +581,7 @@ def list_plugins() -> ResponseReturnValue:
             "type": plugin.plugin_type,
             "description": plugin.description,
             "enabled": plugin.enabled,
+            "config_keys": getattr(plugin, "config_keys", []),
             "health": plugin.check_health(),
         }
         for plugin in plugin_registry.get_all_plugins()

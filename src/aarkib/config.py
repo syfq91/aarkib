@@ -198,6 +198,18 @@ class Config:
     TMDB_API_KEY: str | None = os.getenv(
         "AARKIB_TMDB_API_KEY", os.getenv("TMDB_API_KEY")
     )
+    COMICVINE_API_KEY: str | None = os.getenv(
+        "AARKIB_COMICVINE_API_KEY", os.getenv("COMICVINE_API_KEY")
+    )
+    PODCASTINDEX_API_KEY: str | None = os.getenv(
+        "AARKIB_PODCASTINDEX_API_KEY", os.getenv("PODCASTINDEX_API_KEY")
+    )
+    PODCASTINDEX_API_SECRET: str | None = os.getenv(
+        "AARKIB_PODCASTINDEX_API_SECRET", os.getenv("PODCASTINDEX_API_SECRET")
+    )
+    GOOGLE_BOOKS_API_KEY: str | None = os.getenv(
+        "AARKIB_GOOGLE_BOOKS_API_KEY", os.getenv("GOOGLE_BOOKS_API_KEY")
+    )
     METADATA_CACHE_TTL_DAYS: int = int(
         os.getenv("AARKIB_METADATA_CACHE_TTL_DAYS", "30")
     )

@@ -308,18 +308,32 @@ def settings(category: str | None = None) -> ResponseReturnValue:
 
     plugins_info = None
     if is_admin:
-        plugins_info = [
-            {
-                "name": p.name,
-                "display_name": p.display_name or p.name.title(),
-                "type": p.plugin_type,
-                "description": p.description,
-                "enabled": p.enabled,
-                "health": p.check_health(),
-                "setting_key": f"ENABLE_{p.name.upper()}",
-            }
-            for p in plugin_registry.get_all_plugins()
-        ]
+        plugins_info = []
+        for p in plugin_registry.get_all_plugins():
+            config_items = []
+            for ckey in getattr(p, "config_keys", []):
+                s_spec = system_settings.get("settings", {}).get(ckey)
+                if s_spec:
+                    config_items.append(s_spec)
+
+            has_unconfigured_keys = any(not item.get("is_set") for item in config_items)
+            has_configured_keys = any(bool(item.get("is_set")) for item in config_items)
+
+            plugins_info.append(
+                {
+                    "name": p.name,
+                    "display_name": p.display_name or p.name.title(),
+                    "type": p.plugin_type,
+                    "description": p.description,
+                    "enabled": p.enabled,
+                    "health": p.check_health(),
+                    "setting_key": f"ENABLE_{p.name.upper()}",
+                    "config_keys": getattr(p, "config_keys", []),
+                    "config_items": config_items,
+                    "has_configured_keys": has_configured_keys,
+                    "has_unconfigured_keys": has_unconfigured_keys,
+                }
+            )
 
     users = (
         db.session.scalars(select(User).order_by(User.id.asc())).all()

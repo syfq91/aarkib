@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import urllib.parse
 from typing import ClassVar
 
@@ -22,11 +23,34 @@ class GoogleBooksProvider(MetadataProvider):
     name = "googlebooks"
     supported_media_types: ClassVar[set[str]] = {"book", "comic", "audiobook", "all"}
 
-    def __init__(self, client: ResilientHttpClient | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        client: ResilientHttpClient | None = None,
+    ) -> None:
+        self._api_key = api_key
         self.client = client or ResilientHttpClient(
             provider_name=self.name,
             limiter=books_limiter,
         )
+
+    def get_api_key(self) -> str | None:
+        """Resolves Google Books API key from instance, Flask config, or environment."""
+        if self._api_key:
+            return self._api_key
+        try:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                cfg_key = current_app.config.get("GOOGLE_BOOKS_API_KEY")
+                if cfg_key:
+                    return str(cfg_key).strip()
+        except Exception:
+            pass
+        env_key = os.getenv(
+            "AARKIB_GOOGLE_BOOKS_API_KEY", os.getenv("GOOGLE_BOOKS_API_KEY")
+        )
+        return env_key.strip() if env_key else None
 
     def search(
         self,
@@ -40,7 +64,9 @@ class GoogleBooksProvider(MetadataProvider):
 
         clean_query = query.strip()
         encoded = urllib.parse.quote(clean_query)
-        url = f"https://www.googleapis.com/books/v1/volumes?q={encoded}&maxResults=10"
+        api_key = self.get_api_key()
+        key_param = f"&key={api_key}" if api_key else ""
+        url = f"https://www.googleapis.com/books/v1/volumes?q={encoded}&maxResults=10{key_param}"
 
         data = self.client.get_json(url)
         if not isinstance(data, dict) or not data.get("items"):
@@ -106,7 +132,9 @@ class GoogleBooksProvider(MetadataProvider):
         if not external_id:
             return None
 
-        url = f"https://www.googleapis.com/books/v1/volumes/{urllib.parse.quote(external_id)}"
+        api_key = self.get_api_key()
+        key_param = f"?key={api_key}" if api_key else ""
+        url = f"https://www.googleapis.com/books/v1/volumes/{urllib.parse.quote(external_id)}{key_param}"
         data = self.client.get_json(url)
         if not isinstance(data, dict):
             return None

@@ -22,6 +22,10 @@ class PodcastMediaPlugin(MediaPlugin):
         ".opus",
         ".aac",
     }
+    config_keys: ClassVar[list[str]] = [
+        "PODCASTINDEX_API_KEY",
+        "PODCASTINDEX_API_SECRET",
+    ]
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses podcast episode metadata from ID3/MP4 tags and filename heuristics."""
@@ -63,9 +67,4 @@ class PodcastMediaPlugin(MediaPlugin):
         return None
 
     def check_health(self) -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "plugin": self.name,
-            "media_type": self.media_type,
-            "supported_extensions": sorted(self.supported_extensions),
-        }
+        return super().check_health()

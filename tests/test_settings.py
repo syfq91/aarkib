@@ -441,3 +441,79 @@ def test_plugins_page_filter_ui(client, app):
     assert b"data-enabled=" in res.data
     assert b"setPluginFilter" in res.data
     assert b"plugin-filter-empty" in res.data
+
+
+def test_api_key_settings_lifecycle(app):
+    """Verifies that API keys are managed as secrets, masked in views, and dynamic."""
+    with app.app_context():
+        # Verify definitions
+        tmdb_spec = MANAGED_SETTINGS["TMDB_API_KEY"]
+        comicvine_spec = MANAGED_SETTINGS["COMICVINE_API_KEY"]
+        podcast_spec = MANAGED_SETTINGS["PODCASTINDEX_API_KEY"]
+        assert tmdb_spec.is_secret is True
+        assert comicvine_spec.is_secret is True
+        assert podcast_spec.is_secret is True
+
+        effective_init = get_effective_settings(app)
+        assert effective_init["settings"]["TMDB_API_KEY"]["is_secret"] is True
+        assert effective_init["settings"]["TMDB_API_KEY"]["is_set"] is False
+
+        # Update API key
+        update_settings(
+            app,
+            {
+                "TMDB_API_KEY": "secret_tmdb_token_12345",
+                "COMICVINE_API_KEY": "secret_comicvine_key_9999",
+            },
+        )
+        assert app.config["TMDB_API_KEY"] == "secret_tmdb_token_12345"
+        assert app.config["COMICVINE_API_KEY"] == "secret_comicvine_key_9999"
+
+        # Check effective settings mask the value
+        effective_after = get_effective_settings(app)
+        tmdb_info = effective_after["settings"]["TMDB_API_KEY"]
+        assert tmdb_info["is_set"] is True
+        assert "2345" in tmdb_info["value"]
+        assert tmdb_info["value"].startswith("••••••••")
+        assert "secret_tmdb_token_12345" not in tmdb_info["value"]
+        assert effective_after["values"]["TMDB_API_KEY"] == tmdb_info["value"]
+
+        # Sending masked placeholder back does not overwrite existing key
+        update_settings(app, {"TMDB_API_KEY": tmdb_info["value"]})
+        assert app.config["TMDB_API_KEY"] == "secret_tmdb_token_12345"
+
+        # Explicitly clearing with empty string works
+        update_settings(app, {"TMDB_API_KEY": ""})
+        assert app.config["TMDB_API_KEY"] == ""
+        effective_cleared = get_effective_settings(app)
+        assert effective_cleared["settings"]["TMDB_API_KEY"]["is_set"] is False
+
+
+def test_api_settings_api_keys_endpoint(client, app):
+    """Verifies that admins can update plugin API keys via PATCH /api/settings."""
+    _login_admin(client, app)
+
+    res = client.patch(
+        "/api/settings",
+        json={
+            "TMDB_API_KEY": "tmdb_api_key_test_val",
+            "COMICVINE_API_KEY": "cv_api_key_test_val",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "success"
+    assert "_val" in data["settings"]["TMDB_API_KEY"]["value"]
+    assert data["settings"]["TMDB_API_KEY"]["value"].startswith("••••••••")
+
+    # Reader cannot access or modify
+    _login_reader(client, app)
+    res_reader = client.patch(
+        "/api/settings",
+        json={"TMDB_API_KEY": "hacked"},
+    )
+    assert res_reader.status_code == 403
+
+    # Reset
+    _login_admin(client, app)
+    client.post("/api/settings/reset")

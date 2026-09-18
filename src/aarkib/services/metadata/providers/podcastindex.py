@@ -34,11 +34,55 @@ class PodcastIndexProvider(MetadataProvider):
         api_secret: str | None = None,
         client: ResilientHttpClient | None = None,
     ) -> None:
-        self.api_key = api_key or os.getenv("PODCASTINDEX_API_KEY", "")
-        self.api_secret = api_secret or os.getenv("PODCASTINDEX_API_SECRET", "")
+        self._api_key = api_key
+        self._api_secret = api_secret
         self.client = client or ResilientHttpClient(
             provider_name=self.name,
         )
+
+    @property
+    def api_key(self) -> str:
+        """Dynamically resolves PodcastIndex API key from instance, Flask config, or environment."""
+        if self._api_key:
+            return self._api_key
+        try:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                cfg_val = current_app.config.get("PODCASTINDEX_API_KEY")
+                if cfg_val:
+                    return str(cfg_val).strip()
+        except Exception:
+            pass
+        return os.getenv(
+            "AARKIB_PODCASTINDEX_API_KEY", os.getenv("PODCASTINDEX_API_KEY", "")
+        ).strip()
+
+    @api_key.setter
+    def api_key(self, val: str | None) -> None:
+        self._api_key = val
+
+    @property
+    def api_secret(self) -> str:
+        """Dynamically resolves PodcastIndex API secret from instance, Flask config, or environment."""
+        if self._api_secret:
+            return self._api_secret
+        try:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                cfg_val = current_app.config.get("PODCASTINDEX_API_SECRET")
+                if cfg_val:
+                    return str(cfg_val).strip()
+        except Exception:
+            pass
+        return os.getenv(
+            "AARKIB_PODCASTINDEX_API_SECRET", os.getenv("PODCASTINDEX_API_SECRET", "")
+        ).strip()
+
+    @api_secret.setter
+    def api_secret(self, val: str | None) -> None:
+        self._api_secret = val
 
     def is_configured(self) -> bool:
         """Returns True if valid PodcastIndex API credentials are provided."""

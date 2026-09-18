@@ -24,6 +24,7 @@ class SettingDefinition:
     choices: tuple[str, ...] | None = None
     min_value: int | None = None
     max_value: int | None = None
+    is_secret: bool = False
 
     @property
     def resolved_choices(self) -> tuple[str, ...] | None:
@@ -100,6 +101,51 @@ MANAGED_SETTINGS: dict[str, SettingDefinition] = {
         description="Default online service used for fetching book descriptions, subjects, and covers.",
         category="Metadata Enrichment",
         choices=("all", "googlebooks", "openlibrary"),
+    ),
+    "TMDB_API_KEY": SettingDefinition(
+        key="TMDB_API_KEY",
+        type=str,
+        default="",
+        display_name="TMDB API Key",
+        description="The Movie Database (TMDB) API Key or Read Access Token (v4) for movies & TV metadata enrichment.",
+        category="Metadata Enrichment",
+        is_secret=True,
+    ),
+    "COMICVINE_API_KEY": SettingDefinition(
+        key="COMICVINE_API_KEY",
+        type=str,
+        default="",
+        display_name="ComicVine API Key",
+        description="ComicVine API key for comic book and graphic novel metadata and cover art enrichment.",
+        category="Metadata Enrichment",
+        is_secret=True,
+    ),
+    "PODCASTINDEX_API_KEY": SettingDefinition(
+        key="PODCASTINDEX_API_KEY",
+        type=str,
+        default="",
+        display_name="PodcastIndex API Key",
+        description="PodcastIndex API key for open podcast directory queries and search.",
+        category="Metadata Enrichment",
+        is_secret=True,
+    ),
+    "PODCASTINDEX_API_SECRET": SettingDefinition(
+        key="PODCASTINDEX_API_SECRET",
+        type=str,
+        default="",
+        display_name="PodcastIndex API Secret",
+        description="PodcastIndex API secret for authorization header signing.",
+        category="Metadata Enrichment",
+        is_secret=True,
+    ),
+    "GOOGLE_BOOKS_API_KEY": SettingDefinition(
+        key="GOOGLE_BOOKS_API_KEY",
+        type=str,
+        default="",
+        display_name="Google Books API Key",
+        description="Optional Google Books API key for higher volume request quotas.",
+        category="Metadata Enrichment",
+        is_secret=True,
     ),
     "PAGE_SIZE": SettingDefinition(
         key="PAGE_SIZE",
@@ -289,14 +335,33 @@ def get_effective_settings(app: Flask) -> dict[str, Any]:
         current_val = app.config.get(key, spec.default)
         env_default = env_defaults.get(key, spec.default)
 
-        flat_values[key] = current_val
+        is_set = bool(current_val)
+        if spec.is_secret:
+            s_val = str(current_val or "").strip()
+            masked_val = (
+                f"••••••••{s_val[-4:]}"
+                if len(s_val) > 4
+                else ("••••••••" if s_val else "")
+            )
+            display_val = masked_val
+            flat_values[key] = masked_val
+        else:
+            masked_val = None
+            display_val = current_val
+            flat_values[key] = current_val
+
         settings_detail[key] = {
             "key": key,
-            "value": current_val,
+            "value": display_val,
             "type": spec.type.__name__,
             "is_overridden": is_overridden,
-            "default_value": spec.default,
-            "env_default": env_default,
+            "is_secret": spec.is_secret,
+            "is_set": is_set,
+            "masked_value": masked_val,
+            "default_value": ("" if spec.is_secret else spec.default),
+            "env_default": (
+                "••••••••" if spec.is_secret and env_default else env_default
+            ),
             "display_name": spec.display_name,
             "description": spec.description,
             "category": spec.category,
@@ -328,6 +393,14 @@ def update_settings(app: Flask, updates: dict[str, Any]) -> dict[str, Any]:
         key = raw_key.upper().strip()
         spec = MANAGED_SETTINGS.get(key)
         if not spec:
+            continue
+
+        # If a secret setting was submitted with the masked placeholder, keep existing value
+        if (
+            spec.is_secret
+            and isinstance(raw_val, str)
+            and (raw_val.startswith("••••") or raw_val.startswith("***"))
+        ):
             continue
 
         parsed_val = parse_setting_value(spec, raw_val)

@@ -22,6 +22,7 @@ class BasePlugin:
     enabled: bool = True
     csrf_exempt: bool = False
     blueprint_options: ClassVar[dict[str, Any]] = {}
+    config_keys: ClassVar[list[str]] = []
 
     def register_routes(self, app: Flask | None = None) -> Blueprint | None:
         """Registers and returns any Flask blueprint required by this plugin."""
@@ -30,6 +31,10 @@ class BasePlugin:
     def init_app(self, app: Flask) -> None:
         """Lifecycle hook invoked when Flask application initializes."""
 
+    def get_config_keys(self) -> list[str]:
+        """Returns the list of setting keys associated with this plugin."""
+        return list(self.config_keys)
+
     def check_health(self) -> dict[str, Any]:
         """Performs health / dependency checks for the plugin."""
         return {
@@ -37,6 +42,7 @@ class BasePlugin:
             "plugin": self.name,
             "type": self.plugin_type,
             "enabled": self.enabled,
+            "config_keys": list(self.config_keys),
         }
 
 

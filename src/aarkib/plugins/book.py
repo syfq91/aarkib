@@ -17,6 +17,7 @@ class BookMediaPlugin(MediaPlugin):
     media_type = "book"
     supported_media_types: ClassVar[set[str]] = {"book", "comic"}
     supported_extensions: ClassVar[set[str]] = {".epub", ".cbz", ".zip", ".cbr", ".pdf"}
+    config_keys: ClassVar[list[str]] = ["COMICVINE_API_KEY", "GOOGLE_BOOKS_API_KEY"]
 
     def parse_metadata(self, file_path: Path) -> BaseParsedMetadata | None:
         """Parses EPUB, PDF, or Comic archive metadata."""
@@ -72,9 +73,4 @@ class BookMediaPlugin(MediaPlugin):
 
     def check_health(self) -> dict[str, Any]:
         """Verifies book plugin dependencies."""
-        return {
-            "status": "ok",
-            "plugin": self.name,
-            "media_type": self.media_type,
-            "supported_extensions": sorted(self.supported_extensions),
-        }
+        return super().check_health()
