@@ -494,6 +494,17 @@
         const res = await fetch(`/api/media/${BOOK_ID}/stream/info`);
         if (res.ok) {
           const info = await res.json();
+          if (info.plan) {
+            const planMode = info.plan.mode;
+            if (planMode === "remux") {
+              loadRemux(curTime);
+            } else if (planMode === "transcode") {
+              loadHls(info.plan.resolution || "original", curTime);
+            } else {
+              loadDirect(curTime);
+            }
+            return;
+          }
           const strat = info.evaluation ? info.evaluation.strategy : "direct_play";
           if (strat === "direct_remux") {
             loadRemux(curTime);

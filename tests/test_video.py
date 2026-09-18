@@ -3,7 +3,7 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from aarkib.plugins import plugin_registry
+from aarkib.plugins import init_plugins, plugin_registry
 from aarkib.plugins.video import VideoMediaPlugin
 from aarkib.services.indexer import index_media_file
 from aarkib.services.parsers.video import (
@@ -135,6 +135,7 @@ def test_extract_video_cover_local_poster(tmp_path):
 
 
 def test_video_plugin_registration():
+    init_plugins()
     plugin = plugin_registry.get_plugin("video")
     assert plugin is not None
     assert isinstance(plugin, VideoMediaPlugin)

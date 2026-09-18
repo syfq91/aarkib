@@ -1422,6 +1422,11 @@ def get_media_playback(item_id: int) -> ResponseReturnValue:
 
     user_id = current_user.id if current_user.is_authenticated else None
     from aarkib.plugins import plugin_registry
+    from aarkib.services.capability_service import capability_service
+    from aarkib.services.playback_service import playback_service
+
+    capabilities = capability_service.detect(request)
+    plan = playback_service.plan(item, capabilities=capabilities)
 
     plugin = plugin_registry.get_plugin_for_media_type(item.media_type or "")
     if not plugin:
@@ -1439,6 +1444,9 @@ def get_media_playback(item_id: int) -> ResponseReturnValue:
             "cover_url": f"/api/media/{item.id}/cover",
             "player_url": item.player_url,
         }
+
+    descriptor["plan"] = plan.to_dict()
+    descriptor["playback_plan"] = plan.to_dict()
 
     return jsonify({"status": "ok", "playback": descriptor})
 
@@ -1468,15 +1476,26 @@ def get_stream_info(item_id: int) -> ResponseReturnValue:
     item_id_val = item.id
     item_title = item.title
     item_format = item.file_format
+    item_media_type = item.media_type
     db.session.close()
 
+    from aarkib.services.capability_service import capability_service
+    from aarkib.services.playback_service import playback_service
     from aarkib.services.transcoder import (
         evaluate_playback_strategy,
         probe_media_streams,
     )
 
+    capabilities = capability_service.detect(request)
     streams = probe_media_streams(file_path)
-    eval_res = evaluate_playback_strategy(file_path, streams)
+    plan = playback_service.plan_for_file(
+        file_path=file_path,
+        media_item_id=item_id_val,
+        media_type=item_media_type,
+        capabilities=capabilities,
+        streams_info=streams,
+    )
+    eval_res = evaluate_playback_strategy(file_path, streams, client_caps=capabilities)
 
     return jsonify(
         {
@@ -1486,7 +1505,8 @@ def get_stream_info(item_id: int) -> ResponseReturnValue:
             "original_file_path": str(file_path),
             "streams": streams,
             "evaluation": eval_res,
-            "direct_url": f"/api/media/{item_id_val}/file",
+            "plan": plan.to_dict(),
+            "direct_url": plan.direct_url or f"/api/media/{item_id_val}/file",
             "remux_url": f"/api/media/{item_id_val}/stream/remux",
             "hls_url": f"/api/media/{item_id_val}/stream/hls/master.m3u8",
         }

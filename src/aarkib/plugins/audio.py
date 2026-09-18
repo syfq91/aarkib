@@ -49,9 +49,31 @@ class AudioMediaPlugin(MediaPlugin):
     ) -> dict[str, Any]:
         """Returns audio playback descriptor including stream URL, bitrate, album, and track info."""
         info = super().get_playback_info(item, user_id=user_id)
+        from aarkib.services.playback_service import playback_service
+
+        plan = None
+        strategy = "direct_play"
+        file_path_str = getattr(item, "original_file_path", None)
+        if file_path_str:
+            file_p = Path(file_path_str)
+            if file_p.exists():
+                try:
+                    plan = playback_service.plan_for_file(
+                        file_path=file_p,
+                        media_item_id=getattr(item, "id", None),
+                        media_type=getattr(item, "media_type", None),
+                    )
+                    strategy = (
+                        "direct_play" if plan.mode.value == "direct" else "transcode"
+                    )
+                except Exception:
+                    pass
+
         info.update(
             {
-                "playback_strategy": "direct_play",
+                "playback_strategy": strategy,
+                "plan": plan.to_dict() if plan else None,
+                "playback_plan": plan.to_dict() if plan else None,
                 "stream_url": f"/api/media/{item.id}/stream",
                 "bitrate": getattr(item, "bitrate", None),
                 "album": getattr(item, "album", None),

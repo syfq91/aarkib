@@ -49,22 +49,38 @@ class VideoMediaPlugin(MediaPlugin):
     ) -> dict[str, Any]:
         """Returns video playback descriptor including transcoding strategy and stream URLs."""
         info = super().get_playback_info(item, user_id=user_id)
-        from aarkib.services.transcoder import evaluate_playback_strategy
+        from aarkib.services.playback_service import playback_service
 
         strategy = "direct_play"
+        plan = None
         file_path_str = getattr(item, "original_file_path", None)
         if file_path_str:
             file_p = Path(file_path_str)
             if file_p.exists():
                 try:
-                    probe_res = evaluate_playback_strategy(file_p)
-                    strategy = probe_res.get("strategy", "direct_play")
+                    plan = playback_service.plan_for_file(
+                        file_path=file_p,
+                        media_item_id=getattr(item, "id", None),
+                        media_type=getattr(item, "media_type", None),
+                    )
+                    if plan.mode.value == "direct":
+                        strategy = "direct_play"
+                    elif plan.mode.value == "remux":
+                        strategy = "direct_remux"
+                    elif plan.mode.value == "transcode":
+                        strategy = (
+                            "audio_transcode"
+                            if plan.diagnostics.get("copy_video")
+                            else "full_transcode"
+                        )
                 except Exception:
                     pass
 
         info.update(
             {
                 "playback_strategy": strategy,
+                "plan": plan.to_dict() if plan else None,
+                "playback_plan": plan.to_dict() if plan else None,
                 "stream_url": f"/api/media/{item.id}/stream",
                 "hls_url": f"/api/media/{item.id}/hls/master.m3u8",
                 "mime_type": "video/mp4",

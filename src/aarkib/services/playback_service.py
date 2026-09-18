@@ -64,6 +64,28 @@ class PlaybackService:
     ) -> PlaybackPlan:
         """Determines the optimal playback delivery plan for a database MediaItem."""
         file_path = Path(item.original_file_path)
+        if streams_info is None:
+            from aarkib.services.transcoder import probe_media_streams
+
+            streams_info = probe_media_streams(file_path)
+            if not streams_info.get("video") and getattr(item, "is_video", False):
+                v_codec = getattr(item, "codec", None)
+                if not v_codec:
+                    ext = file_path.suffix.lower()
+                    if ext in (".mp4", ".m4v", ".mkv"):
+                        v_codec = "h264"
+                    elif ext == ".webm":
+                        v_codec = "vp9"
+                if v_codec:
+                    streams_info["video"] = {
+                        "codec": v_codec,
+                        "width": getattr(item, "resolution_width", None),
+                        "height": getattr(item, "resolution_height", None),
+                        "pix_fmt": "yuv420p",
+                    }
+            if not streams_info.get("duration") and getattr(item, "duration", None):
+                streams_info["duration"] = item.duration
+
         return self.plan_for_file(
             file_path=file_path,
             media_item_id=item.id,
@@ -315,6 +337,11 @@ class PlaybackService:
         subtitles_list = streams_info.get("subtitles", [])
 
         v_codec = (video.get("codec") or "").lower()
+        if not v_codec:
+            if ext in (".mp4", ".m4v", ".mkv"):
+                v_codec = "h264"
+            elif ext == ".webm":
+                v_codec = "vp9"
         a_codec = (primary_audio.get("codec") or "").lower()
         pix_fmt = video.get("pix_fmt") or ""
         is_10bit = "10" in pix_fmt or "p010" in pix_fmt

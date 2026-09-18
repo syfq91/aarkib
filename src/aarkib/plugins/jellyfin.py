@@ -448,12 +448,32 @@ def _format_item(item: MediaItem, user_id: int | None = None) -> dict[str, Any]:
     return dto
 
 
-def _format_playback_info(item: MediaItem) -> dict[str, Any]:
-    """Builds MediaSources for a given media item."""
+def _format_playback_info(item: MediaItem, capabilities: Any = None) -> dict[str, Any]:
+    """Builds MediaSources for a given media item using PlaybackService."""
+    from aarkib.models.playback import PlaybackMode
+    from aarkib.services.playback_service import playback_service
+
+    plan = playback_service.plan(item, capabilities=capabilities)
     run_time_ticks = int((item.duration or 0) * 10_000_000)
     source_id = to_jellyfin_id(item.id)
     prefix = "/Videos" if item.is_video else "/Audio"
     stream_url = f"{prefix}/{source_id}/stream?static=true"
+
+    if plan.mode == PlaybackMode.DIRECT:
+        play_method = "DirectPlay"
+        supports_direct_play = True
+        supports_direct_stream = True
+        supports_transcoding = True
+    elif plan.mode == PlaybackMode.REMUX:
+        play_method = "DirectStream"
+        supports_direct_play = False
+        supports_direct_stream = True
+        supports_transcoding = True
+    else:
+        play_method = "Transcode"
+        supports_direct_play = False
+        supports_direct_stream = False
+        supports_transcoding = True
 
     return {
         "MediaSources": [
@@ -461,13 +481,14 @@ def _format_playback_info(item: MediaItem) -> dict[str, Any]:
                 "Id": source_id,
                 "Name": item.title,
                 "Path": item.original_file_path,
-                "Container": item.file_format,
+                "Container": plan.container or item.file_format,
                 "Protocol": "Http",
                 "RunTimeTicks": run_time_ticks,
-                "SupportsDirectPlay": True,
-                "SupportsDirectStream": True,
-                "SupportsTranscoding": True,
+                "SupportsDirectPlay": supports_direct_play,
+                "SupportsDirectStream": supports_direct_stream,
+                "SupportsTranscoding": supports_transcoding,
                 "DirectStreamUrl": stream_url,
+                "PlayMethod": play_method,
                 "MediaStreams": _format_media_streams(item),
             }
         ],
@@ -1117,7 +1138,10 @@ def get_playback_info(item_id: str, user: User | None = None):
     if not item:
         abort(404, description="Media item not found")
 
-    return jsonify(_format_playback_info(item))
+    from aarkib.services.capability_service import capability_service
+
+    caps = capability_service.detect(request)
+    return jsonify(_format_playback_info(item, capabilities=caps))
 
 
 @jellyfin_bp.route("/Videos/<item_id>/stream", methods=["GET"])
