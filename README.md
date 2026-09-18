@@ -14,7 +14,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
 ## ✨ Features
 
 - 📖 **E-Books, Comics & Documents**: Read `.epub`, `.pdf`, `.cbz`, `.cbr`, and `.zip` files directly in your browser or on your favorite e-reader. Includes dedicated PDF web reader, customizable themes (Dark, Sepia, OLED, Light), font sizing, bookmarks, continuous vertical scroll, and two-page spread modes.
-- 🎬 **Movies & TV Shows**: Stream video files (`.mp4`, `.mkv`, `.webm`, etc.) with instant seeking, automatic TV show detection (`S01E02`), resume playback, and next-episode autoplay.
+- 🎬 **Movies & TV Shows**: Stream video files (`.mp4`, `.mkv`, `.webm`, etc.) with deterministic playback planning: native Direct Play, on-the-fly Direct Remuxing, and hardware-accelerated transcoding (Intel QuickSync & VA-API) with automatic CPU fallback. Includes automatic TV show episode parsing (`S01E02`), resume playback, and next-episode autoplay.
 - 🎵 **Audiobooks & Music**: Listen in-browser with album artwork, playback speed controls ($0.75\times$–$2.0\times$), track scrubbing, and saved listening positions.
 - 🎙️ **Podcasts**: Organize audio shows, import OPML subscriptions, stream episodes, and search online directory details.
 - 📱 **Connect Your Devices**:
@@ -24,7 +24,8 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
   - **TV & Mobile Streaming Apps (Jellyfin)**: Connect official and third-party Jellyfin clients (Jellyfin Mobile for Android/iOS, Android TV, Swiftfin, Findroid, Jellyfin Media Player) to browse and stream movies, TV shows, and music.
 - 🎨 **Modern Web App & PWA**: Responsive interface with Dark, Light, and OLED themes. Installable on phones and tablets as a Progressive Web App.
 - 🎮 **Gamepad & 10-Foot Navigation**: Seamless out-of-the-box controller support across the entire Web UI, readers (comics, manga, EPUB, PDF), and players (video, audio, podcasts) using standard Xbox, PlayStation, Nintendo Switch, and Steam Deck gamepads. Includes spatial navigation, context-aware HUD button prompts, and haptic vibration feedback.
-- 👥 **Multi-User**: Dedicated accounts for family members with individual reading progress, bookmarks, and viewing history.
+- 👥 **Multi-User & Family Profiles**: Dedicated accounts with multi-profile support, individual reading progress and bookmarks, kid-safe restrictions (`is_child`), and per-profile library access control lists (ACLs for browsing and downloading).
+- 🛡️ **Mount-Safe Storage Protection**: Intelligent availability guards prevent accidental catalog wipes when external drives or network storage (NFS/SMB) unmount.
 - 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, MusicBrainz, iTunes, and PodcastIndex, with per-library customization and a built-in metadata editor.
 
 ---
@@ -130,11 +131,11 @@ Aarkib exposes a high-performance REST API designed specifically for custom nati
 
 All server management is handled directly through the web interface under **Settings**:
 
-- **📁 Media Folders**: Add new folders, browse mounted directories, select media types, and trigger library rescans.
-- **👥 Users**: Create family accounts, assign administrator or reader roles, and manage passwords.
-- **⚙️ System Preferences**: Configure startup auto-scanning, real-time filesystem watchers, and automatic metadata enrichment.
+- **📁 Media Folders**: Add new folders, browse mounted directories, select media types, and trigger mount-safe library rescans.
+- **👥 Users & Profiles**: Create accounts, manage family member sub-profiles, assign roles, and configure per-library permissions (ACLs).
+- **⚙️ System Preferences**: Configure hardware transcoding backend (VA-API, Intel QSV, CPU), startup auto-scanning, real-time filesystem watchers, and automatic metadata enrichment.
 - **🔌 Plugins & Integrations**: View available media formats and access OPDS and Subsonic connection endpoints.
-- **⚡ Background Tasks**: Monitor active library scans, enrichment jobs, and search index status.
+- **⚡ Background Tasks**: Monitor active library scans, enrichment jobs, e-ink optimizations, and backups with live cooperative cancellation and retry.
 
 ---
 

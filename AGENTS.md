@@ -44,6 +44,27 @@ graph TD
             PodcastPlugin[PodcastMediaPlugin: RSS Feeds & Enclosures]
         end
         
+        subgraph Services ["Application & Domain Services"]
+            JobManager[Background Job Manager: ThreadPoolExecutor, Cancellation & Retries]
+            PluginRegistry[Media Plugin Registry]
+            Scanner[Library Scanner & 3-Way Reconciliation]
+            LibraryService[Mount-Safe Availability & Storage Guard]
+            CapabilityService[Client Capability Detection & Profiler]
+            PlaybackService[Deterministic Playback Planner]
+            AuthorizationService[Centralized Profile & Library ACLs]
+            Transcoder[FFmpeg Remuxing, Transcoding & Hardware Acceleration]
+            Optimizer[E-Ink Device EPUB Optimizer]
+            Enricher[Unified Metadata Registry: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
+            MediaService[Media CRUD, Creator/Collection/Tag Resolvers]
+        end
+        
+        subgraph Plugins ["Media Plugin Subsystem"]
+            BookPlugin[BookMediaPlugin: EPUB, CBZ, CBR, ZIP, PDF]
+            AudioPlugin[AudioMediaPlugin: MP3, M4B, FLAC, AAC, WAV]
+            VideoPlugin[VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V]
+            PodcastPlugin[PodcastMediaPlugin: RSS Feeds & Enclosures]
+        end
+        
         subgraph Storage ["Persistence & Storage Layer"]
             DB[(SQLite with WAL mode: aarkib.db)]
             MediaDir[(User Media Storage: Read-Only by Default)]
@@ -118,68 +139,72 @@ aarkib/
 │   ├── config.py             # Config dataclass, defaults, binary resolvers (ffmpeg/ffprobe), and directory discovery
 │   ├── extensions.py         # SQLAlchemy (db), Flask-Login (login_manager) instances
 │   ├── models/
-│   │   ├── __init__.py       # Model exports (MediaItem, Creator, Collection, Tag, User, Library, SystemSetting, DeviceToken)
-│   │   ├── media_item.py     # Canonical MediaItem model unifying books, comics, video, and audio
-│   │   ├── creator.py        # Creator model and media_creators association table
+│   │   ├── __init__.py       # Model exports (MediaItem, Creator, Collection, Tag, User, Profile, Library, SystemSetting, DeviceToken)
+│   │   ├── capabilities.py   # ClientCapabilities domain models (video, audio, subtitle, streaming, device)
 │   │   ├── collection.py     # Collection model for series, shows, albums
-│   │   ├── tag.py            # Tag model and media_tags association table
+│   │   ├── creator.py        # Creator model and media_creators association table
+│   │   ├── job.py            # BackgroundJob persistent model (explicit states, cancel_requested, retry_count)
 │   │   ├── library.py        # Library model with per-folder JSON settings overrides (auto_enrich, metadata_provider)
-│   │   ├── setting.py        # SystemSetting model for persistent dynamic WebUI preferences
-│   │   ├── playlist.py       # Playlist and PlaylistItem models
-│   │   ├── token.py          # DeviceToken model for hardware e-readers and API Bearer tokens
-│   │   ├── job.py            # BackgroundJob persistent model for asynchronous tasks
-│   │   ├── metadata_cache.py # Online metadata response cache
 │   │   ├── media.py          # MediaItemMixin, PlayableItemMixin, AudioTrackMixin, VideoItemMixin, MediaType enum
-│   │   ├── user.py           # User and UserFavorite models
-│   │   └── progress.py       # UserProgress (enriched time + location) and Bookmark
+│   │   ├── media_item.py     # Canonical MediaItem model unifying books, comics, video, and audio
+│   │   ├── metadata_cache.py # Online metadata response cache
+│   │   ├── playback.py       # PlaybackPlan immutable domain model and PlaybackMode enum (direct, remux, transcode, optimize)
+│   │   ├── playlist.py       # Playlist and PlaylistItem models
+│   │   ├── profile.py        # Profile and ProfileLibraryAccess models for multi-profile accounts and library ACLs
+│   │   ├── progress.py       # UserProgress (enriched time + location, profile_id) and Bookmark
+│   │   ├── setting.py        # SystemSetting model for persistent dynamic WebUI preferences
+│   │   ├── tag.py            # Tag model and media_tags association table
+│   │   ├── token.py          # DeviceToken model for hardware e-readers and API Bearer tokens
+│   │   └── user.py           # User and UserFavorite models
 │   ├── plugins/
 │   │   ├── __init__.py       # Plugin registry initialization and exports
+│   │   ├── audio.py          # AudioMediaPlugin (Music, Audiobook): MP3, M4B, FLAC, AAC, WAV descriptors
 │   │   ├── base.py           # MediaPlugin abstract base class, PluginRegistry, get_playback_info interface
 │   │   ├── book.py           # BookMediaPlugin: EPUB, CBZ, CBR, ZIP, PDF metadata, covers, player URLs
-│   │   ├── video.py          # VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V metadata, remux/transcode strategies
-│   │   ├── audio.py          # AudioMediaPlugin (Music, Audiobook): MP3, M4B, FLAC, AAC, WAV descriptors
-│   │   ├── podcast.py        # PodcastMediaPlugin for RSS audio podcast feeds
-│   │   ├── optimizer.py      # EInkOptimizerPlugin: E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
-│   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
-│   │   ├── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
-│   │   ├── jellyfin.py       # Jellyfin protocol plugin
+│   │   ├── jellyfin.py       # Jellyfin protocol plugin with dynamic PlayMethod mapping
 │   │   ├── mqtt.py           # MqttPlugin: Home Assistant Auto-Discovery, real-time media player, and MQTT commands
-│   │   └── notifier.py       # NotificationPlugin: Apprise push notification integration and event hooks
+│   │   ├── notifier.py       # NotificationPlugin: Apprise push notification integration and event hooks
+│   │   ├── opds.py           # OPDS 1.2 (Atom), OPDS 2.0 (JSON), OPDS Authentication, OPDS Progression 1.0 sync
+│   │   ├── optimizer.py      # EInkOptimizerPlugin: E-ink EPUB optimization engine (font stripping, CSS clean, image dithering)
+│   │   ├── podcast.py        # PodcastMediaPlugin for RSS audio podcast feeds
+│   │   ├── subsonic.py       # Subsonic OpenSubsonic API compatibility layer for music/audio streaming
+│   │   └── video.py          # VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V metadata, remux/transcode strategies
 │   ├── routes/
 │   │   ├── __init__.py
+│   │   ├── api.py            # Unified REST endpoints: media CRUD, playback descriptors, streams, progress, profiles, ACLs
 │   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints
-│   │   ├── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings categories)
-│   │   ├── api.py            # Unified REST endpoints: media CRUD, playback descriptors, streams, progress, safety guards
-│   │   └── reader.py         # In-browser reader/player views (EPUB, CBZ, PDF, Video, Audio, Podcasts)
+│   │   ├── reader.py         # In-browser reader/player views (EPUB, CBZ, PDF, Video, Audio, Podcasts)
+│   │   └── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings categories)
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── events.py         # Internal thread-safe EventDispatcher publish-subscribe bus
-│   │   ├── notifier.py       # Apprise notification worker queue, debounced media batching, and test dispatch
+│   │   ├── authorization.py  # Centralized authorization service (can: library.read, library.download, media.stream, admin)
 │   │   ├── backup.py         # Hot SQLite snapshot, ZIP packaging, validation, atomic database restore
-│   │   ├── scheduler.py      # Background maintenance scheduler (automated backups, library rescans, cache reaping)
-│   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting
-│   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
-│   │   ├── job_manager.py    # Asynchronous background job manager and ThreadPoolExecutor queue
-│   │   ├── scanner.py        # Recursive crawler, watchdog watcher, SHA-256 deduplication, cover caching (.webp)
-│   │   ├── watcher.py        # Filesystem watcher with debounced event handling for library directories
-│   │   ├── search.py         # SQLite FTS5 full-text search engine, query builder, and field-qualified filters
-│   │   ├── transcoder.py     # On-demand video/audio remuxing, HLS adaptive streaming supervisor, VAAPI detection
+│   │   ├── capability_service.py # Client capability detection (Chromium, Firefox, Safari, KOReader, Jellyfin, Subsonic)
+│   │   ├── device_auth_service.py # TV and 10-foot device code flow (RFC 8628) pairing token management
 │   │   ├── enricher.py       # Metadata enrichment workflow using the unified metadata_registry
-│   │   ├── thumbnail.py      # WebP thumbnail and cover generator
-│   │   ├── opml.py           # OPML podcast feed import and parser
+│   │   ├── events.py         # Internal thread-safe EventDispatcher publish-subscribe bus
+│   │   ├── indexer.py        # Media file indexing, 1MB buffered hashing, and fast header/footer fingerprinting
+│   │   ├── job_manager.py    # Asynchronous background job manager (ThreadPoolExecutor, cancellation, retries)
+│   │   ├── library_service.py # Mount-safe library availability verification and safe reconciliation coordination
 │   │   ├── media_service.py  # Canonical multi-media service: edit metadata, resolve creators/collections/tags
 │   │   ├── metadata/         # Pluggable metadata subsystem (providers: comicvine, google_books, tmdb, musicbrainz)
-│   │   └── parsers/
-│   │       ├── base.py       # BaseParsedMetadata and format dataclasses
-│   │       ├── pdf.py        # Native PDF metadata parser and page-0 cover extractor via pypdf
-│   │       ├── epub.py       # EPUB 2/3 XML & OPF metadata, cover extractor, collection/series parser
-│   │       ├── cbz.py        # CBZ archive extractor, ComicInfo.xml parser
-│   │       ├── video.py      # Video container metadata (duration, dimensions, ffprobe inspection)
-│   │       ├── audio.py      # Pure-Python ID3v2, FLAC, and WAV audio metadata and cover extractor
-│   │       └── podcast.py    # RSS podcast feed XML parser
+│   │   ├── notifier.py       # Apprise notification worker queue, debounced media batching, and test dispatch
+│   │   ├── opml.py           # OPML podcast feed import and parser
+│   │   ├── parsers/          # Metadata format parsers (pdf, epub, cbz, video, audio, podcast)
+│   │   ├── playback_service.py # Deterministic playback decision planner evaluating media streams against client capabilities
+│   │   ├── playlist_service.py # Playlist and collection management service
+│   │   ├── progress_service.py # Profile-aware reading and playback progress synchronization service
+│   │   ├── scanner.py        # Three-way crawler reconciliation, watchdog watcher, SHA-256 deduplication
+│   │   ├── scheduler.py      # Background maintenance scheduler (automated backups, library rescans, cache reaping)
+│   │   ├── search.py         # SQLite FTS5 full-text search engine, query builder, and field-qualified filters
+│   │   ├── security.py       # Authentication rate limiting and security guards
+│   │   ├── settings_service.py # Dynamic settings management, DB-to-app.config sync, watcher hot-toggling
+│   │   ├── thumbnail.py      # WebP thumbnail and cover generator
+│   │   ├── transcoder.py     # Hardware-accelerated (VA-API/QSV/CPU) remuxing and HLS adaptive streaming supervisor
+│   │   └── watcher.py        # Filesystem watcher with debounced event handling for library directories
 │   ├── static/               # Obsidian design tokens, modern CSS, gamepad engine (gamepad.js), PWA SW
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (296 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (369 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
@@ -201,6 +226,7 @@ aarkib/
 - **Guarded Path Resolution**: All file access and media streaming (`/api/media/<id>/file`, `/api/media/<id>/stream`, `/api/media/<id>/download`) must pass `is_safe_media_path()`.
 - **Prevent Path Traversal & Symlink Escapes**: The application must verify that any target file resolves strictly within at least one configured `Library.path`, `Config.MEDIA_DIRS`, `Config.COVERS_DIR`, or `Config.TRANSCODE_DIR`. Any path escaping these roots must immediately return `403 Forbidden`.
 - **Never Blindly Concatenate Paths**: Use `Path` objects with `.resolve()` and `.is_relative_to()`. Never construct filesystem paths by concatenating raw user input strings.
+- **Mount-Safe Storage Validation**: Before reconciling or pruning libraries, the scanner and library service MUST call `validate_library_availability()`. If a library root path does not exist, is not a directory, is unreadable, or was populated previously but now appears as an empty mountpoint (e.g. unmounted NAS or external storage), the operation MUST immediately abort pruning to retain 100% of existing database records and prevent catastrophic data loss.
 
 ### 3. Database Integrity & SQLite Concurrency
 - **Persistent Data Protection**:
@@ -213,12 +239,14 @@ aarkib/
   - SQLite is not a heavy concurrent queue; all background scheduling must use `JobManager` threads.
 
 ### 4. Media Playback & Deterministic Decisions
-- **Decision Matrix**: Media playback decisions must be deterministic based on client capabilities and media characteristics:
+- **Decoupled Playback Planner**: Media playback decisions are evaluated by `PlaybackService.plan(item, capabilities)` which takes a `MediaItem` and `ClientCapabilities` (detected via `CapabilityService`) and returns an immutable `PlaybackPlan`. The planner decides the mode (`DIRECT`, `REMUX`, `TRANSCODE`, `OPTIMIZE`), container, target codecs, resolution, and subtitles deterministically without invoking FFmpeg directly.
+- **Decision Matrix**:
   - **Direct Play**: Container and codecs are natively supported by the client browser/player. Served via HTTP 206 byte-range seeking.
   - **Direct Remux**: Video and audio codecs are supported, but container is incompatible (e.g. MKV to fragmented MP4). Remuxed on-the-fly without re-encoding video.
   - **Audio Transcode**: Video stream copied directly; incompatible audio stream (e.g. AC3/DTS/TrueHD) transcoded to AAC.
-  - **Full Transcode / HLS**: Incompatible video codec or target bitrate scaling. Streamed via segmented HLS (`.m3u8`).
-- **Unified Playback Descriptor**: Exposed via `GET /api/media/<id>/playback`. Shields web, mobile, and third-party clients from transcoding internals.
+  - **Full Transcode / HLS**: Incompatible video codec, 10-bit unsupported, or target bitrate scaling. Streamed via segmented HLS (`.m3u8`).
+- **Unified Playback Descriptor**: Exposed via `GET /api/media/<id>/playback` and `GET /api/media/<id>/stream/info`. Shields web, mobile, and third-party clients from transcoding internals.
+- **Hardware Acceleration Abstraction**: Hardware acceleration capabilities (`TranscodeCapabilities`) for Intel VA-API, AMD VA-API, and Intel QuickSync (QSV) are detected via safe argument-list probes. The administrator can dynamically configure `TRANSCODE_BACKEND` (`auto`, `vaapi`, `qsv`, `software`). If hardware transcode initialization fails, `TranscodeSupervisor` automatically falls back to CPU software encoding (`libx264`).
 
 ### 5. FFmpeg Subprocess Execution
 - **Command Construction**: Generate commands using argument lists (`["ffmpeg", "-i", ...]`). Never use `shell=True`.
@@ -230,6 +258,8 @@ aarkib/
 
 ### 6. Background Jobs & Non-Blocking Event Loop
 - **Non-Blocking Architecture**: Library crawls, media file probing, metadata lookups, artwork downloads, and video transcoding must never block the HTTP request/response cycle.
+- **Explicit Lifecycle States**: Background jobs track explicit states via `JobStatus` (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`, `INTERRUPTED`). For legacy compatibility, `"completed"` maps to `SUCCEEDED`.
+- **Cooperative Cancellation & Retry**: Long-running background jobs check `job._cancel_event.is_set()` and support cooperative cancellation via `POST /api/jobs/<id>/cancel` or `JobManager.request_cancel()`. Failed or cancelled jobs can be retried via `POST /api/jobs/<id>/retry`.
 - **Job Specifications**: Background operations must register with `JobManager`, tracking:
   - Unique UUID, job type, human-readable status, integer progress (0-100), start/end timestamps, error payloads, and cancellation flags.
   - Prevent duplicate concurrent jobs for the same library or media resource.
@@ -241,6 +271,7 @@ aarkib/
 
 ### 8. Authentication, Authorization & Security
 - **Mandatory Authentication**: Enforced across all endpoints (WebUI, REST API, OPDS, Subsonic).
+- **User Profiles & Unified ACLs**: Multi-profile support per account (`Profile`) allows per-family-member profiles, avatars, and kid-safe restrictions (`is_child`). Per-profile library access control lists (`ProfileLibraryAccess`) restrict reading and downloading. All access checks route through `AuthorizationService.can(subject, action, resource)`.
 - **Password Security**: Passwords hashed using industry-standard cryptography (`werkzeug.security`). Administrators strictly require strong passwords (>= 4 chars).
 - **Passwordless Account Boundary**: Passwordless reader accounts are strictly restricted to local and private IP networks (RFC 1918 / loopback). Requests from public WAN addresses attempting to authenticate without a password are automatically rejected with HTTP 401 Unauthorized unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is set.
 - **Authentication Rate Limiting**: All login and Basic Auth verification routes are protected by `AuthRateLimiter` to thwart brute-force and enumeration attacks.
@@ -260,7 +291,7 @@ uv sync
 # 2. Run Aarkib development server
 uv run aarkib
 
-# 3. Execute Pytest suite (all 296 tests must pass 100%)
+# 3. Execute Pytest suite (all 369 tests must pass 100%)
 uv run pytest
 
 # 4. Run single test file

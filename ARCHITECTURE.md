@@ -32,11 +32,11 @@ graph TD
 
     subgraph Aarkib Server
         App[Flask Application Factory: create_app]
-        Auth[Authentication: Flask-Login, Session, Basic Auth]
+        Auth[Authentication: Flask-Login, Session, Basic Auth, Profiles & ACLs]
 
         subgraph Routes ["API & Presentation Layer (Thin Route Handlers)"]
             UIRoutes[UI Views: / /media/:id /authors /series /tags /settings]
-            APIRoutes[REST API: /api/media /api/libraries /progress /playback /health]
+            APIRoutes[REST API: /api/media /api/libraries /progress /playback /health /profiles]
             OPDSRoutes[OPDS 1.2 / 2.0 / Progression 1.0: /opds]
             ReaderRoutes[Web Readers & Players: /reader/epub /reader/cbz /reader/pdf /reader/video /reader/audio]
             SubsonicRoutes[Subsonic OpenSubsonic API: /rest]
@@ -44,10 +44,14 @@ graph TD
         end
 
         subgraph Services ["Application & Domain Services"]
-            JobManager[Background Job Manager: ThreadPoolExecutor]
+            JobManager[Background Job Manager: ThreadPoolExecutor, Cancellation & Retries]
             PluginRegistry[Media Plugin Registry]
-            Scanner[Library Scanner & File Crawler]
-            Transcoder[FFmpeg Remuxing & Transcoding Supervisor]
+            Scanner[Library Scanner & 3-Way Reconciliation]
+            LibraryService[Mount-Safe Availability & Storage Guard]
+            CapabilityService[Client Capability Detection & Profiler]
+            PlaybackService[Deterministic Playback Planner]
+            AuthorizationService[Centralized Profile & Library ACLs]
+            Transcoder[FFmpeg Remuxing, Transcoding & Hardware Acceleration]
             Optimizer[E-Ink Device EPUB Optimizer]
             Enricher[Unified Metadata Registry: Google Books, Open Library, ComicVine, TMDB, MusicBrainz]
             MediaService[Media CRUD, Creator/Collection/Tag Resolvers]
@@ -143,6 +147,20 @@ sequenceDiagram
   - Canonical: `AARKIB_MEDIA_DIR` (single folder path).
   - Numbered environment variables: `AARKIB_MEDIA_DIR1`, `AARKIB_MEDIA_DIR2`, etc.
   - Interactive WebUI Selection: Administrators can browse the server filesystem via `GET /api/fs/directories` and configure folders, library names, and media types directly from the WebUI.
+- **Mount-Safe Storage Validation & Guardrails (`services/library_service.py`)**:
+  - **Unmount Detection**: Network filesystems (NFS, SMB, SSHFS) and external USB drives can disconnect or unmount without notice. If a naive crawler runs against an empty mount point or unmounted path, it would assume all media files were deleted and prune the entire catalog.
+  - **Verification Engine (`validate_library_availability`)**: Before any reconciliation or pruning executes, Aarkib validates:
+    1. The library root path exists on disk and is a directory.
+    2. Read access (`os.R_OK`) is verified.
+    3. If the library previously tracked existing media items, but 0 candidate media files are discovered during the filesystem walk, the reconciliation is immediately aborted as a probable unmounted storage incident.
+  - **No Accidental Auto-Creation**: Aarkib never auto-creates missing library directories during scans, which would otherwise mask an unmounted volume.
+  - **Abortion Invariant**: When an availability check fails, pruning for that library is aborted immediately, preserving 100% of existing database records, reading positions, and metadata.
+- **Three-Way Reconciliation Pipeline (`services/scanner.py`)**:
+  - Distinguishes file states across scans:
+    - **`NEW`**: File exists on disk but not in DB $\to$ Parsed, indexed, and added.
+    - **`CHANGED`**: File exists in DB but `mtime` or `size` changed $\to$ Re-parsed and updated.
+    - **`UNCHANGED`**: Matching path, `mtime`, and `size` $\to$ Skipped with zero DB write overhead.
+    - **`MISSING`**: In DB but missing from disk $\to$ Safely pruned only if the parent library passed strict mount availability verification.
 - **Deduplication & Integrity**: Every media item is indexed by its SHA-256 hash. If a file is moved within the library, its record is updated without losing reading/playback history or metadata customizations.
 - **Background Filesystem Watching**: A `watchdog.observers.Observer` monitors all active library directories for file additions, modifications, or deletions when `WATCH_LIBRARY` is enabled.
 
@@ -294,10 +312,25 @@ Aarkib features a decoupled, extensible plugin architecture designed to manage d
 
 Aarkib isolates heavy operations from the Flask HTTP request/response cycle using an in-process asynchronous task queue:
 
-- **Architecture**:
+- **Architecture & Explicit Lifecycle**:
   - `JobManager` wraps a Python `concurrent.futures.ThreadPoolExecutor`.
-  - Persists job records to the SQLite `background_jobs` table via the `BackgroundJob` model (`task_id`, `job_type`, `status`, `progress`, `result_json`, timestamps).
-  - Web clients poll status or receive real-time updates via `GET /api/jobs/<task_id>`.
+  - Persists job records to the SQLite `background_jobs` table via the `BackgroundJob` model (`task_id`, `job_type`, `status`, `progress`, `result_json`, `retry_count`, `cancel_requested`, timestamps).
+  - Explicit states governed by `JobStatus`:
+    - `QUEUED`: Enqueued awaiting worker thread allocation.
+    - `RUNNING`: Actively executing with periodic progress updates.
+    - `SUCCEEDED`: Finished successfully (`"completed"` recognized as backward-compatible alias).
+    - `FAILED`: Aborted due to an unhandled exception with stack trace persisted in `result_json`.
+    - `CANCELLED`: Voluntarily aborted via administrator cancellation request.
+    - `INTERRUPTED`: Halted mid-execution by host crash or server process restart.
+- **Cooperative Cancellation Mechanism**:
+  - Long-running jobs (library crawling, online enrichment, EPUB dithering, hot backups) accept a cooperative `cancel_event` (`threading.Event`).
+  - Requesting cancellation (`POST /api/jobs/<task_id>/cancel` or `job_manager.request_cancel(task_id)`) sets `cancel_requested = True`, signals the event, cancels queued futures, and marks the job as `CANCELLED`.
+  - Workers periodically evaluate `cancel_event.is_set()`, roll back open transactions, clean up ephemeral scratch files, and exit cleanly without data corruption.
+- **Retry Mechanism**:
+  - Failed, interrupted, or cancelled jobs can be retried via `POST /api/jobs/<task_id>/retry` or `job_manager.retry_job(task_id)`.
+  - Increments `retry_count`, resets progress, clears previous error payloads, and re-dispatches the worker task to the `ThreadPoolExecutor`.
+- **Querying & Filtering**:
+  - REST endpoint `GET /api/jobs?status=queued,running` supports comma-separated status filtering and pagination for real-time WebUI cards and operational dashboards.
 - **Deduplication**: Prevents overlapping scans or enrichment jobs from executing concurrently on the same library.
 - **Graceful Shutdown**: On process termination, `JobManager.shutdown()` safely awaits running worker tasks and cancels pending queue items.
 - **Architectural Rationale: Why In-Process ThreadPoolExecutor?**:
@@ -334,39 +367,50 @@ Aarkib decouples runtime application preferences from static environment configu
 
 ---
 
-### 3.9 Transcoding & On-Demand Remuxing Subsystem (`services/transcoder.py`)
+### 3.9 Client Capability Detection, Playback Planning & Transcoding (`services/`)
 
-Aarkib features an automated streaming and transcoding supervisor inspired by Plex and Jellyfin, shielding frontend clients from raw video/audio container incompatibilities while minimizing CPU load:
+Aarkib decouples client capability detection, playback decision-making, and media delivery into clean, deterministic architectural layers, shielding frontend clients from raw container incompatibilities while maximizing Direct Play and minimizing CPU overhead:
 
-1. **Deterministic Playback Decision Tree**:
-   Exposed via `GET /api/media/<id>/playback`, `evaluate_playback_strategy()` determines how media is delivered to web and mobile clients based on stream inspection (`probe_media_streams` via `ffprobe` or pure-Python atom fallback):
-   - **Container Native**: File extension in `WEB_NATIVE_CONTAINERS` (`.mp4`, `.webm`).
-   - **Video Native**: Codec in `WEB_NATIVE_VIDEO_CODECS` (`h264`, `vp8`, `vp9`, `av1`) AND not 10-bit color (pixel format does not contain `10` or `p010`).
-   - **Audio Native**: Codec in `WEB_NATIVE_AUDIO_CODECS` (`aac`, `mp3`, `opus`, `vorbis`, `flac`).
-   - **Remuxable**: Container in `REMUXABLE_CONTAINERS` (`.mkv`, `.m4v`, `.mov`).
+1. **Dynamic Client Capability Detection (`services/capability_service.py`, `models/capabilities.py`)**:
+   - Dynamically analyzes incoming request headers (`User-Agent`, `Sec-CH-UA`, client identifiers) to construct a structured `ClientCapabilities` object:
+     - `VideoCapabilities`: Supported codecs (`h264`, `hevc`, `vp9`, `av1`), containers (`mp4`, `webm`, `mkv`), 10-bit color, HDR, and max resolution.
+     - `AudioCapabilities`: Supported codecs (`aac`, `mp3`, `flac`, `opus`, `vorbis`) and max channel counts.
+     - `SubtitleCapabilities`: Supported formats (`vtt`, `ass`) and JASSUB WebAssembly support.
+     - `StreamingCapabilities`: HLS streaming and HTTP 206 byte-range seek support.
+     - `DeviceCapabilities`: Client engine (`chromium`, `firefox`, `safari`, `koreader`, `jellyfin`, `subsonic`), platform, mobile, and e-ink display detection.
+   - **Header & Query Overrides**: Advanced clients can override capabilities using the `X-Aarkib-Capabilities` JSON header or URL query parameters.
+   - **Unknown Fallback**: Unknown or headless clients safely default to universal baseline profiles (MP4, H.264 8-bit, stereo AAC).
 
-   Using Python 3.14 structural pattern matching `match (container_native, video_native, audio_native)`:
-   - **`case (True, True, True)` $\to$ `DIRECT_PLAY`**: Served directly from original storage via HTTP 206 byte-range seeking with zero CPU overhead.
-   - **`case (False, True, True) if ext in REMUXABLE_CONTAINERS` $\to$ `DIRECT_REMUX`**: Video and audio streams are copied directly (`-c:v copy -c:a copy`) into fragmented MP4 (`fmp4`) piped on-the-fly to the HTTP client with zero disk caching and negligible CPU consumption.
-   - **`case (_, True, False)` $\to$ `AUDIO_TRANSCODE`**: Video stream is copied without re-encoding (`-c:v copy`); incompatible multichannel/lossless audio (AC3, DTS, TrueHD) is transcoded to stereo AAC (`-c:a aac -b:a 192k`).
-   - **`case _` $\to$ `FULL_TRANSCODE`**: Incompatible video codecs (e.g. HEVC/H.265 on non-supporting devices, MPEG-2, VC-1) or explicit resolution downscaling (1080p, 720p, 480p). Media is transcoded into segmented HLS streams (`.m3u8` playlist with `.ts` or `.m4s` segments).
+2. **Deterministic Playback Planner (`services/playback_service.py`, `models/playback.py`)**:
+   - Given a `MediaItem` and `ClientCapabilities`, `PlaybackService.plan()` deterministically generates an immutable `PlaybackPlan`:
+     - **Deterministic Invariant**: Identical media streams and client capabilities always produce the exact same `PlaybackPlan`.
+     - **Execution Modes (`PlaybackMode`)**:
+       - **`DIRECT`**: Native container and codecs. Served directly from original storage via HTTP 206 partial content with zero CPU overhead.
+       - **`REMUX`**: Native video and audio codecs inside an incompatible container (e.g. MKV with H.264 + AAC). Copied on-the-fly (`-c:v copy -c:a copy`) into fragmented MP4 (`fmp4`) with zero video re-encoding.
+       - **`TRANSCODE`**: Incompatible video codec (e.g. HEVC on non-supporting browser), incompatible audio (DTS/AC3 transcoded to AAC), or explicit downscaling. Streamed via segmented HLS (`.m3u8`).
+       - **`OPTIMIZE`**: E-ink reader requesting EPUB media. Routed to the e-ink optimized variant cache.
+   - **Strict Architectural Decoupling**: `PlaybackService` contains zero FFmpeg command execution or process management. It produces a playback contract consumed by routes, readers, Jellyfin, and the transcoding supervisor.
 
-2. **FFmpeg Subprocess Lifecycle & Process Group Supervision**:
+3. **Hardware Acceleration Abstraction & Selection (`services/transcoder.py`)**:
+   - `TranscodeCapabilities` formalizes hardware encoder availability:
+     - **VA-API**: Probes Linux DRM device nodes (`/dev/dri/renderD128` etc.) for Intel and AMD GPUs via safe argument-list probes.
+     - **Intel QuickSync (QSV)**: Probes `h264_qsv` encoding pipeline support.
+     - **Software (CPU)**: Universal `libx264` fallback.
+   - **Dynamic Administrator Selection**: Configured dynamically via `TRANSCODE_BACKEND` (`auto`, `vaapi`, `qsv`, `software`) in system preferences.
+   - **Automatic Runtime Fallback**: If hardware device initialization fails or the GPU encoder encounters an error mid-stream, `TranscodeSupervisor` automatically and seamlessly falls back to CPU software encoding (`libx264`).
+
+4. **FFmpeg Subprocess Lifecycle & Process Group Supervision**:
    - **Process Group Isolation (`os.setsid`)**: All FFmpeg subprocesses are launched with argument lists (never `shell=True`) and attached to distinct process groups via `preexec_fn=os.setsid`. This ensures that killing the process group terminates all child threads and helper forks, preventing orphaned processes.
    - **Graceful Termination & Escalation**: Stopping a transcode session sends `SIGTERM` to the process group (`os.killpg(pgid, signal.SIGTERM)`), allows a brief grace window, and escalates to `SIGKILL` (`signal.SIGKILL`) if unresponsive.
    - **Inactivity Session Reaper**: `TranscodeSupervisor` runs a background reaper thread (`_reap_loop`) checking sessions every 10 seconds. Sessions inactive for longer than `idle_timeout` (default: 300 seconds) are automatically terminated and their temporary chunk directories pruned.
    - **Shutdown Hook**: An `atexit.register(self.cleanup_all)` handler executes during server shutdown, killing all running FFmpeg processes and purging active session directories.
 
-3. **Transcode Disk Cache Bounding & Eviction**:
+5. **Transcode Disk Cache Bounding & Eviction**:
    - **Active Segment Pruning**: HLS sessions continuously prune old media segments outside the sliding live window (`_prune_old_segments`) to prevent runaway disk growth during long viewing sessions.
    - **Session Directory Eviction**: Temporary session segments reside in `TRANSCODE_DIR/hls_{session_id}/`. Upon session termination (user pause/close or idle reaper trigger), the directory is purged immediately via `shutil.rmtree`.
    - **Orphan Directory Reaper (`clean_stale_directories`)**: In the event of an ungraceful host power loss or crash, `clean_stale_directories()` scans `TRANSCODE_DIR` at startup and during scheduled maintenance runs (`CACHE_REAP_HOURS`, default: 24h via `SchedulerService`), deleting any abandoned `hls_*` directories.
 
-4. **Hardware Acceleration (VA-API)**:
-   - Automated device detection probes `/dev/dri/renderD128` (or configured device nodes) using lightweight FFmpeg test probes (`-hwaccel vaapi -c:v h264_vaapi`) with safe argument lists.
-   - Enables hardware-accelerated decoding and scaling for Intel QuickSync and AMD Radeon GPUs (`-hwaccel vaapi -vaapi_device ...`), drastically reducing CPU consumption in Docker and bare-metal environments.
-
-5. **Dual-Engine Subtitle Architecture & JASSUB WebAssembly**:
+6. **Dual-Engine Subtitle Architecture & JASSUB WebAssembly**:
    - **ASS/SSA High-Fidelity Rendering (JASSUB)**: Embedded Advanced SubStation Alpha (`.ass`, `.ssa`) subtitles are served in native format via `GET /api/media/<id>/stream/subtitles/<track_index>.ass` (`generate_ass_subtitles`). In the browser, JASSUB (WebAssembly + WebGL `libass` renderer) renders custom fonts, karaoke effects, dynamic positioning (`\pos`), rotations, color outlines, and signs onto a hardware-accelerated canvas overlay, preserving 100% typesetting fidelity without server-side video burning and enabling Direct Play / Remuxing.
    - **WebVTT Engine & Fallback**: Embedded SRT, VTT, or plain text subtitles are served via `GET /api/media/<id>/stream/subtitles/<track_index>.vtt` (`generate_vtt_subtitles`) and rendered via native HTML5 `<track>` tags. If a client browser lacks WebAssembly or WebGL support, ASS subtitles automatically fall back to WebVTT.
 
@@ -479,15 +523,55 @@ Aarkib maintains strict separation between permanent user media and generated ap
 
 ---
 
+### 3.15 Profile-Based Access Control & Unified ACLs (`services/authorization.py`, `models/profile.py`)
+
+Aarkib features multi-profile user accounts and granular library-level access controls:
+
+1. **Multi-Profile Architecture (`models/profile.py`)**:
+   - Each `User` account owns one or more `Profile` records (`user.profiles`).
+   - On initial migration or user creation, a default profile named `"Default"` is automatically provisioned.
+   - Profiles allow separate reading positions, bookmarks, favorites, and kid-safe restrictions (`is_child = True`) for different family members sharing an account.
+   - Child profiles automatically restrict access to media flagged with adult or mature tags (`RESTRICTED_CHILD_TAGS = {"nsfw", "explicit", "adult", "18+", "mature", "r-rated"}`) and disable downloads by default.
+
+2. **Per-Profile Library ACLs (`ProfileLibraryAccess`)**:
+   - Explicit permissions matrix per profile and library:
+     - `can_read`: Permission to browse, search, and view media in the library.
+     - `can_download`: Permission to download raw media files from the library.
+   - Configurable by administrators via the WebUI (**Settings → Users**) or REST API (`PUT /api/profiles/<id>/libraries`).
+
+3. **Centralized Authorization Service (`services/authorization.py`)**:
+   - Single point of policy evaluation across the entire application:
+     ```python
+     AuthorizationService.can(subject, action, resource)
+     ```
+   - Evaluates actions: `admin`, `metadata.edit`, `library.read`, `library.download`, `media.stream`, `media.transcode`.
+   - Replaces scattered, ad-hoc permission checks in route handlers with standardized policy checks.
+   - Supports active profile resolution via user session, `X-Profile-ID` header, or default profile fallback.
+
+4. **REST API Profile Endpoints**:
+   - `GET /api/profiles`: List profiles for current user.
+   - `POST /api/profiles`: Create a new sub-profile.
+   - `PATCH /api/profiles/<id>`: Update name, avatar, or child status.
+   - `DELETE /api/profiles/<id>`: Delete profile (cascading to progress and bookmarks).
+   - `GET /api/profiles/<id>/libraries` & `PUT /api/profiles/<id>/libraries`: Inspect and set per-library permissions.
+   - `POST /api/profiles/<id>/switch`: Switch active session profile.
+
+---
+
 ## 4. Data Models & Entity Relationship
 
 ```mermaid
 erDiagram
+    User ||--o{ Profile : "owns"
     User ||--o{ UserProgress : "tracks"
     User ||--o{ Bookmark : "creates"
     User ||--o{ UserFavorite : "stars"
     User ||--o{ Playlist : "owns"
     User ||--o{ DeviceToken : "owns"
+    Profile ||--o{ ProfileLibraryAccess : "has"
+    Library ||--o{ ProfileLibraryAccess : "restricted_by"
+    Profile ||--o{ UserProgress : "records"
+    Profile ||--o{ Bookmark : "saves"
     Playlist ||--o{ PlaylistItem : "contains"
     MediaItem ||--o{ PlaylistItem : "referenced_in"
     MediaItem ||--o{ UserProgress : "has"
@@ -516,6 +600,23 @@ erDiagram
         boolean is_admin
         boolean has_password
         datetime created_at
+    }
+
+    Profile {
+        int id PK
+        int user_id FK
+        string name
+        boolean is_child
+        string avatar_url
+        datetime created_at
+    }
+
+    ProfileLibraryAccess {
+        int id PK
+        int profile_id FK
+        int library_id FK
+        boolean can_read
+        boolean can_download
     }
 
     MediaItem {
@@ -571,6 +672,7 @@ erDiagram
     UserProgress {
         int id PK
         int user_id FK
+        int profile_id FK
         int media_id FK
         float percentage
         string locator
@@ -582,6 +684,7 @@ erDiagram
     Bookmark {
         int id PK
         int user_id FK
+        int profile_id FK
         int media_id FK
         string locator
         string label
@@ -594,6 +697,8 @@ erDiagram
         string job_type
         string status
         int progress
+        int retry_count
+        boolean cancel_requested
         text result_json
         datetime created_at
         datetime updated_at
@@ -614,12 +719,15 @@ erDiagram
 
 ### Multi-Media Schema Mixins & Models (`models/`)
 - **`Library` (`models/library.py`)**: Persistent media library directory configuration (`slug`, `name`, `path`, `media_type`, `settings_json`).
+- **`User` & `Profile` (`models/user.py`, `models/profile.py`)**: Multi-profile user accounts with avatars, child flags, and per-profile library ACL association table (`ProfileLibraryAccess`).
+- **`ClientCapabilities` (`models/capabilities.py`)**: Immutable domain models representing client video, audio, subtitle, streaming, and device characteristics for intelligent content delivery.
+- **`PlaybackPlan` (`models/playback.py`)**: Immutable domain model expressing deterministic media delivery plans (`DIRECT`, `REMUX`, `TRANSCODE`, `OPTIMIZE`), containers, codecs, reasons, and diagnostics.
 - **`SystemSetting` (`models/setting.py`)**: Key-value application configuration store (`key`, `value`, `updated_at`) supporting runtime WebUI overrides with dynamic in-memory hot-reloading into Flask's `app.config`.
 - **`DeviceToken` (`models/token.py`)**: Hardware device and automation Bearer token store (`name`, `token_hash`, `token_prefix`, `scopes_json`, `expires_at`, `last_used_at`) linked to `User`.
 - **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus relational `library_id` FK.
 - **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
 - **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and `chapters_json`.
-- **`BackgroundJob` (`models/job.py`)**: Persistent background task tracking (`task_id`, `job_type`, `status`, `progress`, `result_json`, timestamps).
+- **`BackgroundJob` (`models/job.py`)**: Persistent background task tracking (`task_id`, `job_type`, `status`, `progress`, `result_json`, `retry_count`, `cancel_requested`, timestamps).
 - **Curation Models**: `UserFavorite` (`models/user.py`) for starring media items and `Playlist` / `PlaylistItem` (`models/playlist.py`) for custom media collections.
 
 ### Database Pragmas & Concurrency
@@ -668,10 +776,10 @@ To sustain sub-millisecond query latency across libraries containing tens of tho
    - **Passwordless Security Boundary**: Reader accounts configured without passwords (`password_hash = None`) are strictly restricted to local and private IP networks (RFC 1918: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.1`, `::1`). Public internet requests attempting to authenticate as passwordless users over Web UI or Basic Auth are rejected with HTTP 401 Unauthorized unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is explicitly enabled.
 3. **Security Headers**:
    - Injected on all outgoing responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
-4. **Data Isolation**:
-   - All reading positions, progress markers, and bookmarks are strictly partitioned by `user_id`. One user cannot read or alter another user's progress.
+4. **Data Isolation & Profile Partitioning**:
+   - All reading positions, progress markers, and bookmarks are strictly partitioned by `user_id` and sub-profile `profile_id`. One profile cannot alter another profile's progress, and users cannot access other accounts' data.
 5. **Administrative Boundaries**:
-   - Modifying media metadata, triggering full-library scans, creating users, and changing user permissions are protected by `@admin_required`.
+   - Modifying media metadata, triggering full-library scans, creating users, and changing user permissions are protected by `@admin_required` or `AuthorizationService.can(subject, "admin")`.
 6. **Defensive Parsing & SSRF Protection**:
    - All external XML processing (`parsers/epub.py`, `parsers/cbz.py`, `parsers/podcast.py`, and `plugins/optimizer.py`) utilizes `defusedxml` to defend against XML entity expansion (Billion Laughs) and XXE vulnerabilities.
    - The metadata enricher verifies URL schemes (`http`, `https`) before issuing outbound requests to prevent SSRF or arbitrary local file disclosure (`file://`).
@@ -684,10 +792,10 @@ To sustain sub-millisecond query latency across libraries containing tens of tho
    - Tokens are cryptographically hashed using SHA-256 with optional expiration dates and access scopes.
    - Raw tokens are only visible once upon initial generation. Revocation is instantaneous via REST API or the Web UI.
 10. **TV & 10-Foot Device Code Flow (RFC 8628, `services/device_auth_service.py`)**:
-   - Tailored for input-constrained devices (Apple TV, Android TV, Fire TV, game consoles).
-   - TV clients call `POST /api/auth/device-code` to generate an unambiguous, visually clean 6-character user code (`ABC-123`, excluding ambiguous characters like `0`, `O`, `1`, `I`, `L`) with a 300-second TTL.
-   - Users authorize the TV by entering the code at `/pair` on their smartphone or PC browser.
-   - The TV client polls `POST /api/auth/device-code/token` at the prescribed interval; once approved, a permanent Bearer token is issued and the pairing session is securely consumed.
+    - Tailored for input-constrained devices (Apple TV, Android TV, Fire TV, game consoles).
+    - TV clients call `POST /api/auth/device-code` to generate an unambiguous, visually clean 6-character user code (`ABC-123`, excluding ambiguous characters like `0`, `O`, `1`, `I`, `L`) with a 300-second TTL.
+    - Users authorize the TV by entering the code at `/pair` on their smartphone or PC browser.
+    - The TV client polls `POST /api/auth/device-code/token` at the prescribed interval; once approved, a permanent Bearer token is issued and the pairing session is securely consumed.
 11. **Native Mobile & TV Dashboard Rails (`services/media_service.py`, `/api/docs`)**:
     - `GET /api/home` aggregates personalized dashboard rails in a single query: *Continue Watching* (video <90%), *Continue Reading* (books/comics <100%), *Continue Listening* (audio <95%), *Next Up* (candidate next episodes for TV series in progress), *Recently Added*, and *Favorites*.
     - First-class taxonomy navigation endpoints: `/api/creators` (with media type filtering), `/api/collections` (with ordered item series indexing), and `/api/tags` (with media counts).
@@ -703,6 +811,9 @@ To sustain sub-millisecond query latency across libraries containing tens of tho
 14. **Cross-Site Request Forgery (CSRF) Protection**:
     - **Stateful Forms**: All HTML form views (`/auth/login`, `/auth/setup`, `/auth/profile`, `/pair`, `/settings/users`) are protected with Flask-WTF `CSRFProtect`, requiring valid, signed `csrf_token` inputs or `X-CSRFToken` request headers.
     - **Stateless API & Protocol Blueprint Exemption**: The REST API (`/api/*`), OPDS feeds (`/opds/*`), Subsonic API (`/rest/*`), and Jellyfin endpoints (`/System/*`) are explicitly CSRF-exempted (`csrf.exempt(api_bp)`, `plugin.csrf_exempt = True`). These interfaces authenticate via cryptographic Bearer tokens (`Authorization: Bearer ark_...`) or HTTP Basic Auth headers (`Authorization: Basic ...`), which browsers cannot forge in cross-site requests, eliminating unnecessary CSRF token overhead for mobile apps and third-party media players.
+15. **Centralized Authorization & Profile ACLs (`AuthorizationService`)**:
+    - All access to library browsing, media streaming, transcode dispatching, downloads, and metadata mutations passes through `AuthorizationService.can(subject, action, resource)`.
+    - Non-admin profiles are restricted by their explicit `ProfileLibraryAccess` records (`can_read`, `can_download`), and child profiles (`is_child=True`) are automatically filtered from mature content (`RESTRICTED_CHILD_TAGS`) and denied raw file downloads by default.
 
 ---
 

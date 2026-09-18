@@ -66,17 +66,17 @@ gantt
     dateFormat  X
     axisFormat  Day %d
     section Core Infrastructure
-    Phase 0: Baseline & Guardrails           :p0, 0, 1
-    Phase 1: Client Capabilities            :p1, 1, 3
-    Phase 2: Playback Planner Model & Service:p2, 3, 5
-    Phase 3: Route & Streaming Refactor     :p3, 5, 7
-    Phase 4: Hardware Acceleration          :p4, 7, 9
+    Phase 0: Baseline & Guardrails           :done, p0, 0, 1
+    Phase 1: Client Capabilities            :done, p1, 1, 3
+    Phase 2: Playback Planner Model & Service:done, p2, 3, 5
+    Phase 3: Route & Streaming Refactor     :done, p3, 5, 7
+    Phase 4: Hardware Acceleration          :done, p4, 7, 9
     section Reliability & Authorization
-    Phase 5: Job Lifecycle Upgrade          :p5, 9, 11
-    Phase 6: Mount-Safe Reconciliation      :p6, 11, 13
-    Phase 7: Profiles & Unified ACLs        :p7, 13, 16
+    Phase 5: Job Lifecycle Upgrade          :done, p5, 9, 11
+    Phase 6: Mount-Safe Reconciliation      :done, p6, 11, 13
+    Phase 7: Profiles & Unified ACLs        :done, p7, 13, 16
     section Enrichment & Presentation
-    Phase 8: Metadata Matching & Provenance :p8, 16, 18
+    Phase 8: Metadata Matching & Provenance :active, p8, 16, 18
     Phase 9: Versioned Clean API (/api/v1)  :p9, 18, 20
     Phase 10: UI Diagnostics & Management   :p10, 20, 22
     Phase 11: Final Verification & DoD      :p11, 22, 23
@@ -556,8 +556,21 @@ Execute rigorous validation across the entire repository to ensure zero regressi
 
 ---
 
-## 🚀 Recommended Immediate Next Steps
+## 🚀 Current Status & Next Steps
 
-1. **Review and approve this work plan** to confirm phase prioritization and architectural alignments.
-2. **Begin Phase 1**: Create `src/aarkib/models/capabilities.py` and `src/aarkib/services/capability_service.py` with accompanying unit tests in `tests/test_capabilities.py`.
-3. **Execute incrementally**, validating test suite and Ruff formatting after each phase.
+1. **Phases 0 through 7 Complete**:
+   - Baseline validation (Phase 0)
+   - Client capabilities domain model & detection service (Phase 1)
+   - Deterministic playback planner & domain models (Phase 2)
+   - Media streaming & plugin consumption of playback planner (Phase 3)
+   - Hardware acceleration abstraction (VA-API / Intel QSV / CPU software fallback) (Phase 4)
+   - Background job manager explicit states, cooperative cancellation & retry (Phase 5)
+   - Mount-safe library reconciliation & availability guards (Phase 6)
+   - User profiles & centralized authorization / library ACLs (Phase 7)
+2. **Current Verification Status**:
+   - All 369 Pytest tests pass cleanly (100% pass rate).
+   - Zero Ruff linting errors (`uv run ruff check .`).
+   - Zero Ruff formatting issues (`uv run ruff format --check .`).
+3. **Next Recommended Milestone — Phase 8**:
+   - Implement metadata candidate matcher with confidence scoring (`services/metadata/matcher.py`).
+   - Implement field-level provenance tracking and manual edit locks.
