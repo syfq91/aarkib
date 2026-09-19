@@ -407,94 +407,130 @@
       </div>
     </div>
 
-    <!-- Artwork -->
-    <div class="cover-box">
-      {% if item.cover_image_path %}
-      <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
-      <div id="coverFallback" class="cover-fallback" style="display: none;">🎧</div>
-      {% else %}
-      <div class="cover-fallback">🎧</div>
-      {% endif %}
-    </div>
-
-    <!-- Metadata -->
-    <div class="book-info">
-      <h1 class="book-title">{{ item.title }}</h1>
-      <p class="book-author">by {{ item.author or item.creators_display }}</p>
-      {% if item.narrator %}
-      <p class="book-narrator">Narrated by {{ item.narrator }}</p>
-      {% endif %}
-      <div class="active-chapter-pill" id="chapterPill">
-        <span>📖</span>
-        <span id="currentChapterName">Chapter 1</span>
-      </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="controls-panel">
-      <!-- Scrubber -->
-      <div class="scrubber-group">
-        <div class="scrubber-track" id="scrubberTrack">
-          <div class="scrubber-progress" id="scrubberProgress"></div>
-        </div>
-        <div class="time-row">
-          <span id="currentTime">0:00:00</span>
-          <span id="totalDuration">{{ item.formatted_duration or "0:00:00" }}</span>
-        </div>
-      </div>
-
-      <!-- Main Buttons -->
-      <div class="button-row">
-        <button class="step-btn" id="prevChBtn" title="Previous Chapter">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
-        </button>
-
-        <button class="step-btn" id="rewind15Btn" title="Rewind 15s">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="6.5" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">15</text></svg>
-        </button>
-
-        <button class="step-btn play-btn" id="playBtn" title="Play">
-          <svg id="playIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          <svg id="pauseIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        </button>
-
-        <button class="step-btn" id="forward30Btn" title="Forward 30s">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="7" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">30</text></svg>
-        </button>
-
-        <button class="step-btn" id="nextChBtn" title="Next Chapter">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
-        </button>
-      </div>
-
-      <!-- Extra Controls (Speed, Sleep Timer) -->
-      <div class="bottom-row">
-        <div style="position: relative;">
-          <button class="chip-btn" id="speedMenuBtn" title="Playback Speed">
-            <span id="speedLabel">1.0x</span>
-          </button>
-          <div class="popup-menu" id="speedPopup">
-            <button class="popup-item" data-speed="0.75">0.75x</button>
-            <button class="popup-item selected" data-speed="1.0">1.0x (Normal)</button>
-            <button class="popup-item" data-speed="1.25">1.25x</button>
-            <button class="popup-item" data-speed="1.5">1.5x</button>
-            <button class="popup-item" data-speed="1.75">1.75x</button>
-            <button class="popup-item" data-speed="2.0">2.0x</button>
+    <!-- Split Stage -->
+    <div class="player-split-stage">
+      <!-- Left Column: Cover with Ambient Backlight Glow & Metadata -->
+      <div class="player-artwork-column">
+        <div class="ambient-glow-wrapper">
+          {% if item.cover_image_path %}
+          <div class="ambient-glow" style="background-image: url('/api/media/{{ item.id }}/cover');"></div>
+          {% endif %}
+          <div class="ambient-cover-box">
+            {% if item.cover_image_path %}
+            <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
+            <div id="coverFallback" class="cover-fallback" style="display: none;">🎧</div>
+            {% else %}
+            <div class="cover-fallback">🎧</div>
+            {% endif %}
           </div>
         </div>
 
-        <div style="position: relative;">
-          <button class="chip-btn" id="sleepMenuBtn" title="Sleep Timer">
-            <span>⏱️</span>
-            <span id="sleepLabel">Timer</span>
+        <div class="book-info" style="margin-top: 1.25rem;">
+          <h1 class="book-title">{{ item.title }}</h1>
+          <p class="book-author">by {{ item.author or item.creators_display }}</p>
+          {% if item.narrator %}
+          <p class="book-narrator">Narrated by {{ item.narrator }}</p>
+          {% endif %}
+
+          <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center; margin-top: 0.75rem; flex-wrap: wrap;">
+            {% if item.file_format %}
+            <span class="badge" style="background: rgba(0, 210, 255, 0.15); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; font-weight: 700;">{{ item.file_format }}</span>
+            {% endif %}
+            {% if chapters and chapters|length > 0 %}
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem; font-weight: 700;">{{ chapters|length }} CHAPTERS</span>
+            {% endif %}
+            <div class="active-chapter-pill" id="chapterPill" style="margin-top: 0;">
+              <span class="eq-bars" id="eqBars">
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+              </span>
+              <span id="currentChapterName">Chapter 1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Waveform Scrubber & Controls -->
+      <div class="controls-panel">
+        <!-- Dynamic Waveform Visualizer & Scrubber -->
+        <div class="scrubber-group">
+          <div class="waveform-canvas-container" id="waveformContainer" title="Click or drag to seek">
+            <canvas class="waveform-canvas" id="waveformCanvas" width="600" height="64"></canvas>
+            <div class="waveform-hover-needle" id="waveformNeedle"></div>
+            <div class="waveform-hover-tooltip" id="waveformTooltip">0:00:00</div>
+            <div id="chapterTickMarkers"></div>
+          </div>
+
+          <div class="scrubber-track" id="scrubberTrack" style="margin-top: 0.5rem;">
+            <div class="scrubber-progress" id="scrubberProgress"></div>
+          </div>
+
+          <div class="time-row" style="margin-top: 0.35rem;">
+            <span id="currentTime">0:00:00</span>
+            <span id="totalDuration">{{ item.formatted_duration or "0:00:00" }}</span>
+          </div>
+        </div>
+
+        <!-- Main Buttons -->
+        <div class="button-row">
+          <button class="step-btn" id="prevChBtn" title="Previous Chapter">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
           </button>
-          <div class="popup-menu" id="sleepPopup">
-            <button class="popup-item selected" data-sleep="0">Off</button>
-            <button class="popup-item" data-sleep="15">15 minutes</button>
-            <button class="popup-item" data-sleep="30">30 minutes</button>
-            <button class="popup-item" data-sleep="45">45 minutes</button>
-            <button class="popup-item" data-sleep="60">60 minutes</button>
-            <button class="popup-item" data-sleep="end-chapter">End of Chapter</button>
+
+          <button class="step-btn" id="rewind15Btn" title="Rewind 15s">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="6.5" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">15</text></svg>
+          </button>
+
+          <button class="step-btn play-btn" id="playBtn" title="Play">
+            <svg id="playIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <svg id="pauseIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          </button>
+
+          <button class="step-btn" id="forward30Btn" title="Forward 30s">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="7" y="15.5" font-size="7.5" font-weight="bold" fill="currentColor" stroke="none">30</text></svg>
+          </button>
+
+          <button class="step-btn" id="nextChBtn" title="Next Chapter">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+          </button>
+        </div>
+
+        <!-- Extra Controls (Speed, Sleep Timer, DSP Output) -->
+        <div class="bottom-row">
+          <div style="position: relative;">
+            <button class="chip-btn" id="speedMenuBtn" title="Playback Speed">
+              <span id="speedLabel">1.0x</span>
+            </button>
+            <div class="popup-menu" id="speedPopup">
+              <button class="popup-item" data-speed="0.75">0.75x</button>
+              <button class="popup-item selected" data-speed="1.0">1.0x (Normal)</button>
+              <button class="popup-item" data-speed="1.25">1.25x</button>
+              <button class="popup-item" data-speed="1.5">1.5x</button>
+              <button class="popup-item" data-speed="1.75">1.75x</button>
+              <button class="popup-item" data-speed="2.0">2.0x</button>
+              <button class="popup-item" data-speed="2.5">2.5x</button>
+            </div>
+          </div>
+
+          <div style="font-size: 0.8rem; color: #94a3b8; display: flex; align-items: center; gap: 0.35rem;">
+            <span>🔊</span>
+            <span>WebAudio DSP</span>
+          </div>
+
+          <div style="position: relative;">
+            <button class="chip-btn" id="sleepMenuBtn" title="Sleep Timer">
+              <span>⏱️</span>
+              <span id="sleepLabel">Timer</span>
+            </button>
+            <div class="popup-menu" id="sleepPopup">
+              <button class="popup-item selected" data-sleep="0">Off</button>
+              <button class="popup-item" data-sleep="15">15 minutes</button>
+              <button class="popup-item" data-sleep="30">30 minutes</button>
+              <button class="popup-item" data-sleep="45">45 minutes</button>
+              <button class="popup-item" data-sleep="60">60 minutes</button>
+              <button class="popup-item" data-sleep="end-chapter">End of Chapter</button>
+            </div>
           </div>
         </div>
       </div>
@@ -539,6 +575,14 @@
     const closeDrawerBtn = document.getElementById("closeDrawerBtn");
     const chapterListEl = document.getElementById("chapterList");
 
+    const waveformCanvas = document.getElementById("waveformCanvas");
+    const waveformCtx = waveformCanvas ? waveformCanvas.getContext("2d") : null;
+    const waveformContainer = document.getElementById("waveformContainer");
+    const waveformNeedle = document.getElementById("waveformNeedle");
+    const waveformTooltip = document.getElementById("waveformTooltip");
+    const chapterTickMarkers = document.getElementById("chapterTickMarkers");
+    const eqBars = document.getElementById("eqBars");
+
     const speedMenuBtn = document.getElementById("speedMenuBtn");
     const speedPopup = document.getElementById("speedPopup");
     const speedLabel = document.getElementById("speedLabel");
@@ -556,6 +600,125 @@
     let sleepInterval = null;
     let sleepTargetTime = null;
     let sleepMode = "off";
+
+    // Deterministic pseudo-waveform generator based on item id and title
+    const BAR_COUNT = 80;
+    const barHeights = [];
+    (function generateWaveformData() {
+      let seed = itemId * 1337;
+      const titleStr = {{ item.title | tojson }};
+      for (let i = 0; i < titleStr.length; i++) {
+        seed = (seed ^ titleStr.charCodeAt(i)) * 16807 % 2147483647;
+      }
+      for (let i = 0; i < BAR_COUNT; i++) {
+        seed = (seed * 16807) % 2147483647;
+        const normalized = (seed % 1000) / 1000;
+        const envelope = 0.35 + 0.65 * Math.sin((i / BAR_COUNT) * Math.PI);
+        const h = Math.max(0.18, Math.min(1.0, (0.2 + normalized * 0.8) * envelope));
+        barHeights.push(h);
+      }
+    })();
+
+    function drawWaveform() {
+      if (!waveformCanvas || !waveformCtx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const width = waveformCanvas.width / dpr;
+      const height = waveformCanvas.height / dpr;
+
+      waveformCtx.clearRect(0, 0, width, height);
+
+      const progress = (audio.duration && audio.duration > 0) ? (audio.currentTime / audio.duration) : 0;
+      const totalBars = barHeights.length;
+      const barWidth = Math.max(2, (width / totalBars) - 2.5);
+      const gap = (width - (barWidth * totalBars)) / (totalBars - 1);
+
+      for (let i = 0; i < totalBars; i++) {
+        const x = i * (barWidth + gap);
+        const bh = barHeights[i] * (height * 0.82);
+        const y = (height - bh) / 2;
+        const barProgress = i / totalBars;
+
+        if (barProgress <= progress) {
+          const grad = waveformCtx.createLinearGradient(0, y, 0, y + bh);
+          grad.addColorStop(0, "#38bdf8");
+          grad.addColorStop(1, "#00d2ff");
+          waveformCtx.fillStyle = grad;
+        } else {
+          waveformCtx.fillStyle = "rgba(255, 255, 255, 0.18)";
+        }
+
+        const r = Math.min(barWidth / 2, 2);
+        waveformCtx.beginPath();
+        waveformCtx.roundRect(x, y, barWidth, bh, r);
+        waveformCtx.fill();
+      }
+    }
+
+    function resizeWaveform() {
+      if (!waveformCanvas || !waveformContainer) return;
+      const rect = waveformContainer.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      waveformCanvas.width = rect.width * dpr;
+      waveformCanvas.height = rect.height * dpr;
+      if (waveformCtx) {
+        waveformCtx.scale(dpr, dpr);
+      }
+      drawWaveform();
+    }
+    window.addEventListener("resize", resizeWaveform);
+
+    if (waveformContainer) {
+      waveformContainer.addEventListener("mousemove", (e) => {
+        if (!audio.duration) return;
+        const rect = waveformContainer.getBoundingClientRect();
+        const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const hoverPct = mouseX / rect.width;
+        const hoverSec = hoverPct * audio.duration;
+
+        if (waveformNeedle) {
+          waveformNeedle.style.display = "block";
+          waveformNeedle.style.left = `${mouseX}px`;
+        }
+        if (waveformTooltip) {
+          waveformTooltip.style.display = "block";
+          waveformTooltip.style.left = `${mouseX}px`;
+          waveformTooltip.textContent = formatTime(hoverSec);
+        }
+      });
+
+      waveformContainer.addEventListener("mouseleave", () => {
+        if (waveformNeedle) waveformNeedle.style.display = "none";
+        if (waveformTooltip) waveformTooltip.style.display = "none";
+      });
+
+      waveformContainer.addEventListener("click", (e) => {
+        if (!audio.duration) return;
+        const rect = waveformContainer.getBoundingClientRect();
+        const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const pct = clickX / rect.width;
+        audio.currentTime = pct * audio.duration;
+        drawWaveform();
+      });
+    }
+
+    function renderChapterMarkers() {
+      if (!chapterTickMarkers || !chapters || !audio.duration) return;
+      chapterTickMarkers.innerHTML = "";
+      chapters.forEach((ch, idx) => {
+        if (ch.start_time <= 0 || ch.start_time >= audio.duration) return;
+        const pct = (ch.start_time / audio.duration) * 100;
+        const marker = document.createElement("div");
+        marker.className = "chapter-tick-marker";
+        marker.style.left = `${pct}%`;
+        marker.title = `${ch.title || 'Chapter ' + (idx + 1)} (${formatTime(ch.start_time)})`;
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          audio.currentTime = ch.start_time;
+          if (audio.paused) togglePlay();
+        });
+        chapterTickMarkers.appendChild(marker);
+      });
+    }
 
     function formatTime(secs) {
       if (isNaN(secs) || secs < 0) return "0:00:00";
@@ -670,6 +833,8 @@
       }
       totalDurationEl.textContent = formatTime(audio.duration);
       initChapters();
+      resizeWaveform();
+      renderChapterMarkers();
     });
 
     // Play / Pause
@@ -678,11 +843,13 @@
         audio.play().then(() => {
           playIcon.style.display = "none";
           pauseIcon.style.display = "block";
+          if (eqBars) eqBars.classList.add("playing");
         }).catch(err => console.error("Audiobook play failed:", err));
       } else {
         audio.pause();
         playIcon.style.display = "block";
         pauseIcon.style.display = "none";
+        if (eqBars) eqBars.classList.remove("playing");
         saveProgress();
       }
     }
@@ -695,6 +862,7 @@
         const pct = (audio.currentTime / audio.duration) * 100;
         scrubberProgress.style.width = pct + "%";
       }
+      drawWaveform();
       updateCurrentChapter();
       checkSleepEndOfChapter();
     });
@@ -704,6 +872,7 @@
       const rect = scrubberTrack.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       audio.currentTime = pct * audio.duration;
+      drawWaveform();
     });
 
     rewind15Btn.addEventListener("click", () => {

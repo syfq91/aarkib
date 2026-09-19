@@ -644,6 +644,32 @@ Aarkib exposes a modern, versioned REST API under the `/api/v1` prefix designed 
    | `POST` | `/api/v1/jobs/<id>/retry` | Re-enqueue failed or interrupted background job | Admin / Owner |
    | `GET` | `/api/v1/system/capabilities` | Hardware acceleration encoder detection (VA-API, QSV) and active backend | `admin` |
 
+### 3.17 WebUI Presentation Layer & In-Browser Media Engines
+
+Aarkib's Web UI is built using server-rendered Jinja2 templates styled with the **Cinematic Obsidian** design system (`DESIGN.md`), delivering deep contrast, atmospheric glassmorphism (`backdrop-filter: blur(20px)`), and GPU-accelerated micro-interactions without heavy single-page application (SPA) framework overhead:
+
+1. **Universal Bookshelf & Discovery Rails (`library.html`)**:
+   - **Multi-View Switcher**: Supports three distinct visualization modes:
+     - `Shelves`: Horizontal carousels partitioned by library, recently added, and continue reading/watching rails.
+     - `Grid`: High-density responsive card grid optimized for rapid scanning and bulk management.
+     - `3D Shelf`: Hardware-accelerated CSS 3D virtual bookshelf (`perspective: 1100px`) rendering books as realistic spines with dynamic hue variation, vertical titles, and hover pop-out physics.
+   - **Category Quick-Filter Pills**: Client-side category switching (`Books & Comics`, `Audiobooks & Music`, `Movies & TV`, `All Media`) filtering DOM elements instantly without network latency.
+   - **Global Search Shortcut (`⌘K` / `Ctrl+K`)**: Keyboard-driven focus accelerator enabling fast media lookup from any page.
+
+2. **Batch Curator & Floating Action Dock (`library.html`)**:
+   - **Multi-Select Workflow**: Toggling `☑ Select` renders card selection checkboxes.
+   - **Floating Action Dock**: An anchored glassmorphic pill bar displaying selected item counts and triggers for bulk tagging, collection assignment, mark as read, and library rescans.
+
+3. **Sliding Metadata Inspector & Field Lock Engine (`library.html`, `media_detail.html`)**:
+   - Inspecting any title opens a slide-over drawer exposing field-level provenance (`MANUAL`, `AUTOMATIC`, `DERIVED`).
+   - Granular lock toggles (🔒 / 🔓) allow administrators to freeze specific attributes (Title, Creator, Year, Description), shielding user-curated metadata from automated crawler overwrites.
+
+4. **In-Browser Playback Engines & Telemetry**:
+   - **4K HDR Video Player (`reader_video.html`)**: HTML5 / HLS.js adaptive player with JASSUB WebAssembly subtitle overlay and an on-demand **Playback Diagnostics HUD** (hotkey `D`) displaying client engine, decision mode, hardware encoder backend, dropped frame rates, and forward buffer health gauges.
+   - **Lossless Audio & Spoken Word Suite (`player_audiobook.html`, `player_audio.html`, `player_podcast.html`)**: Split-stage responsive layout featuring ambient cover backlight glow, an interactive 80-bar HTML5 canvas waveform scrubber with hover time preview, chapter tick markers with tooltips, animated tri-bar equalizer, variable playback rate ($0.75\times$–$2.5\times$), and sleep timers with countdown badges.
+   - **EPUB & Comic Readers (`reader_epub.html`, `reader_cbz.html`)**: Touch-zone navigation, paginated/continuous flow, typography and reading themes (Dark, Sepia, OLED, Light), and single/dual-page comic spread rendering.
+   - **10-Foot TV Device Code Pairing (`pair.html`)**: Glassmorphic RFC 8628 pairing interface with segmented monospace code input and auto-formatting for living-room streaming setups.
+
 ---
 
 ## 4. Data Models & Entity Relationship

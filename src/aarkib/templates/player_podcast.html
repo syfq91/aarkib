@@ -381,13 +381,18 @@
       </button>
     </div>
 
-    <!-- Artwork -->
-    <div class="cover-box">
+    <!-- Artwork with Ambient Glow -->
+    <div class="ambient-glow-wrapper">
       {% if item.cover_image_path %}
-        <img class="cover-img" src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}">
-      {% else %}
-        <div class="cover-fallback">🎙️</div>
+      <div class="ambient-glow" style="background-image: url('/api/media/{{ item.id }}/cover');"></div>
       {% endif %}
+      <div class="cover-box">
+        {% if item.cover_image_path %}
+          <img class="cover-img" src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}">
+        {% else %}
+          <div class="cover-fallback">🎙️</div>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Controls & Info -->

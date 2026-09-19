@@ -8,7 +8,10 @@
 
 <div class="detail-layout">
   <div>
-    <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="detail-cover">
+    <div style="position: relative; display: inline-block;">
+      <div style="position: absolute; inset: -14px; background: radial-gradient(circle, rgba(0, 210, 255, 0.22) 0%, rgba(99, 102, 241, 0.12) 60%, transparent 80%); filter: blur(20px); z-index: 0; pointer-events: none; border-radius: var(--radius-lg);"></div>
+      <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="detail-cover" style="position: relative; z-index: 1; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.85);">
+    </div>
     
     <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
       {% if item.is_video %}
@@ -29,6 +32,16 @@
             📖 Continue Reading ({{ progress.percentage|round(0)|int }}%)
           {% else %}
             📖 Read in Browser (EPUB)
+          {% endif %}
+        </a>
+      {% elif item.is_audio %}
+        <a href="{{ item.player_url }}" class="btn btn-primary" style="padding: 0.75rem; font-size: 1rem;">
+          {% if progress and progress.is_completed %}
+            🎧 Listen Again
+          {% elif progress and progress.percentage > 0 %}
+            🎧 Resume Listening ({{ progress.percentage|round(0)|int }}%)
+          {% else %}
+            🎧 Play Audio
           {% endif %}
         </a>
       {% else %}
@@ -99,7 +112,7 @@
       <span title="Title locked from scanner overwrites" style="font-size: 0.9rem; cursor: help;">🔒</span>
       {% endif %}
     </h1>
-    <h3 style="color: var(--text-secondary); font-weight: 500; font-size: 1.1rem; margin-bottom: 1.5rem;">
+    <h3 style="color: var(--text-secondary); font-weight: 500; font-size: 1.1rem; margin-bottom: 0.75rem;">
       by
       {% for creator in item.creators %}
         <a href="/?author_id={{ creator.id }}" style="color: var(--accent); text-decoration: none;">{{ creator.name }}</a>{% if not loop.last %}, {% endif %}
@@ -110,6 +123,45 @@
       <span title="Creators locked from scanner overwrites" style="font-size: 0.8rem; cursor: help;">🔒</span>
       {% endif %}
     </h3>
+
+    <!-- Studio Format & Technical Badges -->
+    <div style="display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.25rem;">
+      <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;">
+        {{ item.file_format|upper }}
+      </span>
+      {% if item.is_video %}
+        {% if item.resolution_label %}
+        <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(0,210,255,0.4); color: var(--accent); border-radius: 4px;">
+          {{ item.resolution_label }}
+        </span>
+        {% endif %}
+        {% if item.codec %}
+        <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;">
+          {{ item.codec|upper }}
+        </span>
+        {% endif %}
+      {% elif item.is_audio %}
+        <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(99,102,241,0.4); color: #c0c1ff; border-radius: 4px;">
+          🎧 AUDIO HQ
+        </span>
+      {% elif item.file_format == 'epub' %}
+        <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(0,210,255,0.3); color: var(--accent); border-radius: 4px;">
+          📖 EPUB 3.0
+        </span>
+      {% elif item.file_format in ('cbz', 'cbr') %}
+        <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(255,180,171,0.3); color: #ffb4ab; border-radius: 4px;">
+          🖼️ COMIC ARCHIVE
+        </span>
+      {% endif %}
+      <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(16,185,129,0.3); color: var(--success); border-radius: 4px;">
+        ✅ PATH VERIFIED
+      </span>
+      {% if item.is_field_locked('title') or item.is_field_locked('creators') %}
+      <span class="badge-format" style="font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; background: #0f172a; border: 1px solid rgba(99,102,241,0.3); color: #c0c1ff; border-radius: 4px;">
+        🔒 EDITS LOCKED
+      </span>
+      {% endif %}
+    </div>
 
     <div style="background-color: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
       <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">

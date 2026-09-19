@@ -76,6 +76,7 @@ function initUserMenu() {
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initUserMenu();
+  initGlobalKeyboardShortcuts();
 
   const themeBtn = document.getElementById("theme-toggle-btn");
   if (themeBtn) {
@@ -85,6 +86,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// --- Global Keyboard Shortcuts (⌘K search, Escape dismiss) ---
+function initGlobalKeyboardShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    // ⌘K or Ctrl+K: Focus global search
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      const searchInput = document.getElementById("search-input");
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  });
+}
 
 // Toast notification helper
 function showToast(message, type = "info") {

@@ -256,73 +256,110 @@
       </a>
     </div>
 
-    <!-- Artwork -->
-    <div class="cover-container">
-      {% if item.cover_image_path %}
-      <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
-      <div id="coverFallback" class="cover-placeholder" style="display: none;">🎵</div>
-      {% else %}
-      <div class="cover-placeholder">🎵</div>
-      {% endif %}
-    </div>
-
-    <!-- Metadata -->
-    <div class="audio-details">
-      <h1 class="audio-title">{{ item.title }}</h1>
-      <p class="audio-artist">{{ item.creators_display }}</p>
-    </div>
-
-    <!-- Controls -->
-    <div class="audio-controls-container">
-      <!-- Scrubber -->
-      <div class="scrubber-wrapper">
-        <div class="scrubber-bar" id="scrubberBar">
-          <div class="scrubber-fill" id="scrubberFill"></div>
+    <!-- Split Stage -->
+    <div class="player-split-stage">
+      <!-- Left Column: Artwork with Ambient Glow & Badges -->
+      <div class="player-artwork-column">
+        <div class="ambient-glow-wrapper">
+          {% if item.cover_image_path %}
+          <div class="ambient-glow" style="background-image: url('/api/media/{{ item.id }}/cover');"></div>
+          {% endif %}
+          <div class="ambient-cover-box">
+            {% if item.cover_image_path %}
+            <img src="/api/media/{{ item.id }}/cover" alt="{{ item.title }}" class="cover-img" id="coverImg" onerror="this.style.display='none'; document.getElementById('coverFallback').style.display='flex';">
+            <div id="coverFallback" class="cover-placeholder" style="display: none;">🎵</div>
+            {% else %}
+            <div class="cover-placeholder">🎵</div>
+            {% endif %}
+          </div>
         </div>
-        <div class="time-display">
-          <span id="currentTime">0:00</span>
-          <span id="totalDuration">{{ item.formatted_duration or "0:00" }}</span>
+
+        <div class="audio-details" style="margin-top: 1.25rem;">
+          <h1 class="audio-title">{{ item.title }}</h1>
+          <p class="audio-artist">{{ item.creators_display }}</p>
+
+          <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center; margin-top: 0.75rem; flex-wrap: wrap;">
+            {% if item.file_format %}
+            <span class="badge" style="background: rgba(0, 210, 255, 0.15); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; font-weight: 700;">
+              {% if item.file_format in ['flac', 'wav', 'aiff'] %}LOSSLESS {{ item.file_format.upper() }}{% else %}{{ item.file_format.upper() }}{% endif %}
+            </span>
+            {% endif %}
+            {% if item.sample_rate %}
+            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem; font-weight: 700;">{{ (item.sample_rate / 1000) | round | int }} kHz</span>
+            {% endif %}
+            {% if item.bitrate %}
+            <span class="badge" style="background: rgba(255, 255, 255, 0.08); color: #cbd5e1; font-size: 0.72rem;">{{ (item.bitrate / 1000) | round | int }} kbps</span>
+            {% endif %}
+            <div class="active-chapter-pill" style="margin-top: 0; padding: 0.25rem 0.65rem;">
+              <span class="eq-bars" id="eqBars">
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+              </span>
+              <span>Audio HQ</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Playback Buttons -->
-      <div class="main-controls">
-        {% if prev_track %}
-        <a href="/reader/audio/{{ prev_track.id }}" class="ctrl-btn" title="Previous: {{ prev_track.title }}">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
-        </a>
-        {% endif %}
+      <!-- Right Column: Interactive Waveform Scrubber & Controls -->
+      <div class="audio-controls-container">
+        <!-- Scrubber with Waveform Canvas -->
+        <div class="scrubber-wrapper">
+          <div class="waveform-canvas-container" id="waveformContainer" title="Click or drag to seek">
+            <canvas class="waveform-canvas" id="waveformCanvas" width="500" height="56"></canvas>
+            <div class="waveform-hover-needle" id="waveformNeedle"></div>
+            <div class="waveform-hover-tooltip" id="waveformTooltip">0:00</div>
+          </div>
 
-        <button class="ctrl-btn" id="rewindBtn" title="Rewind 10s">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="8" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
-        </button>
+          <div class="scrubber-bar" id="scrubberBar" style="margin-top: 0.4rem;">
+            <div class="scrubber-fill" id="scrubberFill"></div>
+          </div>
+          <div class="time-display" style="margin-top: 0.35rem;">
+            <span id="currentTime">0:00</span>
+            <span id="totalDuration">{{ item.formatted_duration or "0:00" }}</span>
+          </div>
+        </div>
 
-        <button class="ctrl-btn play-pause-btn" id="playPauseBtn" title="Play">
-          <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          <svg id="pauseIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        </button>
+        <!-- Playback Buttons -->
+        <div class="main-controls">
+          {% if prev_track %}
+          <a href="/reader/audio/{{ prev_track.id }}" class="ctrl-btn" title="Previous: {{ prev_track.title }}">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+          </a>
+          {% endif %}
 
-        <button class="ctrl-btn" id="forwardBtn" title="Forward 10s">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="9" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
-        </button>
-
-        {% if next_track %}
-        <a href="/reader/audio/{{ next_track.id }}" class="ctrl-btn" title="Next: {{ next_track.title }}">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
-        </a>
-        {% endif %}
-      </div>
-
-      <!-- Extra Controls (Speed, Volume) -->
-      <div class="extra-controls">
-        <button class="speed-btn" id="speedBtn" title="Playback Speed">1.0x</button>
-
-        <div class="volume-wrap">
-          <button class="ctrl-btn" id="muteBtn" style="padding: 0.25rem;">
-            <svg id="volHigh" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            <svg id="volMute" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <button class="ctrl-btn" id="rewindBtn" title="Rewind 10s">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path><text x="8" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
           </button>
-          <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider" id="volumeSlider">
+
+          <button class="ctrl-btn play-pause-btn" id="playPauseBtn" title="Play">
+            <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <svg id="pauseIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          </button>
+
+          <button class="ctrl-btn" id="forwardBtn" title="Forward 10s">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path><text x="9" y="15" font-size="8" font-weight="bold" fill="currentColor" stroke="none">10</text></svg>
+          </button>
+
+          {% if next_track %}
+          <a href="/reader/audio/{{ next_track.id }}" class="ctrl-btn" title="Next: {{ next_track.title }}">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line></svg>
+          </a>
+          {% endif %}
+        </div>
+
+        <!-- Extra Controls (Speed, Volume) -->
+        <div class="extra-controls">
+          <button class="speed-btn" id="speedBtn" title="Playback Speed">1.0x</button>
+
+          <div class="volume-wrap">
+            <button class="ctrl-btn" id="muteBtn" style="padding: 0.25rem;">
+              <svg id="volHigh" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+              <svg id="volMute" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+            </button>
+            <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider" id="volumeSlider">
+          </div>
         </div>
       </div>
     </div>
@@ -347,11 +384,118 @@
     const muteBtn = document.getElementById("muteBtn");
     const volHigh = document.getElementById("volHigh");
     const volMute = document.getElementById("volMute");
+    const eqBars = document.getElementById("eqBars");
+
+    const waveformCanvas = document.getElementById("waveformCanvas");
+    const waveformCtx = waveformCanvas ? waveformCanvas.getContext("2d") : null;
+    const waveformContainer = document.getElementById("waveformContainer");
+    const waveformNeedle = document.getElementById("waveformNeedle");
+    const waveformTooltip = document.getElementById("waveformTooltip");
 
     const itemId = {{ item.id }};
     const initialTime = {{ initial_time }};
     const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
     let currentSpeedIdx = 1;
+
+    // Deterministic pseudo-waveform generator based on item id and title
+    const BAR_COUNT = 75;
+    const barHeights = [];
+    (function generateWaveformData() {
+      let seed = itemId * 2741;
+      const titleStr = {{ item.title | tojson }};
+      for (let i = 0; i < titleStr.length; i++) {
+        seed = (seed ^ titleStr.charCodeAt(i)) * 16807 % 2147483647;
+      }
+      for (let i = 0; i < BAR_COUNT; i++) {
+        seed = (seed * 16807) % 2147483647;
+        const normalized = (seed % 1000) / 1000;
+        const envelope = 0.4 + 0.6 * Math.sin((i / BAR_COUNT) * Math.PI);
+        const h = Math.max(0.15, Math.min(1.0, (0.2 + normalized * 0.8) * envelope));
+        barHeights.push(h);
+      }
+    })();
+
+    function drawWaveform() {
+      if (!waveformCanvas || !waveformCtx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const width = waveformCanvas.width / dpr;
+      const height = waveformCanvas.height / dpr;
+
+      waveformCtx.clearRect(0, 0, width, height);
+
+      const progress = (audio.duration && audio.duration > 0) ? (audio.currentTime / audio.duration) : 0;
+      const totalBars = barHeights.length;
+      const barWidth = Math.max(2, (width / totalBars) - 2.5);
+      const gap = (width - (barWidth * totalBars)) / (totalBars - 1);
+
+      for (let i = 0; i < totalBars; i++) {
+        const x = i * (barWidth + gap);
+        const bh = barHeights[i] * (height * 0.82);
+        const y = (height - bh) / 2;
+        const barProgress = i / totalBars;
+
+        if (barProgress <= progress) {
+          const grad = waveformCtx.createLinearGradient(0, y, 0, y + bh);
+          grad.addColorStop(0, "#38bdf8");
+          grad.addColorStop(1, "#00d2ff");
+          waveformCtx.fillStyle = grad;
+        } else {
+          waveformCtx.fillStyle = "rgba(255, 255, 255, 0.18)";
+        }
+
+        const r = Math.min(barWidth / 2, 2);
+        waveformCtx.beginPath();
+        waveformCtx.roundRect(x, y, barWidth, bh, r);
+        waveformCtx.fill();
+      }
+    }
+
+    function resizeWaveform() {
+      if (!waveformCanvas || !waveformContainer) return;
+      const rect = waveformContainer.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      waveformCanvas.width = rect.width * dpr;
+      waveformCanvas.height = rect.height * dpr;
+      if (waveformCtx) {
+        waveformCtx.scale(dpr, dpr);
+      }
+      drawWaveform();
+    }
+    window.addEventListener("resize", resizeWaveform);
+
+    if (waveformContainer) {
+      waveformContainer.addEventListener("mousemove", (e) => {
+        if (!audio.duration) return;
+        const rect = waveformContainer.getBoundingClientRect();
+        const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const hoverPct = mouseX / rect.width;
+        const hoverSec = hoverPct * audio.duration;
+
+        if (waveformNeedle) {
+          waveformNeedle.style.display = "block";
+          waveformNeedle.style.left = `${mouseX}px`;
+        }
+        if (waveformTooltip) {
+          waveformTooltip.style.display = "block";
+          waveformTooltip.style.left = `${mouseX}px`;
+          waveformTooltip.textContent = formatTime(hoverSec);
+        }
+      });
+
+      waveformContainer.addEventListener("mouseleave", () => {
+        if (waveformNeedle) waveformNeedle.style.display = "none";
+        if (waveformTooltip) waveformTooltip.style.display = "none";
+      });
+
+      waveformContainer.addEventListener("click", (e) => {
+        if (!audio.duration) return;
+        const rect = waveformContainer.getBoundingClientRect();
+        const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const pct = clickX / rect.width;
+        audio.currentTime = pct * audio.duration;
+        drawWaveform();
+      });
+    }
 
     function formatTime(secs) {
       if (isNaN(secs) || secs < 0) return "0:00";
@@ -367,6 +511,7 @@
         audio.currentTime = initialTime;
       }
       totalDurationEl.textContent = formatTime(audio.duration);
+      resizeWaveform();
     });
 
     // Play/Pause toggle
@@ -375,11 +520,13 @@
         audio.play().then(() => {
           playIcon.style.display = "none";
           pauseIcon.style.display = "block";
+          if (eqBars) eqBars.classList.add("playing");
         }).catch(err => console.error("Playback failed:", err));
       } else {
         audio.pause();
         playIcon.style.display = "block";
         pauseIcon.style.display = "none";
+        if (eqBars) eqBars.classList.remove("playing");
         saveProgress();
       }
     }
@@ -392,6 +539,7 @@
         const pct = (audio.currentTime / audio.duration) * 100;
         scrubberFill.style.width = pct + "%";
       }
+      drawWaveform();
     });
 
     // Scrubber click
@@ -401,6 +549,7 @@
       const clickX = e.clientX - rect.left;
       const pct = Math.max(0, Math.min(1, clickX / rect.width));
       audio.currentTime = pct * audio.duration;
+      drawWaveform();
     });
 
     // 10s Skip
