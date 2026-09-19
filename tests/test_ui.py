@@ -5,7 +5,7 @@ def test_ui_index(client):
     assert b"Library" in response.data
     assert b'class="nav-search"' in response.data
     assert b'id="search-input"' in response.data
-    assert b'class="subnav-bar"' in response.data
+    assert b'class="subnav-bar"' not in response.data
     assert b'href="/authors"' in response.data
     assert b'href="/series"' in response.data
     assert b'href="/tags"' in response.data
@@ -351,6 +351,7 @@ def test_authors_view_direct(client, app, sample_epub):
     assert res.status_code == 200
     assert b"Authors" in res.data or b"Creators" in res.data
     assert b"Jane Doe" in res.data
+    assert b'class="subnav-bar"' in res.data
 
 
 def test_series_view_direct(client, app, sample_epub):

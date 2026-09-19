@@ -71,6 +71,20 @@
               <span class="dropdown-icon">⚙️</span>
               <span>Settings</span>
             </a>
+            <div class="dropdown-divider"></div>
+            <a href="/authors" class="dropdown-item">
+              <span class="dropdown-icon">✍️</span>
+              <span>Authors</span>
+            </a>
+            <a href="/series" class="dropdown-item">
+              <span class="dropdown-icon">📑</span>
+              <span>Series</span>
+            </a>
+            <a href="/tags" class="dropdown-item">
+              <span class="dropdown-icon">🏷️</span>
+              <span>Tags</span>
+            </a>
+            <div class="dropdown-divider"></div>
             <button id="theme-toggle-btn" class="dropdown-item dropdown-btn" type="button">
               <span class="dropdown-icon">🌓</span>
               <span>Switch Theme</span>
@@ -85,6 +99,19 @@
               <div class="dropdown-username">Guest</div>
               <div class="dropdown-role">Not logged in</div>
             </div>
+            <div class="dropdown-divider"></div>
+            <a href="/authors" class="dropdown-item">
+              <span class="dropdown-icon">✍️</span>
+              <span>Authors</span>
+            </a>
+            <a href="/series" class="dropdown-item">
+              <span class="dropdown-icon">📑</span>
+              <span>Series</span>
+            </a>
+            <a href="/tags" class="dropdown-item">
+              <span class="dropdown-icon">🏷️</span>
+              <span>Tags</span>
+            </a>
             <div class="dropdown-divider"></div>
             <button id="theme-toggle-btn" class="dropdown-item dropdown-btn" type="button">
               <span class="dropdown-icon">🌓</span>
@@ -106,6 +133,7 @@
   </header>
 
   <!-- Sub-Header Navigation Bar -->
+  {% block subnav %}
   <nav class="subnav-bar" aria-label="Primary Navigation">
     <div class="subnav-container">
       <ul class="subnav-links">
@@ -116,6 +144,7 @@
       </ul>
     </div>
   </nav>
+  {% endblock %}
 
   <!-- Main View Container -->
   <main class="main-content">
