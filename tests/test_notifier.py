@@ -79,10 +79,10 @@ def test_notification_service_send_and_worker(app: Flask):
         )
         assert sent is True
 
-        # Wait briefly for background worker to process queue
-        timeout = 2.0
+        # Wait briefly for background worker to process queue and invoke notify
+        timeout = 3.0
         start = time.time()
-        while svc._queue.qsize() > 0 and time.time() - start < timeout:
+        while not mock_notify.called and time.time() - start < timeout:
             time.sleep(0.05)
 
         svc.stop()

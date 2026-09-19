@@ -36,7 +36,7 @@ graph TD
 
         subgraph Routes ["API & Presentation Layer (Thin Route Handlers)"]
             UIRoutes[UI Views: / /media/:id /authors /series /tags /settings]
-            APIRoutes[REST API: /api/media /api/libraries /progress /playback /health /profiles]
+            APIRoutes[REST API: /api/v1/... & /api/media /api/libraries /progress /playback /health /profiles]
             OPDSRoutes[OPDS 1.2 / 2.0 / Progression 1.0: /opds]
             ReaderRoutes[Web Readers & Players: /reader/epub /reader/cbz /reader/pdf /reader/video /reader/audio]
             SubsonicRoutes[Subsonic OpenSubsonic API: /rest]
@@ -330,7 +330,11 @@ Aarkib isolates heavy operations from the Flask HTTP request/response cycle usin
   - Failed, interrupted, or cancelled jobs can be retried via `POST /api/jobs/<task_id>/retry` or `job_manager.retry_job(task_id)`.
   - Increments `retry_count`, resets progress, clears previous error payloads, and re-dispatches the worker task to the `ThreadPoolExecutor`.
 - **Querying & Filtering**:
-  - REST endpoint `GET /api/jobs?status=queued,running` supports comma-separated status filtering and pagination for real-time WebUI cards and operational dashboards.
+  - REST endpoint `GET /api/v1/jobs?status=queued,running` (and legacy `GET /api/jobs`) supports comma-separated status filtering and pagination for real-time WebUI cards and operational dashboards.
+- **Live Background Jobs Manager UI (`templates/settings/system.html`)**:
+  - Embedded operational card in **Settings → System** rendering active, queued, succeeded, and failed jobs in real time.
+  - Automatically polls `/api/v1/jobs` every 5 seconds while running or queued tasks exist, animating progress bars and updating human-readable status labels.
+  - Provides one-click interactive cancellation (`cancelLiveJob`) and retry (`retryLiveJob`) buttons invoking `/api/v1/jobs/<task_id>/cancel` and `/api/v1/jobs/<task_id>/retry`.
 - **Deduplication**: Prevents overlapping scans or enrichment jobs from executing concurrently on the same library.
 - **Graceful Shutdown**: On process termination, `JobManager.shutdown()` safely awaits running worker tasks and cancels pending queue items.
 - **Architectural Rationale: Why In-Process ThreadPoolExecutor?**:
@@ -413,6 +417,15 @@ Aarkib decouples client capability detection, playback decision-making, and medi
 6. **Dual-Engine Subtitle Architecture & JASSUB WebAssembly**:
    - **ASS/SSA High-Fidelity Rendering (JASSUB)**: Embedded Advanced SubStation Alpha (`.ass`, `.ssa`) subtitles are served in native format via `GET /api/media/<id>/stream/subtitles/<track_index>.ass` (`generate_ass_subtitles`). In the browser, JASSUB (WebAssembly + WebGL `libass` renderer) renders custom fonts, karaoke effects, dynamic positioning (`\pos`), rotations, color outlines, and signs onto a hardware-accelerated canvas overlay, preserving 100% typesetting fidelity without server-side video burning and enabling Direct Play / Remuxing.
    - **WebVTT Engine & Fallback**: Embedded SRT, VTT, or plain text subtitles are served via `GET /api/media/<id>/stream/subtitles/<track_index>.vtt` (`generate_vtt_subtitles`) and rendered via native HTML5 `<track>` tags. If a client browser lacks WebAssembly or WebGL support, ASS subtitles automatically fall back to WebVTT.
+
+7. **Video Playback Diagnostics HUD (`reader_video.html`)**:
+   - Integrated heads-up display (HUD) overlay toggled in the web video reader via keyboard hotkey `D` or the toolbar stats button (`#stats-btn`).
+   - Fetches the deterministic `PlaybackPlan` from `GET /api/v1/media/<id>/playback-plan` (or `/api/media/<id>/playback`) to expose live streaming telemetry:
+     - **Client Target & Platform**: Detected browser engine, OS platform, and display capabilities (`diag-client`).
+     - **Playback Mode**: Current active delivery strategy (`DIRECT`, `REMUX`, or `TRANSCODE`) (`diag-mode`).
+     - **Hardware Acceleration Engine**: Active transcode backend (`vaapi`, `qsv`, or `software`) (`diag-hwaccel`).
+     - **Stream Profiles & Codecs**: Source container, video codec, audio codec, resolution, and target bitrates.
+     - **Planner Decision Reasons**: Transparent bulleted list explaining why a transcode, remux, or downscale was mandated by client capabilities (`diag-reasons`).
 
 ---
 
@@ -507,6 +520,26 @@ Aarkib integrates a multi-provider metadata retrieval and caching engine designe
    - **Configurable TTL**: Cache validity defaults to 30 days (`METADATA_CACHE_TTL_DAYS`). Cache hits bypass outbound network calls entirely, preventing duplicate API requests across rescans.
    - **Cache Pruning**: `MetadataCacheManager.prune_expired()` purges stale entries during maintenance cycles.
 
+5. **Fuzzy Candidate Matching Engine (`services/metadata/matcher.py`)**:
+   - External provider search results are scored and ranked via `CandidateMatcher` utilizing a normalized Levenshtein edit distance algorithm and multi-signal confidence metric:
+     - **Title Similarity (Weight: 0.50)**: Case-normalized string edit distance, resilient against punctuation, subtitles, and bracketed edition markers.
+     - **Creator/Author Similarity (Weight: 0.25)**: Evaluates match against parsed or existing primary creators.
+     - **Release Year Proximity (Weight: 0.15)**: Exponential decay penalty applied for discrepancies between metadata candidate dates and local media file dates.
+     - **External Identifier Match (Weight: 0.10)**: Immediate boost to confidence score $1.0$ when exact identifiers match (ISBN-10/13, TMDB ID, ComicVine volume/issue ID, MusicBrainz release MBID).
+   - **Confidence Thresholding**: Candidates scoring below a composite confidence threshold (default: $0.65$) are rejected to prevent low-confidence or false-positive metadata poisoning.
+
+6. **Field-Level Provenance Tracking (`models/media.py`, `MediaItem.metadata_provenance`)**:
+   - Maintains an auditable JSON dictionary on each media record mapping every metadata attribute (`title`, `description`, `publisher`, `language`, `cover_image_path`, `creators`, `tags`) to its origin:
+     - `AUTOMATIC`: Ingested from an external API provider (Google Books, TMDB, ComicVine, etc.).
+     - `DERIVED`: Extracted locally from embedded file tags (ID3, EXIF, ComicInfo.xml, ffprobe stream atoms, EPUB OPF).
+     - `MANUAL`: Authored or edited directly by a user via the WebUI or API.
+
+7. **Manual Edit Lock Protection (`models/media.py`, `MediaItem.locked_fields`)**:
+   - Provides granular protection against accidental metadata clobbering:
+     - When an administrator modifies any field (e.g. title, creators, description, cover) in the WebUI or via `PATCH /api/v1/media/<id>`, that field is automatically appended to `locked_fields`.
+     - Automated background crawlers and scheduled enrichment batch passes strictly respect locked fields: locked attributes are never overwritten, while unlocked empty attributes remain eligible for automatic enrichment.
+     - Fields can be explicitly unlocked at any time by the user via the metadata editor or API.
+
 ---
 
 ### 3.14 Storage & Cache Management Policies
@@ -549,12 +582,67 @@ Aarkib features multi-profile user accounts and granular library-level access co
    - Supports active profile resolution via user session, `X-Profile-ID` header, or default profile fallback.
 
 4. **REST API Profile Endpoints**:
-   - `GET /api/profiles`: List profiles for current user.
-   - `POST /api/profiles`: Create a new sub-profile.
-   - `PATCH /api/profiles/<id>`: Update name, avatar, or child status.
-   - `DELETE /api/profiles/<id>`: Delete profile (cascading to progress and bookmarks).
-   - `GET /api/profiles/<id>/libraries` & `PUT /api/profiles/<id>/libraries`: Inspect and set per-library permissions.
+   - `GET /api/v1/profiles` (and `/api/profiles`): List profiles for current user.
+   - `POST /api/v1/profiles` (and `/api/profiles`): Create a new sub-profile.
+   - `GET /api/v1/profiles/<id>`: Retrieve specific profile and effective library permissions.
+   - `PATCH /api/v1/profiles/<id>` (and `PUT`): Atomically update name, avatar, child status, and library ACL rules (`library_access: [{library_id, can_read, can_download}]`).
+   - `DELETE /api/v1/profiles/<id>` (and `/api/profiles/<id>`): Delete profile (cascading to progress and bookmarks).
+   - `GET /api/profiles/<id>/libraries` & `PUT /api/profiles/<id>/libraries`: Legacy per-library permission inspect and update.
    - `POST /api/profiles/<id>/switch`: Switch active session profile.
+
+5. **Interactive Family Profiles & Library ACL Matrix UI (`templates/settings/users.html`)**:
+   - Management card under **Settings → Users** exposing family profile management and permission controls.
+   - Displays sub-profile cards with user avatars, child account indicators, creation modal, and deletion confirmation.
+   - **Interactive ACL Modal Matrix**: Displays a tabular matrix of all configured libraries on the server with independent checkboxes for **Read** (`can_read`) and **Download** (`can_download`). Changes are submitted via `PATCH /api/v1/profiles/<id>` and take effect immediately across all client sessions.
+
+---
+
+### 3.16 Clean, Versioned REST API v1 Architecture (`routes/api_v1.py`)
+
+Aarkib exposes a modern, versioned REST API under the `/api/v1` prefix designed for native mobile, TV, desktop, and third-party automation clients:
+
+1. **Standardized JSON Envelope & Error Handling**:
+   - Every failure returns a consistent error schema with appropriate HTTP status codes:
+     ```json
+     {
+       "error": "Descriptive human-readable error message",
+       "status": "error",
+       "status_code": 404
+     }
+     ```
+   - Standard HTTP codes: `200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `429 Too Many Requests`.
+
+2. **Fine-Grained Token Scope Enforcement (`require_token_scope`)**:
+   - Bearer tokens (`DeviceToken`) authenticate via `Authorization: Bearer ark_...`.
+   - Granular scopes defined in `DeviceToken.scopes_json`:
+     - `media:read`: Browse catalog items, read metadata, stream audio/video.
+     - `media:write`: Edit metadata, update progress and bookmarks.
+     - `admin`: Trigger library crawls, manage users, modify system settings.
+   - Requests lacking the required scope return HTTP `403 Forbidden`.
+
+3. **Core API v1 Endpoint Catalog**:
+
+   | Method | Endpoint | Description | Scope / Access |
+   | :--- | :--- | :--- | :--- |
+   | `GET` | `/api/v1/health` | System health check, database connectivity, and uptime metrics | Public / Authenticated |
+   | `GET` | `/api/v1/media` | Catalog listing with filters (`library_id`, `media_type`, `search`, pagination `limit`/`offset`) | `media:read` |
+   | `GET` | `/api/v1/media/<id>` | Comprehensive media item details, streams, progress, and provenance | `media:read` |
+   | `GET` | `/api/v1/media/<id>/playback-plan` | Deterministic delivery descriptor evaluating media against client capabilities | `media:read` |
+   | `GET` | `/api/v1/media/<id>/stream` | Native HTTP 206 byte-range audio/video seeking | `media:read` |
+   | `GET` | `/api/v1/media/<id>/file` | Raw media file download guarded by mount availability and safe paths | `media:read` + ACL download |
+   | `GET` | `/api/v1/libraries` | List registered libraries, paths, media types, item counts, and mount status | Authenticated |
+   | `GET` | `/api/v1/libraries/<id>` | Inspect single library configuration and storage metrics | Authenticated |
+   | `POST` | `/api/v1/libraries/<id>/reconcile` | Trigger asynchronous mount-safe crawler reconciliation job | `admin` |
+   | `GET` | `/api/v1/profiles` | List sub-profiles for authenticated account | Authenticated |
+   | `POST` | `/api/v1/profiles` | Create family member sub-profile with optional `is_child` flag | Authenticated |
+   | `GET` | `/api/v1/profiles/<id>` | Retrieve specific profile and effective library ACL permissions | Authenticated |
+   | `PATCH` | `/api/v1/profiles/<id>` | Update profile name, avatar, child status, and library ACL rules | Admin or Profile Owner |
+   | `DELETE` | `/api/v1/profiles/<id>` | Delete profile (blocked if last remaining profile) | Admin or Profile Owner |
+   | `GET` | `/api/v1/jobs` | Query background task queue with status filtering (`?status=queued,running`) | Authenticated |
+   | `GET` | `/api/v1/jobs/<id>` | Detailed job status, progress percentage, error payloads, and retry count | Authenticated |
+   | `POST` | `/api/v1/jobs/<id>/cancel` | Cooperatively signal cancellation to active or queued background task | Admin / Owner |
+   | `POST` | `/api/v1/jobs/<id>/retry` | Re-enqueue failed or interrupted background job | Admin / Owner |
+   | `GET` | `/api/v1/system/capabilities` | Hardware acceleration encoder detection (VA-API, QSV) and active backend | `admin` |
 
 ---
 
@@ -634,6 +722,9 @@ erDiagram
         string publication_date
         string language
         string isbn
+        string external_id
+        text locked_fields
+        text metadata_provenance
         float series_index
         int library_id FK
         float duration
@@ -724,7 +815,7 @@ erDiagram
 - **`PlaybackPlan` (`models/playback.py`)**: Immutable domain model expressing deterministic media delivery plans (`DIRECT`, `REMUX`, `TRANSCODE`, `OPTIMIZE`), containers, codecs, reasons, and diagnostics.
 - **`SystemSetting` (`models/setting.py`)**: Key-value application configuration store (`key`, `value`, `updated_at`) supporting runtime WebUI overrides with dynamic in-memory hot-reloading into Flask's `app.config`.
 - **`DeviceToken` (`models/token.py`)**: Hardware device and automation Bearer token store (`name`, `token_hash`, `token_prefix`, `scopes_json`, `expires_at`, `last_used_at`) linked to `User`.
-- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, timestamps), plus relational `library_id` FK.
+- **`MediaItemMixin` (`models/media.py`)**: Standardized base columns across all media (`title`, `sort_title`, `media_type`, `original_file_path`, `file_format`, `file_size`, `file_hash`, `cover_image_path`, `description`, `publisher`, `language`, `publication_date`, `external_id`, `locked_fields`, `metadata_provenance`, timestamps), plus relational `library_id` FK.
 - **`VideoItemMixin` (`models/media.py`)**: Schema extension columns for video media (`duration`, `resolution_width`, `resolution_height`, `codec`, `season`, `episode`).
 - **`AudioTrackMixin` (`models/media.py`)**: Schema extension columns for audio media: `duration` (seconds), `bitrate` (kbps), `album`, `track_number`, `disc_number`, and `chapters_json`.
 - **`BackgroundJob` (`models/job.py`)**: Persistent background task tracking (`task_id`, `job_type`, `status`, `progress`, `result_json`, `retry_count`, `cancel_requested`, timestamps).

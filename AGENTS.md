@@ -171,7 +171,8 @@ aarkib/
 │   │   └── video.py          # VideoMediaPlugin: MP4, MKV, WEBM, AVI, MOV, M4V metadata, remux/transcode strategies
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── api.py            # Unified REST endpoints: media CRUD, playback descriptors, streams, progress, profiles, ACLs
+│   │   ├── api.py            # Legacy unified REST endpoints: media CRUD, playback descriptors, streams, progress
+│   │   ├── api_v1.py         # Versioned REST API v1: media CRUD, playback-plan, jobs, profiles, ACLs, reconciliation
 │   │   ├── auth.py           # Login, logout, setup, profile, user management endpoints
 │   │   ├── reader.py         # In-browser reader/player views (EPUB, CBZ, PDF, Video, Audio, Podcasts)
 │   │   └── ui.py             # Server-rendered HTML templates (Library, Authors, Series, Tags, Settings categories)
@@ -187,7 +188,7 @@ aarkib/
 │   │   ├── job_manager.py    # Asynchronous background job manager (ThreadPoolExecutor, cancellation, retries)
 │   │   ├── library_service.py # Mount-safe library availability verification and safe reconciliation coordination
 │   │   ├── media_service.py  # Canonical multi-media service: edit metadata, resolve creators/collections/tags
-│   │   ├── metadata/         # Pluggable metadata subsystem (providers: comicvine, google_books, tmdb, musicbrainz)
+│   │   ├── metadata/         # Pluggable metadata subsystem (providers, matcher.py Levenshtein distance scoring)
 │   │   ├── notifier.py       # Apprise notification worker queue, debounced media batching, and test dispatch
 │   │   ├── opml.py           # OPML podcast feed import and parser
 │   │   ├── parsers/          # Metadata format parsers (pdf, epub, cbz, video, audio, podcast)
@@ -204,7 +205,7 @@ aarkib/
 │   │   └── watcher.py        # Filesystem watcher with debounced event handling for library directories
 │   ├── static/               # Obsidian design tokens, modern CSS, gamepad engine (gamepad.js), PWA SW
 │   └── templates/            # Jinja2 templates (bookshelf, media detail, readers, settings, OPDS XML)
-├── tests/                    # Deterministic Pytest suite (369 tests covering all features)
+├── tests/                    # Deterministic Pytest suite (388 tests covering all features)
 ├── pyproject.toml            # Project dependencies, build configuration, ruff & pytest options
 ├── Dockerfile                # Multi-stage multi-arch production container build
 ├── docker-compose.yml        # Docker Compose deployment definition
@@ -245,8 +246,9 @@ aarkib/
   - **Direct Remux**: Video and audio codecs are supported, but container is incompatible (e.g. MKV to fragmented MP4). Remuxed on-the-fly without re-encoding video.
   - **Audio Transcode**: Video stream copied directly; incompatible audio stream (e.g. AC3/DTS/TrueHD) transcoded to AAC.
   - **Full Transcode / HLS**: Incompatible video codec, 10-bit unsupported, or target bitrate scaling. Streamed via segmented HLS (`.m3u8`).
-- **Unified Playback Descriptor**: Exposed via `GET /api/media/<id>/playback` and `GET /api/media/<id>/stream/info`. Shields web, mobile, and third-party clients from transcoding internals.
+- **Unified Playback Descriptor & Diagnostics**: Exposed via `GET /api/v1/media/<id>/playback-plan`, `GET /api/media/<id>/playback`, and the in-browser **Playback Diagnostics HUD** (`reader_video.html`, hotkey `D`). Shields web, mobile, and third-party clients from transcoding internals while providing live visibility into client engine, hardware acceleration, target codecs, and planner decision reasons.
 - **Hardware Acceleration Abstraction**: Hardware acceleration capabilities (`TranscodeCapabilities`) for Intel VA-API, AMD VA-API, and Intel QuickSync (QSV) are detected via safe argument-list probes. The administrator can dynamically configure `TRANSCODE_BACKEND` (`auto`, `vaapi`, `qsv`, `software`). If hardware transcode initialization fails, `TranscodeSupervisor` automatically falls back to CPU software encoding (`libx264`).
+- **High-Fidelity Subtitle Engine**: Embedded ASS/SSA subtitles render via the JASSUB WebAssembly (`libass`) canvas overlay, preserving 100% typesetting fidelity without server-side video burning and enabling Direct Remuxing.
 
 ### 5. FFmpeg Subprocess Execution
 - **Command Construction**: Generate commands using argument lists (`["ffmpeg", "-i", ...]`). Never use `shell=True`.
@@ -259,19 +261,25 @@ aarkib/
 ### 6. Background Jobs & Non-Blocking Event Loop
 - **Non-Blocking Architecture**: Library crawls, media file probing, metadata lookups, artwork downloads, and video transcoding must never block the HTTP request/response cycle.
 - **Explicit Lifecycle States**: Background jobs track explicit states via `JobStatus` (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`, `INTERRUPTED`). For legacy compatibility, `"completed"` maps to `SUCCEEDED`.
-- **Cooperative Cancellation & Retry**: Long-running background jobs check `job._cancel_event.is_set()` and support cooperative cancellation via `POST /api/jobs/<id>/cancel` or `JobManager.request_cancel()`. Failed or cancelled jobs can be retried via `POST /api/jobs/<id>/retry`.
+- **Cooperative Cancellation & Retry**: Long-running background jobs check `job._cancel_event.is_set()` and support cooperative cancellation via `POST /api/v1/jobs/<id>/cancel` or `JobManager.request_cancel()`. Failed or cancelled jobs can be retried via `POST /api/v1/jobs/<id>/retry`.
+- **Live Background Jobs Manager**: Visualized in real time under **Settings → System** (`/settings/system`) with 5-second polling during active jobs, progress bars, cancellation, and retry triggers.
 - **Job Specifications**: Background operations must register with `JobManager`, tracking:
   - Unique UUID, job type, human-readable status, integer progress (0-100), start/end timestamps, error payloads, and cancellation flags.
   - Prevent duplicate concurrent jobs for the same library or media resource.
 
 ### 7. External Metadata Subsystem
 - **Provider Abstraction**: Providers inherit from `MetadataProvider` (`search`, `get_details`).
+- **Candidate Matching Engine**: External metadata candidates are ranked using normalized Levenshtein distance and composite confidence scoring (`CandidateMatcher`), weighting title similarity, creators, release year, and external identifiers. Candidates falling below confidence thresholds are rejected.
+- **Field-Level Provenance Tracking**: Tracks the authoritative source for each attribute (`title`, `description`, `publisher`, `language`, `cover`) in `metadata_provenance`, categorized as `AUTOMATIC` (external APIs), `DERIVED` (embedded tags), or `MANUAL` (user direct edits).
+- **Manual Edit Lock Protection**: When an administrator modifies media attributes in the WebUI or API, those fields are permanently locked (`locked_fields`). Automated crawlers and batch enrichment jobs strictly respect these locks to prevent overwriting user-curated metadata.
 - **Failure Tolerance**: External metadata is untrusted input. Handle network timeouts, rate limits, schema changes, and missing fields gracefully. A metadata provider failure must never crash the server or block media access.
 - **Rate Limiting & Caching**: Enforce token-bucket limits (`limiter.py`) and persist responses in `MetadataCache`.
 
 ### 8. Authentication, Authorization & Security
-- **Mandatory Authentication**: Enforced across all endpoints (WebUI, REST API, OPDS, Subsonic).
-- **User Profiles & Unified ACLs**: Multi-profile support per account (`Profile`) allows per-family-member profiles, avatars, and kid-safe restrictions (`is_child`). Per-profile library access control lists (`ProfileLibraryAccess`) restrict reading and downloading. All access checks route through `AuthorizationService.can(subject, action, resource)`.
+- **Mandatory Authentication**: Enforced across all endpoints (WebUI, REST API v1, OPDS, Subsonic).
+- **Versioned Clean REST API v1 (`/api/v1/`)**: Exposes versioned endpoints with standard JSON error envelopes (`{"error": "...", "status": "error", "status_code": ...}`).
+- **User Profiles & Unified ACLs**: Multi-profile support per account (`Profile`) allows per-family-member profiles, avatars, and kid-safe restrictions (`is_child`). Per-profile library access control lists (`ProfileLibraryAccess`) restrict browsing and downloading, managed via the interactive Library Access Control modal matrix in `/settings/users`. All access checks route through `AuthorizationService.can(subject, action, resource)`.
+- **Scoped Device Tokens**: Mobile, TV, and automation Bearer tokens support granular scope restrictions (`require_token_scope` for `media:read`, `media:write`, `admin`).
 - **Password Security**: Passwords hashed using industry-standard cryptography (`werkzeug.security`). Administrators strictly require strong passwords (>= 4 chars).
 - **Passwordless Account Boundary**: Passwordless reader accounts are strictly restricted to local and private IP networks (RFC 1918 / loopback). Requests from public WAN addresses attempting to authenticate without a password are automatically rejected with HTTP 401 Unauthorized unless `AARKIB_ALLOW_PASSWORDLESS_REMOTE=true` is set.
 - **Authentication Rate Limiting**: All login and Basic Auth verification routes are protected by `AuthRateLimiter` to thwart brute-force and enumeration attacks.
@@ -291,7 +299,7 @@ uv sync
 # 2. Run Aarkib development server
 uv run aarkib
 
-# 3. Execute Pytest suite (all 369 tests must pass 100%)
+# 3. Execute Pytest suite (all 388 tests must pass 100%)
 uv run pytest
 
 # 4. Run single test file

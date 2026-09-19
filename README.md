@@ -14,7 +14,7 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
 ## ✨ Features
 
 - 📖 **E-Books, Comics & Documents**: Read `.epub`, `.pdf`, `.cbz`, `.cbr`, and `.zip` files directly in your browser or on your favorite e-reader. Includes dedicated PDF web reader, customizable themes (Dark, Sepia, OLED, Light), font sizing, bookmarks, continuous vertical scroll, and two-page spread modes.
-- 🎬 **Movies & TV Shows**: Stream video files (`.mp4`, `.mkv`, `.webm`, etc.) with deterministic playback planning: native Direct Play, on-the-fly Direct Remuxing, and hardware-accelerated transcoding (Intel QuickSync & VA-API) with automatic CPU fallback. Includes automatic TV show episode parsing (`S01E02`), resume playback, and next-episode autoplay.
+- 🎬 **Movies & TV Shows**: Stream video files (`.mp4`, `.mkv`, `.webm`, etc.) with deterministic playback planning: native Direct Play, on-the-fly Direct Remuxing, and hardware-accelerated transcoding (Intel QuickSync & VA-API) with automatic CPU fallback. Features high-fidelity anime/effects subtitle rendering via the **JASSUB WebAssembly libass engine**, a real-time **Playback Diagnostics HUD** (hotkey `D` or stats button), automatic TV show episode parsing (`S01E02`), resume playback, and next-episode autoplay.
 - 🎵 **Audiobooks & Music**: Listen in-browser with album artwork, playback speed controls ($0.75\times$–$2.0\times$), track scrubbing, and saved listening positions.
 - 🎙️ **Podcasts**: Organize audio shows, import OPML subscriptions, stream episodes, and search online directory details.
 - 📱 **Connect Your Devices**:
@@ -24,9 +24,10 @@ Read, watch, and listen anywhere — in your web browser, on your e-reader (KORe
   - **TV & Mobile Streaming Apps (Jellyfin)**: Connect official and third-party Jellyfin clients (Jellyfin Mobile for Android/iOS, Android TV, Swiftfin, Findroid, Jellyfin Media Player) to browse and stream movies, TV shows, and music.
 - 🎨 **Modern Web App & PWA**: Responsive interface with Dark, Light, and OLED themes. Installable on phones and tablets as a Progressive Web App.
 - 🎮 **Gamepad & 10-Foot Navigation**: Seamless out-of-the-box controller support across the entire Web UI, readers (comics, manga, EPUB, PDF), and players (video, audio, podcasts) using standard Xbox, PlayStation, Nintendo Switch, and Steam Deck gamepads. Includes spatial navigation, context-aware HUD button prompts, and haptic vibration feedback.
-- 👥 **Multi-User & Family Profiles**: Dedicated accounts with multi-profile support, individual reading progress and bookmarks, kid-safe restrictions (`is_child`), and per-profile library access control lists (ACLs for browsing and downloading).
-- 🛡️ **Mount-Safe Storage Protection**: Intelligent availability guards prevent accidental catalog wipes when external drives or network storage (NFS/SMB) unmount.
-- 🔍 **Automatic Metadata & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, MusicBrainz, iTunes, and PodcastIndex, with per-library customization and a built-in metadata editor.
+- 👥 **Multi-User & Family Profiles**: Dedicated accounts with multi-profile support, individual reading progress and bookmarks, kid-safe restrictions (`is_child`), and per-profile library access control lists (ACLs for browsing and downloading) configured through an interactive permission matrix.
+- 🛡️ **Mount-Safe Storage Protection**: Intelligent availability guards prevent accidental catalog wipes when external drives or network storage (NFS/SMB) unmount, backed by three-way crawler reconciliation (`NEW`, `CHANGED`, `UNCHANGED`, `MISSING`).
+- 🔍 **Automatic Metadata, Matching & Cover Art**: Automatically fetch covers, summaries, series numbering, and details from Google Books, Open Library, ComicVine, TMDB, MusicBrainz, iTunes, and PodcastIndex. Features fuzzy candidate matching (Levenshtein distance & composite confidence scoring), field-level provenance tracking (`AUTOMATIC`, `DERIVED`, `MANUAL`), and manual edit lock protection to safeguard user-curated metadata.
+- 🔔 **Notifications & Smart Home**: Push notification dispatch via Apprise (Discord, Telegram, Slack, Webhooks, Pushbullet) with debounced media batching, plus bidirectional MQTT integration with Home Assistant Auto-Discovery.
 
 ---
 
@@ -116,10 +117,16 @@ Connect your favorite Jellyfin-compatible client app:
 - **Username & Password**: Your Aarkib user credentials
 - **Supported Clients**: Jellyfin Mobile (Android / iOS), Jellyfin Android TV, Swiftfin, Findroid, Jellyfin Media Player, Infuse
 
-### Native Mobile & TV Apps (REST API & 10-Foot UI)
+### Native Mobile & TV Apps (Versioned REST API v1 & 10-Foot UI)
 
 Aarkib exposes a high-performance REST API designed specifically for custom native mobile (iOS/Android) and TV (Apple TV, Android TV, Fire TV) clients:
-- **Direct Login**: `POST /api/auth/login` with username and password returns a persistent API Bearer token.
+- **Clean, Versioned REST API v1 (`/api/v1`)**:
+  - `GET /api/v1/media`: Filter catalog items by library, media type, full-text search, and pagination.
+  - `GET /api/v1/media/<id>/playback-plan`: Client capability-aware playback planner delivering deterministic delivery descriptors (`DIRECT`, `REMUX`, `TRANSCODE`).
+  - `GET /api/v1/libraries` & `POST /api/v1/libraries/<id>/reconcile`: Inspect folders and trigger mount-safe crawler reconciliations.
+  - `GET /api/v1/profiles` & `PATCH /api/v1/profiles/<id>`: Manage family profiles and update granular library ACLs.
+  - `GET /api/v1/jobs`, `POST /api/v1/jobs/<id>/cancel`, `POST /api/v1/jobs/<id>/retry`: Live asynchronous task monitoring and cooperative control.
+- **Direct Login & Scoped Tokens**: `POST /api/auth/login` returns a persistent API Bearer token with optional scoped permissions (`media:read`, `media:write`, `admin`).
 - **TV Device Pairing (RFC 8628)**: TV apps request an unambiguous 6-character code via `POST /api/auth/device-code`. The user pairs the TV by opening `http://<your-server-ip>:5000/pair` on their phone or computer.
 - **Aggregated Home Feed**: `GET /api/home` provides ready-to-render dashboard rails including *Continue Watching*, *Continue Reading*, *Continue Listening*, *Next Up* (for episodic TV series), *Recently Added*, and *Favorites*.
 - **Taxonomy Browsing**: Full creator (`/api/creators`), collection/series (`/api/collections`), and genre tag (`/api/tags`) endpoints with item counts and media filtering.
@@ -132,10 +139,10 @@ Aarkib exposes a high-performance REST API designed specifically for custom nati
 All server management is handled directly through the web interface under **Settings**:
 
 - **📁 Media Folders**: Add new folders, browse mounted directories, select media types, and trigger mount-safe library rescans.
-- **👥 Users & Profiles**: Create accounts, manage family member sub-profiles, assign roles, and configure per-library permissions (ACLs).
+- **👥 Users & Family Profiles**: Create accounts, manage family member sub-profiles, assign roles, and configure per-library permissions (ACLs) using the interactive Library Access Control modal matrix.
 - **⚙️ System Preferences**: Configure hardware transcoding backend (VA-API, Intel QSV, CPU), startup auto-scanning, real-time filesystem watchers, and automatic metadata enrichment.
-- **🔌 Plugins & Integrations**: View available media formats and access OPDS and Subsonic connection endpoints.
-- **⚡ Background Tasks**: Monitor active library scans, enrichment jobs, e-ink optimizations, and backups with live cooperative cancellation and retry.
+- **🔌 Plugins & Integrations**: Configure push notifications (Apprise), MQTT / Home Assistant auto-discovery, view available media formats, and access OPDS and Subsonic connection endpoints.
+- **⚡ Background Tasks (Live Manager)**: Real-time dashboard card in System Settings displaying active, queued, succeeded, and failed jobs with live progress bars, cooperative cancellation, and retry controls.
 
 ---
 

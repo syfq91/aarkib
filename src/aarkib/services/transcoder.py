@@ -160,9 +160,9 @@ def detect_transcode_capabilities(
     if not ffmpeg_bin:
         caps = TranscodeCapabilities(
             software_available=False,
-            vaapi_device=None,
+            vaapi_device=device_override,
             qsv_available=False,
-            active_backend="software",
+            active_backend="vaapi" if device_override else "software",
         )
         if not device_override:
             with _TRANSCODE_CAPS_LOCK:
